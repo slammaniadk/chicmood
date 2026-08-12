@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CHICMOOD - Elegant Fashion for Women</title>
+  <title>CHICMOOD - 라이브 쇼핑</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -36,349 +36,179 @@
     html { scroll-behavior: smooth; }
     body { font-family: 'Noto Sans KR', sans-serif; background: #fdf8f4; color: #3d2e22; }
 
-    /* 애니메이션 */
-    .fade-in { animation: fadeIn 0.6s ease-out forwards; opacity: 0; }
+    .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
     @keyframes fadeIn { to { opacity: 1; } }
-    .slide-up { animation: slideUp 0.6s ease-out forwards; opacity: 0; transform: translateY(30px); }
+    .slide-up { animation: slideUp 0.5s ease-out forwards; opacity: 0; transform: translateY(20px); }
     @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
 
-    /* 로딩 스피너 */
     .spinner { width: 40px; height: 40px; border: 3px solid #f0dcc8; border-top-color: #8a5628; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
-    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    @keyframes dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} }
 
-    /* 오버레이 */
     .overlay { position: fixed; inset: 0; background: rgba(74,46,22,0.4); backdrop-filter: blur(6px); z-index: 50; display: flex; align-items: center; justify-content: center; }
     .overlay-content { animation: scaleIn 0.3s ease-out forwards; }
     @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-    /* 수량 버튼 */
-    .qty-btn { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4c5a5; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 16px; user-select: none; color: #6b4220; }
+    .qty-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4c5a5; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 15px; user-select: none; color: #6b4220; }
     .qty-btn:hover { background: #6b4220; color: #fff; border-color: #6b4220; }
-    .qty-btn:active { transform: scale(0.95); }
 
-    /* 옵션 칩 */
-    .chip { padding: 9px 22px; border: 1.5px solid #e4c5a5; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 500; background: #fff; color: #6b4220; }
+    .chip { padding: 8px 20px; border: 1.5px solid #e4c5a5; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 500; background: #fff; color: #6b4220; }
     .chip:hover { border-color: #c4884a; }
     .chip.active { background: #6b4220; color: #fff; border-color: #6b4220; }
 
-    /* 색상 칩 */
-    .color-chip { width: 34px; height: 34px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
+    .color-chip { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
     .color-chip:hover { transform: scale(1.1); }
     .color-chip.active { box-shadow: 0 0 0 2px #fdf8f4, 0 0 0 4px #8a5628; }
 
-    /* 입력 필드 */
-    .input-field { width: 100%; padding: 14px 16px; border: 1.5px solid #e4c5a5; border-radius: 6px; background: #fff; font-size: 14px; transition: border-color 0.2s; outline: none; font-family: 'Noto Sans KR', sans-serif; color: #3d2e22; }
+    .input-field { width: 100%; padding: 13px 16px; border: 1.5px solid #e4c5a5; border-radius: 6px; background: #fff; font-size: 14px; transition: border-color 0.2s; outline: none; font-family: 'Noto Sans KR', sans-serif; color: #3d2e22; }
     .input-field:focus { border-color: #8a5628; }
     .input-field::placeholder { color: #c4b09a; }
 
-    /* 버튼 */
-    .btn-primary { background: #6b4220; color: #fff; padding: 16px 32px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; letter-spacing: 0.5px; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-primary { background: #6b4220; color: #fff; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; letter-spacing: 0.5px; font-family: 'Noto Sans KR', sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     .btn-primary:hover { background: #8a5628; }
     .btn-primary:active { transform: scale(0.98); }
     .btn-primary:disabled { background: #d4c5a5; cursor: not-allowed; }
 
-    /* 상품 이미지 */
-    .product-img { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.4s ease, transform 0.6s ease; }
-    .product-img:hover { transform: scale(1.03); }
-    .thumb-img { width: 100%; height: 100%; object-fit: cover; transition: all 0.2s; }
+    .btn-outline { background: transparent; color: #6b4220; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1.5px solid #6b4220; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-outline:hover { background: #6b4220; color: #fff; }
+
+    .product-card { cursor: pointer; transition: transform 0.3s, box-shadow 0.3s; border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid #f0dcc8; }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(74,46,22,0.1); }
+    .product-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; }
+
     .thumb-wrap { cursor: pointer; border: 2px solid transparent; border-radius: 4px; transition: border-color 0.2s; overflow: hidden; }
     .thumb-wrap.active { border-color: #8a5628; }
     .thumb-wrap:hover { opacity: 0.85; }
 
-    /* 토스트 */
     .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #6b4220; color: #fff; padding: 14px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    /* 스크롤바 */
+    .badge { position: absolute; top: -6px; right: -8px; background: #b85a6c; color: #fff; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+    .status-입금대기 { background: #fef1d1; color: #a86e35; }
+    .status-확인요청 { background: #c9daf8; color: #2b5797; }
+    .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
+    .status-배송중 { background: #e4d7f5; color: #5b3a8e; }
+
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e4c5a5; border-radius: 3px; }
 
-    /* 장식 구분선 */
     .elegant-divider { display: flex; align-items: center; gap: 16px; }
     .elegant-divider::before, .elegant-divider::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #e4c5a5, transparent); }
+
+    .mobile-nav { display: none; }
+    @media (max-width: 768px) {
+      .desktop-nav { display: none; }
+      .mobile-nav { display: flex; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- 토스트 -->
   <div id="toast" class="toast"></div>
 
-  <!-- ==================== 상단 안내 배너 ==================== -->
-  <div class="bg-warm-800 text-warm-100 text-center py-2.5 text-[11px] tracking-wider font-light">
-    SUMMER SPECIAL &mdash; 첫 구매 고객 <span class="font-semibold">10% 할인</span> &middot; 10만원 이상 무료배송
+  <!-- 상단 안내 배너 -->
+  <div class="bg-warm-800 text-warm-100 text-center py-2 text-[11px] tracking-wider font-light">
+    LIVE 특가 쇼핑 &middot; <span class="font-semibold">10만원 이상 무료배송</span> &middot; 카카오채널 문의 가능
   </div>
 
-  <!-- ==================== 헤더 ==================== -->
+  <!-- 헤더 -->
   <header class="sticky top-0 z-40 bg-[#fdf8f4]/95 backdrop-blur-md border-b border-warm-200">
-    <div class="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-between">
-      <div class="w-28"></div>
-      <a href="#" onclick="navigateTo('shop')" class="cursor-pointer text-center">
-        <span class="font-serif text-3xl font-semibold tracking-[0.15em] text-warm-900 italic">CHICMOOD</span>
-        <span class="block text-[9px] tracking-[0.35em] text-warm-400 font-sans uppercase -mt-0.5">Elegant Fashion</span>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-[64px] flex items-center justify-between">
+      <!-- 로고 -->
+      <a href="#home" class="cursor-pointer text-center flex-shrink-0">
+        <span class="font-serif text-2xl sm:text-3xl font-semibold tracking-[0.12em] text-warm-900 italic">CHICMOOD</span>
       </a>
-      <div class="w-28 flex justify-end">
-        <button onclick="navigateTo('lookup')" class="text-[11px] font-medium tracking-wider text-warm-500 hover:text-warm-800 transition-colors uppercase border-b border-warm-300 pb-0.5">주문조회</button>
-      </div>
+      <!-- 데스크톱 네비 -->
+      <nav class="desktop-nav items-center gap-6 text-[12px] font-medium text-warm-500">
+        <a href="#home" class="hover:text-warm-800 transition-colors tracking-wide">홈</a>
+        <a href="#cart" class="hover:text-warm-800 transition-colors tracking-wide relative">
+          장바구니
+          <span id="cart-badge-desktop" class="badge hidden">0</span>
+        </a>
+        <a href="#lookup" class="hover:text-warm-800 transition-colors tracking-wide">주문조회</a>
+        <a href="#login" id="nav-auth-desktop" class="hover:text-warm-800 transition-colors tracking-wide">로그인</a>
+      </nav>
+      <!-- 모바일 네비 -->
+      <nav class="mobile-nav items-center gap-4 text-[11px] font-medium text-warm-500">
+        <a href="#home" class="hover:text-warm-800 transition-colors">홈</a>
+        <a href="#cart" class="hover:text-warm-800 transition-colors relative">
+          🛒<span id="cart-badge-mobile" class="badge hidden" style="top:-8px;right:-10px;">0</span>
+        </a>
+        <a href="#lookup" class="hover:text-warm-800 transition-colors">조회</a>
+        <a href="#login" id="nav-auth-mobile" class="hover:text-warm-800 transition-colors">로그인</a>
+      </nav>
     </div>
   </header>
 
-  <!-- ==================== 메인 ==================== -->
-  <main class="max-w-6xl mx-auto px-6 pb-20">
+  <!-- 메인 콘텐츠 영역 -->
+  <main id="page-content" class="max-w-6xl mx-auto px-4 sm:px-6 pb-20 min-h-[60vh]"></main>
 
-    <!-- ========== 쇼핑 화면 ========== -->
-    <section id="page-shop" class="py-10">
-      <div class="grid lg:grid-cols-2 gap-12 lg:gap-16">
-
-        <!-- 상품 이미지 -->
-        <div class="fade-in">
-          <div class="aspect-[3/4] bg-warm-100 relative overflow-hidden rounded-lg">
-            <img id="main-product-img"
-              src="https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=600&h=800&fit=crop&auto=format&q=80"
-              alt="엘레강스 트렌치 코트 - 카멜"
-              class="product-img" />
-            <div class="absolute top-4 left-4 bg-warm-800 text-warm-100 text-[10px] font-semibold tracking-widest px-3 py-1.5 rounded uppercase">Best</div>
-          </div>
-          <div class="grid grid-cols-4 gap-2 mt-2">
-            <div class="thumb-wrap active aspect-square bg-warm-100 rounded" onclick="switchMainImage(0, this)">
-              <img src="https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=200&h=200&fit=crop&auto=format&q=60" alt="썸네일 1" class="thumb-img rounded" />
-            </div>
-            <div class="thumb-wrap aspect-square bg-warm-100 rounded" onclick="switchMainImage(1, this)">
-              <img src="https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=200&h=200&fit=crop&auto=format&q=60" alt="썸네일 2" class="thumb-img rounded" />
-            </div>
-            <div class="thumb-wrap aspect-square bg-warm-100 rounded" onclick="switchMainImage(2, this)">
-              <img src="https://images.unsplash.com/photo-1509631179647-0177331693ae?w=200&h=200&fit=crop&auto=format&q=60" alt="썸네일 3" class="thumb-img rounded" />
-            </div>
-            <div class="thumb-wrap aspect-square bg-warm-100 rounded" onclick="switchMainImage(3, this)">
-              <img src="https://images.unsplash.com/photo-1487222477857-f5e183d3e68b?w=200&h=200&fit=crop&auto=format&q=60" alt="썸네일 4" class="thumb-img rounded" />
-            </div>
-          </div>
-        </div>
-
-        <!-- 상품 정보 -->
-        <div class="slide-up flex flex-col">
-          <p class="text-[11px] text-warm-400 tracking-[0.25em] uppercase mb-3 font-light">CHICMOOD 2026 F/W Collection</p>
-          <h1 class="font-serif text-3xl font-semibold tracking-tight text-warm-900 mb-1 italic">엘레강스 트렌치 코트</h1>
-          <p class="text-sm text-warm-400 mb-6 font-light">Elegant Trench Coat</p>
-
-          <div class="flex items-baseline gap-3 mb-3">
-            <span class="font-serif text-3xl font-bold text-warm-800">₩189,000</span>
-            <span class="text-base text-warm-300 line-through">₩248,000</span>
-          </div>
-          <div class="flex items-center gap-2 mb-8">
-            <span class="text-[11px] font-semibold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-full">24% OFF</span>
-            <span class="text-[11px] text-warm-400">| 적립금 1,890P</span>
-          </div>
-
-          <div class="border-t border-warm-200 pt-6 space-y-7 flex-1">
-
-            <!-- 색상 -->
-            <div>
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">색상</span>
-                <span id="color-label" class="text-[11px] text-warm-400">카멜</span>
-              </div>
-              <div class="flex gap-3">
-                <button class="color-chip active" style="background:#c4a882;" onclick="selectColor(this,'카멜')" data-color="카멜"></button>
-                <button class="color-chip" style="background:#8b7d6b;" onclick="selectColor(this,'모카')" data-color="모카"></button>
-              </div>
-            </div>
-
-            <!-- 사이즈 -->
-            <div>
-              <div class="flex items-center justify-between mb-3">
-                <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">사이즈</span>
-                <button class="text-[11px] text-warm-400 underline underline-offset-4 hover:text-warm-700 transition-colors bg-transparent border-none cursor-pointer decoration-warm-300" onclick="showSizeGuide()">사이즈 가이드</button>
-              </div>
-              <div class="flex gap-2">
-                <button class="chip" onclick="selectSize(this,'S')">S (44)</button>
-                <button class="chip active" onclick="selectSize(this,'M')">M (55)</button>
-                <button class="chip" onclick="selectSize(this,'L')">L (66)</button>
-              </div>
-            </div>
-
-            <!-- 수량 -->
-            <div>
-              <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 block mb-3">수량</span>
-              <div class="flex items-center gap-0">
-                <button class="qty-btn rounded-l-md" onclick="changeQty(-1)">−</button>
-                <div id="qty-display" class="w-14 h-[38px] flex items-center justify-center border-t border-b border-warm-200 text-sm font-semibold bg-white text-warm-800">1</div>
-                <button class="qty-btn rounded-r-md" onclick="changeQty(1)">+</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 장바구니 담기 -->
-          <div class="mt-8 space-y-3">
-            <button class="btn-primary w-full" onclick="addToCart()">장바구니 담기</button>
-          </div>
-
-          <!-- 안내 아이콘 -->
-          <div class="mt-6 grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div class="text-warm-400 mb-1">
-                <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
-              </div>
-              <p class="text-[10px] text-warm-400">무료배송</p>
-            </div>
-            <div>
-              <div class="text-warm-400 mb-1">
-                <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              </div>
-              <p class="text-[10px] text-warm-400">정품보장</p>
-            </div>
-            <div>
-              <div class="text-warm-400 mb-1">
-                <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-              </div>
-              <p class="text-[10px] text-warm-400">7일 교환/반품</p>
-            </div>
-          </div>
-
-          <!-- 상품 설명 -->
-          <div class="mt-8 pt-6 border-t border-warm-200">
-            <p class="text-[12px] text-warm-500 leading-[1.9] font-light">
-              고급스러운 실루엣의 엘레강스 트렌치 코트입니다. 클래식한 디자인에 현대적인 핏을 더해, 격식 있는 자리부터 일상 외출까지 품격 있게 연출할 수 있습니다.
-              <br /><br />
-              <span class="text-warm-400">
-              · 소재: 울 50%, 폴리에스터 45%, 스판덱스 5%<br />
-              · 안감: 고급 새틴 안감 (정전기 방지)<br />
-              · 세탁: 드라이클리닝 권장<br />
-              · 제조국: 대한민국
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- ========== 장바구니 & 주문서 ========== -->
-      <div id="order-section" class="mt-20 hidden">
-        <div class="pt-12">
-          <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-10">Shopping Cart</p>
-
-          <!-- 장바구니 목록 -->
-          <div id="cart-items" class="space-y-4 mb-8"></div>
-
-          <!-- 합계 -->
-          <div class="border-t border-warm-200 pt-6 mb-14">
-            <div class="flex justify-between items-center">
-              <span class="text-sm text-warm-500">총 결제금액</span>
-              <span id="cart-total" class="font-serif text-2xl font-bold text-warm-800">₩0</span>
-            </div>
-          </div>
-
-          <!-- 주문서 폼 -->
-          <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-10">Order Information</p>
-          <form id="order-form" class="space-y-5 max-w-xl" onsubmit="return false;">
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">이름 <span class="text-rose-400">*</span></label>
-              <input id="input-name" type="text" class="input-field" placeholder="홍길동" required />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호 <span class="text-rose-400">*</span></label>
-              <input id="input-phone" type="tel" class="input-field" placeholder="010-1234-5678" required />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">유튜브 / 소셜 닉네임</label>
-              <input id="input-social" type="text" class="input-field" placeholder="@chicmood_official" />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송지 주소 <span class="text-rose-400">*</span></label>
-              <input id="input-address" type="text" class="input-field" placeholder="서울특별시 강남구 테헤란로 123" required />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송 요청사항</label>
-              <textarea id="input-memo" class="input-field resize-none" rows="3" placeholder="부재 시 경비실에 맡겨주세요."></textarea>
-            </div>
-            <button class="btn-primary w-full mt-4" onclick="submitOrder()">구매하기</button>
-          </form>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========== 주문 조회 ========== -->
-    <section id="page-lookup" class="py-10 hidden">
-      <div class="max-w-lg mx-auto">
-        <p class="font-serif text-2xl font-semibold tracking-tight text-warm-900 text-center italic mb-2">주문 내역 조회</p>
-        <p class="text-[12px] text-warm-400 text-center mb-10 font-light">주문 시 입력한 이름과 전화번호 뒤 4자리를 입력해주세요.</p>
-
-        <div class="space-y-4 mb-6">
-          <input id="lookup-name" type="text" class="input-field" placeholder="이름" />
-          <input id="lookup-phone" type="text" class="input-field" maxlength="4" placeholder="전화번호 뒤 4자리" />
-          <button class="btn-primary w-full" onclick="lookupOrder()">조회하기</button>
-        </div>
-
-        <div id="lookup-result" class="mt-8"></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- ==================== 푸터 ==================== -->
-  <footer class="border-t border-warm-200 py-12 text-center bg-warm-100/50">
-    <p class="font-serif text-lg italic text-warm-700 tracking-wider mb-4">CHICMOOD</p>
+  <!-- 푸터 -->
+  <footer class="border-t border-warm-200 py-10 text-center bg-warm-100/50">
+    <p class="font-serif text-lg italic text-warm-700 tracking-wider mb-3">CHICMOOD</p>
     <div class="text-[10px] text-warm-400 leading-[2] tracking-wide">
       <p>대표이사 지선미 &middot; 사업자등록번호 123-45-67890</p>
       <p>서울특별시 강남구 테헤란로 123, 8층</p>
-      <p>고객센터 1588-1234 &middot; 평일 10:00 - 18:00 (점심 12:00 - 13:00)</p>
+      <p>입금계좌: 신한은행 110-123-456789 예금주 지선미</p>
+      <p>고객센터: 카카오채널 @chicmood &middot; 평일 10:00 - 18:00</p>
     </div>
-    <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-4">&copy; 2026 CHICMOOD. All rights reserved.</p>
+    <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
   </footer>
 
-  <!-- ==================== 오버레이: 로딩 ==================== -->
+  <!-- 오버레이: 로딩 -->
   <div id="overlay-loading" class="overlay hidden">
     <div class="overlay-content bg-white rounded-xl p-12 text-center max-w-sm mx-6 shadow-2xl">
       <div class="spinner mx-auto mb-6"></div>
       <p class="text-base font-semibold text-warm-800 mb-2">주문 처리 중</p>
-      <p class="text-sm text-warm-400 font-light"><span class="loading-dots">주문/정산 데이터를 동기화하고 있습니다</span></p>
+      <p class="text-sm text-warm-400 font-light"><span class="loading-dots">주문 정보를 처리하고 있습니다</span></p>
     </div>
   </div>
 
-  <!-- ==================== 오버레이: 주문 완료 ==================== -->
+  <!-- 오버레이: 주문 완료 -->
   <div id="overlay-complete" class="overlay hidden">
     <div class="overlay-content bg-white rounded-xl max-w-md w-full mx-6 shadow-2xl overflow-hidden">
-      <div class="bg-warm-800 text-white py-10 px-8 text-center">
-        <div class="w-16 h-16 rounded-full border-2 border-warm-400 mx-auto mb-4 flex items-center justify-center">
-          <svg class="w-8 h-8 text-warm-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+      <div class="bg-warm-800 text-white py-8 px-8 text-center">
+        <div class="w-14 h-14 rounded-full border-2 border-warm-400 mx-auto mb-3 flex items-center justify-center">
+          <svg class="w-7 h-7 text-warm-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
         </div>
         <h3 class="font-serif text-xl font-semibold tracking-wide mb-1 italic">주문이 완료되었습니다</h3>
         <p class="text-[11px] text-warm-400 tracking-widest uppercase">Order Confirmed</p>
       </div>
-      <div class="p-8 space-y-5">
+      <div class="p-6 space-y-4">
         <div>
-          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-1">주문번호</p>
-          <p id="complete-order-no" class="text-sm font-bold text-warm-800">CM-20260812-0001</p>
+          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-0.5">주문번호</p>
+          <p id="complete-order-no" class="text-sm font-bold text-warm-800"></p>
         </div>
         <div>
-          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-1">입금 계좌</p>
-          <p class="text-sm font-bold text-warm-800">카카오뱅크 3333-12-3456789 (주)시크무드</p>
+          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-0.5">입금 계좌</p>
+          <p class="text-sm font-bold text-warm-800">신한은행 110-123-456789 예금주 지선미</p>
         </div>
         <div>
-          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-1">결제 금액</p>
-          <p id="complete-total" class="font-serif text-xl font-bold text-warm-800">₩0</p>
+          <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-0.5">결제 금액</p>
+          <p id="complete-total" class="font-serif text-xl font-bold text-warm-800"></p>
         </div>
-        <div id="complete-items" class="border-t border-warm-100 pt-4 space-y-2"></div>
-        <p class="text-[10px] text-warm-400 leading-relaxed font-light">위 계좌로 입금 확인 후 순차적으로 발송됩니다. 주문 관련 문의는 고객센터(1588-1234)로 연락해 주세요.</p>
+        <div id="complete-items" class="border-t border-warm-100 pt-3 space-y-1.5"></div>
+        <p class="text-[10px] text-warm-400 leading-relaxed font-light">위 계좌로 입금 후 주문조회에서 "입금완료" 버튼을 눌러주세요. 확인 후 순차적으로 발송됩니다.</p>
         <button class="btn-primary w-full" onclick="closeComplete()">확인</button>
       </div>
     </div>
   </div>
 
-  <!-- ==================== 오버레이: 사이즈 가이드 ==================== -->
+  <!-- 오버레이: 사이즈 가이드 -->
   <div id="overlay-size" class="overlay hidden">
     <div class="overlay-content bg-white rounded-xl max-w-sm w-full mx-6 shadow-2xl p-8">
       <div class="flex justify-between items-center mb-6">
         <h3 class="font-serif text-lg font-semibold text-warm-800 italic">사이즈 가이드</h3>
-        <button onclick="closeSizeGuide()" class="text-warm-400 hover:text-warm-700 transition-colors bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        <button onclick="document.getElementById('overlay-size').classList.add('hidden')" class="text-warm-400 hover:text-warm-700 transition-colors bg-transparent border-none cursor-pointer text-xl">&times;</button>
       </div>
       <table class="w-full text-sm">
         <thead>
           <tr class="border-b border-warm-200 text-[10px] font-semibold text-warm-400 uppercase tracking-wider">
-            <th class="pb-3 text-left">사이즈</th>
-            <th class="pb-3 text-center">어깨</th>
-            <th class="pb-3 text-center">가슴</th>
-            <th class="pb-3 text-center">총장</th>
+            <th class="pb-3 text-left">사이즈</th><th class="pb-3 text-center">어깨</th><th class="pb-3 text-center">가슴</th><th class="pb-3 text-center">총장</th>
           </tr>
         </thead>
         <tbody class="text-warm-600">
@@ -387,358 +217,1019 @@
           <tr><td class="py-3 font-semibold">L (66)</td><td class="text-center">43</td><td class="text-center">104</td><td class="text-center">111</td></tr>
         </tbody>
       </table>
-      <p class="text-[10px] text-warm-400 mt-4 font-light">단위: cm &middot; 측정 방법에 따라 1~3cm 오차가 있을 수 있습니다.</p>
+      <p class="text-[10px] text-warm-400 mt-4 font-light">단위: cm · 측정 방법에 따라 1~3cm 오차가 있을 수 있습니다.</p>
     </div>
   </div>
 
-
   <!-- ==================== JavaScript ==================== -->
   <script>
-    // ========================================
-    //  상품 이미지 데이터
-    // ========================================
-    const productImages = {
-      '카멜': {
-        main: [
-          'https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1487222477857-f5e183d3e68b?w=600&h=800&fit=crop&auto=format&q=80'
-        ],
-        thumbs: [
-          'https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1487222477857-f5e183d3e68b?w=200&h=200&fit=crop&auto=format&q=60'
-        ],
-        cartThumb: 'https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=100&h=130&fit=crop&auto=format&q=60'
-      },
-      '모카': {
-        main: [
-          'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1548126032-079a0fb0099d?w=600&h=800&fit=crop&auto=format&q=80',
-          'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=800&fit=crop&auto=format&q=80'
-        ],
-        thumbs: [
-          'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1548126032-079a0fb0099d?w=200&h=200&fit=crop&auto=format&q=60',
-          'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=200&h=200&fit=crop&auto=format&q=60'
-        ],
-        cartThumb: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=100&h=130&fit=crop&auto=format&q=60'
-      }
-    };
-
-    const state = {
-      color: '카멜',
-      size: 'M',
-      qty: 1,
-      cart: [],
-      currentImageIndex: 0,
-      product: {
-        name: '엘레강스 트렌치 코트',
-        price: 189000,
-        originalPrice: 248000
-      }
-    };
-
-    // ========================================
-    //  유틸리티
-    // ========================================
-    function formatPrice(n) {
-      return '₩' + n.toLocaleString('ko-KR');
+  // ============================================================
+  //  DATA
+  // ============================================================
+  const PRODUCTS = [
+    {
+      id: 1, name: '엘레강스 트렌치 코트', price: 189000, originalPrice: 248000, discount: 24,
+      description: '고급스러운 실루엣의 엘레강스 트렌치 코트입니다. 클래식한 디자인에 현대적인 핏을 더해, 격식 있는 자리부터 일상 외출까지 품격 있게 연출할 수 있습니다.',
+      material: '울 50%, 폴리에스터 45%, 스판덱스 5% / 안감: 고급 새틴 / 드라이클리닝 권장',
+      images: [
+        'https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1544022613-e87ca75a784a?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'카멜',hex:'#c4a882'},{name:'모카',hex:'#8b7d6b'}],
+      broadcastId: 2
+    },
+    {
+      id: 2, name: '캐시미어 블렌드 니트', price: 89000, originalPrice: 128000, discount: 30,
+      description: '부드러운 캐시미어 블렌드 소재로 제작된 고급 니트입니다. 가벼우면서도 보온성이 뛰어나 가을부터 겨울까지 활용도가 높습니다.',
+      material: '캐시미어 30%, 울 40%, 나일론 30% / 손세탁 또는 드라이클리닝',
+      images: [
+        'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1548126032-079a0fb0099d?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1487222477857-f5e183d3e68b?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'크림',hex:'#f5ead6'},{name:'베이지',hex:'#c8b898'}],
+      broadcastId: 2
+    },
+    {
+      id: 3, name: '플리츠 롱스커트', price: 79000, originalPrice: 110000, discount: 28,
+      description: '우아한 플리츠 디테일의 롱스커트입니다. 잔잔한 주름이 움직일 때마다 아름다운 실루엣을 만들어냅니다.',
+      material: '폴리에스터 100% / 기계세탁 가능 (찬물, 약한 세탁)',
+      images: [
+        'https://images.unsplash.com/photo-1583496661160-fb5886a0aaaa?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'베이지',hex:'#d4b896'},{name:'블랙',hex:'#2c2c2c'}],
+      broadcastId: 2
+    },
+    {
+      id: 4, name: '린넨 블라우스', price: 69000, originalPrice: 98000, discount: 30,
+      description: '시원한 린넨 소재의 블라우스입니다. 자연스러운 질감과 편안한 핏으로 여름철 데일리 아이템으로 활용하기 좋습니다.',
+      material: '린넨 70%, 면 30% / 기계세탁 가능 (찬물)',
+      images: [
+        'https://images.unsplash.com/photo-1564257631407-4deb1f99d992?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'화이트',hex:'#f8f4ef'},{name:'베이지',hex:'#d8c8a8'}],
+      broadcastId: 1
+    },
+    {
+      id: 5, name: '플라워 랩원피스', price: 129000, originalPrice: 168000, discount: 23,
+      description: '은은한 플라워 패턴의 랩원피스입니다. 여성스러운 실루엣과 허리 벨트 디테일로 날씬해 보이는 효과가 있습니다.',
+      material: '폴리에스터 95%, 스판덱스 5% / 기계세탁 가능 (약한 세탁)',
+      images: [
+        'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'네이비',hex:'#2c3e6b'},{name:'와인',hex:'#7b2d4a'}],
+      broadcastId: 1
+    },
+    {
+      id: 6, name: 'A라인 미디 원피스', price: 99000, originalPrice: 139000, discount: 29,
+      description: '깔끔한 A라인 실루엣의 미디 원피스입니다. 체형을 자연스럽게 커버해주며 단품으로 착용하기 좋은 아이템입니다.',
+      material: '폴리에스터 80%, 레이온 20% / 기계세탁 가능',
+      images: [
+        'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'블랙',hex:'#2c2c2c'},{name:'카키',hex:'#7a7d5a'}],
+      broadcastId: 1
+    },
+    {
+      id: 7, name: '쉬폰 프릴 원피스', price: 109000, originalPrice: 148000, discount: 26,
+      description: '로맨틱한 프릴 디테일의 쉬폰 원피스입니다. 가벼운 쉬폰 소재가 바람에 자연스럽게 흔들리며 우아한 분위기를 연출합니다.',
+      material: '쉬폰(폴리에스터 100%) / 안감 있음 / 손세탁 권장',
+      images: [
+        'https://images.unsplash.com/photo-1539533113208-f6df8cc8b543?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&h=800&fit=crop&auto=format&q=80',
+        'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=600&h=800&fit=crop&auto=format&q=80'
+      ],
+      colors: [{name:'아이보리',hex:'#f0e8d8'},{name:'핑크',hex:'#d4a0a0'}],
+      broadcastId: 1
     }
+  ];
 
-    function showToast(msg) {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 2500);
+  const BROADCASTS = [
+    {
+      id: 1,
+      title: '8/12(화) 여름 원피스 특가 LIVE',
+      date: '2026.08.12 (화) 20:00',
+      status: 'live',
+      description: '올 여름 마지막 원피스 특가! 린넨부터 쉬폰까지 다양한 소재를 만나보세요.',
+      productIds: [4, 5, 6, 7]
+    },
+    {
+      id: 2,
+      title: '8/10(일) F/W 아우터 선공개',
+      date: '2026.08.10 (일) 19:00',
+      status: 'ended',
+      description: '가을/겨울 시즌 아우터와 니트를 미리 만나보세요. 선공개 특가 혜택!',
+      productIds: [1, 2, 3]
     }
+  ];
 
-    function generateOrderNo() {
-      const d = new Date();
-      const date = d.getFullYear().toString() +
-        String(d.getMonth() + 1).padStart(2, '0') +
-        String(d.getDate()).padStart(2, '0');
-      const seq = String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0');
-      return 'CM-' + date + '-' + seq;
+  // ============================================================
+  //  STATE
+  // ============================================================
+  let cart = JSON.parse(localStorage.getItem('chicmood_cart') || '[]');
+  let currentUser = JSON.parse(localStorage.getItem('chicmood_current_user') || 'null');
+
+  // Product detail page state
+  let pdState = { selectedColor: 0, selectedSize: 1, qty: 1, imageIndex: 0 };
+
+  // ============================================================
+  //  UTILITIES
+  // ============================================================
+  function fmt(n) { return '₩' + n.toLocaleString('ko-KR'); }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  function genOrderNo() {
+    const d = new Date();
+    const ds = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    return 'CM-' + ds + '-' + String(Math.floor(Math.random()*9999)+1).padStart(4,'0');
+  }
+
+  function getProduct(id) { return PRODUCTS.find(p => p.id === Number(id)); }
+  function getBroadcast(id) { return BROADCASTS.find(b => b.id === Number(id)); }
+
+  function saveCart() { localStorage.setItem('chicmood_cart', JSON.stringify(cart)); }
+  function getUsers() { return JSON.parse(localStorage.getItem('chicmood_users') || '[]'); }
+  function saveUsers(u) { localStorage.setItem('chicmood_users', JSON.stringify(u)); }
+  function getOrders() { return JSON.parse(localStorage.getItem('chicmood_orders') || '[]'); }
+  function saveOrders(o) { localStorage.setItem('chicmood_orders', JSON.stringify(o)); }
+
+  function cartCount() { return cart.reduce((s,i) => s + i.qty, 0); }
+
+  function updateCartBadge() {
+    const count = cartCount();
+    ['cart-badge-desktop','cart-badge-mobile'].forEach(id => {
+      const el = document.getElementById(id);
+      if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
+      else { el.classList.add('hidden'); }
+    });
+  }
+
+  function updateAuthNav() {
+    const dEl = document.getElementById('nav-auth-desktop');
+    const mEl = document.getElementById('nav-auth-mobile');
+    if (currentUser) {
+      dEl.href = '#mypage'; dEl.textContent = '마이페이지';
+      mEl.href = '#mypage'; mEl.textContent = 'MY';
+    } else {
+      dEl.href = '#login'; dEl.textContent = '로그인';
+      mEl.href = '#login'; mEl.textContent = '로그인';
     }
+  }
 
-    // ========================================
-    //  페이지 네비게이션
-    // ========================================
-    function navigateTo(page) {
-      document.getElementById('page-shop').classList.add('hidden');
-      document.getElementById('page-lookup').classList.add('hidden');
+  function escapeHtml(str) {
+    const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+  }
 
-      if (page === 'shop') {
-        document.getElementById('page-shop').classList.remove('hidden');
-      } else if (page === 'lookup') {
-        const el = document.getElementById('page-lookup');
-        el.classList.remove('hidden');
-        el.classList.add('fade-in');
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  // ============================================================
+  //  ROUTER
+  // ============================================================
+  function router() {
+    const hash = location.hash.slice(1) || 'home';
+    const parts = hash.split('/');
+    const page = parts[0];
+    const param = parts[1];
+
+    const content = document.getElementById('page-content');
+    window.scrollTo({ top: 0 });
+    updateCartBadge();
+    updateAuthNav();
+
+    switch(page) {
+      case 'home': renderHome(content); break;
+      case 'live': renderLive(content, param); break;
+      case 'product': renderProduct(content, param); break;
+      case 'cart': renderCart(content); break;
+      case 'checkout': renderCheckout(content); break;
+      case 'lookup': renderLookup(content); break;
+      case 'register': renderRegister(content); break;
+      case 'login': renderLogin(content); break;
+      case 'mypage': renderMypage(content); break;
+      default: renderHome(content);
     }
+  }
 
-    // ========================================
-    //  옵션 선택
-    // ========================================
-    function selectColor(btn, color) {
-      document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
-      btn.classList.add('active');
-      state.color = color;
-      state.currentImageIndex = 0;
-      document.getElementById('color-label').textContent = color;
+  window.addEventListener('hashchange', router);
+  window.addEventListener('DOMContentLoaded', router);
 
-      const mainImg = document.getElementById('main-product-img');
-      mainImg.style.opacity = '0';
-      setTimeout(() => {
-        mainImg.src = productImages[color].main[0];
-        mainImg.alt = '엘레강스 트렌치 코트 - ' + color;
-        mainImg.style.opacity = '1';
-      }, 200);
+  // ============================================================
+  //  PAGE: HOME
+  // ============================================================
+  function renderHome(el) {
+    el.innerHTML = `
+      <!-- 히어로 배너 -->
+      <section class="py-12 sm:py-16 fade-in">
+        <div class="relative bg-warm-800 rounded-2xl overflow-hidden">
+          <div class="absolute inset-0 opacity-20">
+            <img src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1200&h=500&fit=crop&auto=format&q=60" alt="" class="w-full h-full object-cover" />
+          </div>
+          <div class="relative py-16 sm:py-20 px-8 sm:px-16 text-center">
+            <p class="text-[11px] tracking-[0.4em] text-warm-400 uppercase mb-4">Live Commerce Shopping</p>
+            <h1 class="font-serif text-4xl sm:text-5xl font-bold text-white italic tracking-wide mb-4">CHICMOOD LIVE 특가</h1>
+            <p class="text-warm-300 text-sm sm:text-base font-light max-w-lg mx-auto mb-8">유튜브/틱톡 라이브 방송에서 만나는<br class="sm:hidden"> 엘레강스 여성 패션 특가 쇼핑</p>
+            <a href="#live/1" class="btn-primary inline-flex">지금 LIVE 보러가기 →</a>
+          </div>
+        </div>
+      </section>
 
-      const thumbWraps = document.querySelectorAll('.thumb-wrap');
-      thumbWraps.forEach((wrap, i) => {
-        wrap.querySelector('img').src = productImages[color].thumbs[i];
-        wrap.classList.toggle('active', i === 0);
-      });
-    }
+      <!-- 방송 카드 -->
+      <section class="pb-16">
+        <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-10">Live Broadcasts</p>
+        <div class="grid sm:grid-cols-2 gap-6">
+          ${BROADCASTS.map(b => {
+            const prods = b.productIds.map(id => getProduct(id)).filter(Boolean);
+            const isLive = b.status === 'live';
+            return `
+              <a href="#live/${b.id}" class="block bg-white border border-warm-200 rounded-xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1">
+                <div class="relative h-48 sm:h-56 overflow-hidden bg-warm-100">
+                  <div class="grid grid-cols-${Math.min(prods.length, 3)} h-full">
+                    ${prods.slice(0,3).map(p => `<img src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover" />`).join('')}
+                  </div>
+                  <div class="absolute top-3 left-3">
+                    ${isLive
+                      ? '<span class="bg-red-500 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full animate-pulse">● LIVE</span>'
+                      : '<span class="bg-warm-500/80 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full">종료</span>'}
+                  </div>
+                </div>
+                <div class="p-5">
+                  <h3 class="font-semibold text-warm-800 mb-1">${b.title}</h3>
+                  <p class="text-[12px] text-warm-400 font-light mb-2">${b.date}</p>
+                  <p class="text-[12px] text-warm-400 font-light">${b.description}</p>
+                  <div class="mt-3 flex items-center gap-2">
+                    <span class="text-[11px] font-semibold text-warm-600">상품 ${prods.length}개</span>
+                    <span class="text-warm-300">·</span>
+                    <span class="text-[11px] text-rose-500 font-semibold">최대 ${Math.max(...prods.map(p=>p.discount))}% OFF</span>
+                  </div>
+                </div>
+              </a>
+            `;
+          }).join('')}
+        </div>
+      </section>
 
-    function switchMainImage(index, thumbEl) {
-      state.currentImageIndex = index;
-      const mainImg = document.getElementById('main-product-img');
-      mainImg.style.opacity = '0';
-      setTimeout(() => {
-        mainImg.src = productImages[state.color].main[index];
-        mainImg.style.opacity = '1';
-      }, 200);
-      document.querySelectorAll('.thumb-wrap').forEach(w => w.classList.remove('active'));
-      thumbEl.classList.add('active');
-    }
-
-    function selectSize(btn, size) {
-      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      btn.classList.add('active');
-      state.size = size;
-    }
-
-    function changeQty(delta) {
-      state.qty = Math.max(1, Math.min(99, state.qty + delta));
-      document.getElementById('qty-display').textContent = state.qty;
-    }
-
-    // ========================================
-    //  사이즈 가이드
-    // ========================================
-    function showSizeGuide() { document.getElementById('overlay-size').classList.remove('hidden'); }
-    function closeSizeGuide() { document.getElementById('overlay-size').classList.add('hidden'); }
-
-    // ========================================
-    //  장바구니
-    // ========================================
-    function addToCart() {
-      const existing = state.cart.find(item =>
-        item.color === state.color && item.size === state.size
-      );
-      if (existing) {
-        existing.qty += state.qty;
-      } else {
-        state.cart.push({
-          id: Date.now(),
-          name: state.product.name,
-          price: state.product.price,
-          color: state.color,
-          size: state.size,
-          qty: state.qty
-        });
-      }
-      renderCart();
-      showToast('장바구니에 담았습니다');
-      const section = document.getElementById('order-section');
-      section.classList.remove('hidden');
-      setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    }
-
-    function removeFromCart(id) {
-      state.cart = state.cart.filter(item => item.id !== id);
-      renderCart();
-      if (state.cart.length === 0) document.getElementById('order-section').classList.add('hidden');
-    }
-
-    function updateCartQty(id, delta) {
-      const item = state.cart.find(i => i.id === id);
-      if (!item) return;
-      item.qty = Math.max(1, item.qty + delta);
-      renderCart();
-    }
-
-    function renderCart() {
-      const container = document.getElementById('cart-items');
-      const totalEl = document.getElementById('cart-total');
-      let total = 0;
-
-      container.innerHTML = state.cart.map(item => {
-        const subtotal = item.price * item.qty;
-        total += subtotal;
-        const thumbSrc = productImages[item.color] ? productImages[item.color].cartThumb : '';
-        return `
-          <div class="flex items-center gap-5 bg-white border border-warm-200 rounded-lg p-5">
-            <div class="w-16 h-20 bg-warm-100 rounded flex-shrink-0 overflow-hidden">
-              <img src="${thumbSrc}" alt="${item.name} ${item.color}" class="w-full h-full object-cover rounded" />
+      <!-- 안내 -->
+      <section class="pb-8">
+        <div class="grid grid-cols-3 gap-4 text-center py-8 border-t border-warm-200">
+          <div>
+            <div class="text-warm-400 mb-2">
+              <svg class="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
             </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-warm-800 truncate">${item.name}</p>
-              <p class="text-[11px] text-warm-400 mt-0.5">${item.color} / ${item.size}</p>
-              <div class="flex items-center gap-0 mt-2">
-                <button class="qty-btn rounded-l text-xs" onclick="updateCartQty(${item.id},-1)" style="width:28px;height:28px;">−</button>
-                <div class="w-10 h-[28px] flex items-center justify-center border-t border-b border-warm-200 text-xs font-semibold bg-white text-warm-800">${item.qty}</div>
-                <button class="qty-btn rounded-r text-xs" onclick="updateCartQty(${item.id},1)" style="width:28px;height:28px;">+</button>
+            <p class="text-[11px] text-warm-500 font-medium">10만원 이상 무료배송</p>
+          </div>
+          <div>
+            <div class="text-warm-400 mb-2">
+              <svg class="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <p class="text-[11px] text-warm-500 font-medium">정품 보장</p>
+          </div>
+          <div>
+            <div class="text-warm-400 mb-2">
+              <svg class="w-6 h-6 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            </div>
+            <p class="text-[11px] text-warm-500 font-medium">카카오 채널 문의</p>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  // ============================================================
+  //  PAGE: LIVE (방송별 상품 목록)
+  // ============================================================
+  function renderLive(el, id) {
+    const broadcast = getBroadcast(id);
+    if (!broadcast) { el.innerHTML = '<p class="py-20 text-center text-warm-400">방송 정보를 찾을 수 없습니다.</p>'; return; }
+    const products = broadcast.productIds.map(pid => getProduct(pid)).filter(Boolean);
+    const isLive = broadcast.status === 'live';
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <a href="#home" class="inline-flex items-center gap-1 text-[12px] text-warm-400 hover:text-warm-700 transition-colors mb-6">
+          ← 홈으로
+        </a>
+        <div class="mb-8">
+          <div class="flex items-center gap-3 mb-2">
+            ${isLive
+              ? '<span class="bg-red-500 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full animate-pulse">● LIVE</span>'
+              : '<span class="bg-warm-400 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full">종료</span>'}
+            <h1 class="font-serif text-2xl sm:text-3xl font-semibold text-warm-900 italic">${broadcast.title}</h1>
+          </div>
+          <p class="text-[13px] text-warm-400 font-light">${broadcast.date} · ${broadcast.description}</p>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          ${products.map((p, i) => `
+            <a href="#product/${p.id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
+              <div class="relative">
+                <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+                <span class="absolute top-2 left-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">${p.discount}%</span>
               </div>
-            </div>
-            <div class="text-right flex-shrink-0">
-              <p class="text-sm font-bold text-warm-800">${formatPrice(subtotal)}</p>
-              <button class="text-[10px] text-warm-400 hover:text-rose-500 mt-2 underline underline-offset-2 transition-colors bg-transparent border-none cursor-pointer" onclick="removeFromCart(${item.id})">삭제</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      totalEl.textContent = formatPrice(total);
-    }
-
-    // ========================================
-    //  주문 제출
-    // ========================================
-    function submitOrder() {
-      if (state.cart.length === 0) { showToast('장바구니가 비어 있습니다'); return; }
-
-      const name = document.getElementById('input-name').value.trim();
-      const phone = document.getElementById('input-phone').value.trim();
-      const address = document.getElementById('input-address').value.trim();
-
-      if (!name) { showToast('이름을 입력해주세요'); document.getElementById('input-name').focus(); return; }
-      if (!phone) { showToast('전화번호를 입력해주세요'); document.getElementById('input-phone').focus(); return; }
-      if (!address) { showToast('배송지 주소를 입력해주세요'); document.getElementById('input-address').focus(); return; }
-
-      const social = document.getElementById('input-social').value.trim();
-      const memo = document.getElementById('input-memo').value.trim();
-      const total = state.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-      const orderNo = generateOrderNo();
-
-      const order = {
-        orderNo, name, phone, social, address, memo, total,
-        items: state.cart.map(item => ({
-          name: item.name, color: item.color, size: item.size,
-          qty: item.qty, price: item.price, subtotal: item.price * item.qty
-        })),
-        createdAt: new Date().toISOString()
-      };
-
-      const orders = JSON.parse(localStorage.getItem('chicmood_orders') || '[]');
-      orders.push(order);
-      localStorage.setItem('chicmood_orders', JSON.stringify(orders));
-
-      document.getElementById('overlay-loading').classList.remove('hidden');
-
-      setTimeout(() => {
-        document.getElementById('overlay-loading').classList.add('hidden');
-        document.getElementById('complete-order-no').textContent = orderNo;
-        document.getElementById('complete-total').textContent = formatPrice(total);
-        document.getElementById('complete-items').innerHTML = order.items.map(item => `
-          <div class="flex justify-between items-center text-sm">
-            <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
-            <span class="font-semibold text-warm-800">${formatPrice(item.subtotal)}</span>
-          </div>
-        `).join('');
-
-        document.getElementById('overlay-complete').classList.remove('hidden');
-
-        state.cart = [];
-        state.qty = 1;
-        document.getElementById('qty-display').textContent = '1';
-        document.getElementById('order-form').reset();
-        renderCart();
-        document.getElementById('order-section').classList.add('hidden');
-      }, 3000);
-    }
-
-    function closeComplete() {
-      document.getElementById('overlay-complete').classList.add('hidden');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    // ========================================
-    //  주문 조회
-    // ========================================
-    function lookupOrder() {
-      const name = document.getElementById('lookup-name').value.trim();
-      const phoneLast4 = document.getElementById('lookup-phone').value.trim();
-      const resultEl = document.getElementById('lookup-result');
-
-      if (!name || !phoneLast4) { showToast('이름과 전화번호 뒤 4자리를 입력해주세요'); return; }
-      if (phoneLast4.length !== 4 || !/^\d{4}$/.test(phoneLast4)) { showToast('전화번호 뒤 4자리(숫자)를 정확히 입력해주세요'); return; }
-
-      const orders = JSON.parse(localStorage.getItem('chicmood_orders') || '[]');
-      const matched = orders.filter(o => o.name === name && o.phone.slice(-4) === phoneLast4);
-
-      if (matched.length === 0) {
-        resultEl.innerHTML = `
-          <div class="text-center py-12 fade-in">
-            <svg class="w-12 h-12 mx-auto text-warm-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <p class="text-sm text-warm-400">일치하는 주문 내역이 없습니다.</p>
-            <p class="text-[11px] text-warm-300 mt-1">이름과 전화번호를 다시 확인해주세요.</p>
-          </div>
-        `;
-        return;
-      }
-
-      matched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      resultEl.innerHTML = matched.map(order => {
-        const date = new Date(order.createdAt);
-        const dateStr = `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-        return `
-          <div class="border border-warm-200 rounded-lg bg-white p-6 mb-4 slide-up">
-            <div class="flex justify-between items-start mb-4">
-              <div>
-                <p class="text-[11px] text-warm-400 mb-0.5">${dateStr}</p>
-                <p class="text-sm font-bold text-warm-800">${order.orderNo}</p>
+              <div class="p-3 sm:p-4">
+                <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-[15px] font-bold text-warm-800">${fmt(p.price)}</span>
+                  <span class="text-[11px] text-warm-300 line-through">${fmt(p.originalPrice)}</span>
+                </div>
               </div>
-              <span class="text-[10px] font-semibold tracking-wider uppercase bg-warm-100 px-3 py-1 rounded-full text-warm-500">입금 대기</span>
+            </a>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  // ============================================================
+  //  PAGE: PRODUCT DETAIL
+  // ============================================================
+  function renderProduct(el, id) {
+    const p = getProduct(id);
+    if (!p) { el.innerHTML = '<p class="py-20 text-center text-warm-400">상품 정보를 찾을 수 없습니다.</p>'; return; }
+
+    pdState = { selectedColor: 0, selectedSize: 1, qty: 1, imageIndex: 0 };
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <a href="#live/${p.broadcastId}" class="inline-flex items-center gap-1 text-[12px] text-warm-400 hover:text-warm-700 transition-colors mb-6">
+          ← 상품 목록
+        </a>
+        <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
+          <!-- 이미지 -->
+          <div>
+            <div class="aspect-[3/4] bg-warm-100 rounded-lg overflow-hidden mb-2">
+              <img id="pd-main-img" src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" />
             </div>
-            <div class="space-y-2 mb-4">
-              ${order.items.map(item => `
-                <div class="flex justify-between items-center text-sm">
-                  <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
-                  <span class="font-semibold text-warm-800">${formatPrice(item.subtotal)}</span>
+            <div class="grid grid-cols-${p.images.length} gap-2">
+              ${p.images.map((img, i) => `
+                <div class="thumb-wrap ${i===0?'active':''} aspect-square bg-warm-100 rounded" onclick="pdSwitchImage(${id},${i},this)">
+                  <img src="${img.replace('w=600&h=800','w=200&h=200')}" alt="썸네일 ${i+1}" class="w-full h-full object-cover rounded" />
                 </div>
               `).join('')}
             </div>
-            <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
-              <span class="text-[11px] text-warm-400">총 결제금액</span>
-              <span class="font-serif text-base font-bold text-warm-800">${formatPrice(order.total)}</span>
+          </div>
+
+          <!-- 정보 -->
+          <div class="flex flex-col">
+            <p class="text-[11px] text-warm-400 tracking-[0.2em] uppercase mb-2 font-light">CHICMOOD LIVE</p>
+            <h1 class="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-warm-900 italic mb-1">${p.name}</h1>
+
+            <div class="flex items-baseline gap-3 mt-4 mb-2">
+              <span class="font-serif text-3xl font-bold text-warm-800">${fmt(p.price)}</span>
+              <span class="text-base text-warm-300 line-through">${fmt(p.originalPrice)}</span>
             </div>
-            <div class="border-t border-warm-100 pt-3 mt-3 space-y-1">
-              <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${order.address}</p>
-              ${order.memo ? `<p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">요청사항</span> ${order.memo}</p>` : ''}
+            <div class="flex items-center gap-2 mb-6">
+              <span class="text-[11px] font-semibold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-full">${p.discount}% OFF</span>
+            </div>
+
+            <div class="border-t border-warm-200 pt-6 space-y-6 flex-1">
+              <!-- 색상 -->
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">색상</span>
+                  <span id="pd-color-label" class="text-[11px] text-warm-400">${p.colors[0].name}</span>
+                </div>
+                <div class="flex gap-3">
+                  ${p.colors.map((c, i) => `
+                    <button class="color-chip ${i===0?'active':''}" style="background:${c.hex}" onclick="pdSelectColor(${id},${i})" data-idx="${i}"></button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <!-- 사이즈 -->
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">사이즈</span>
+                  <button class="text-[11px] text-warm-400 underline underline-offset-4 hover:text-warm-700 transition-colors bg-transparent border-none cursor-pointer" onclick="document.getElementById('overlay-size').classList.remove('hidden')">사이즈 가이드</button>
+                </div>
+                <div class="flex gap-2" id="pd-sizes">
+                  <button class="chip" onclick="pdSelectSize(0,this)">S (44)</button>
+                  <button class="chip active" onclick="pdSelectSize(1,this)">M (55)</button>
+                  <button class="chip" onclick="pdSelectSize(2,this)">L (66)</button>
+                </div>
+              </div>
+
+              <!-- 수량 -->
+              <div>
+                <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 block mb-3">수량</span>
+                <div class="flex items-center">
+                  <button class="qty-btn rounded-l-md" onclick="pdChangeQty(-1)">−</button>
+                  <div id="pd-qty" class="w-14 h-[36px] flex items-center justify-center border-t border-b border-warm-200 text-sm font-semibold bg-white text-warm-800">1</div>
+                  <button class="qty-btn rounded-r-md" onclick="pdChangeQty(1)">+</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 버튼 -->
+            <div class="mt-8 space-y-3">
+              <button class="btn-primary w-full" onclick="pdAddToCart(${p.id})">장바구니 담기</button>
+              <button class="btn-outline w-full" onclick="pdBuyNow(${p.id})">바로 구매하기</button>
+            </div>
+
+            <!-- 아이콘 -->
+            <div class="mt-6 grid grid-cols-3 gap-4 text-center">
+              <div>
+                <svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <p class="text-[10px] text-warm-400">무료배송 (10만↑)</p>
+              </div>
+              <div>
+                <svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <p class="text-[10px] text-warm-400">정품보장</p>
+              </div>
+              <div>
+                <svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <p class="text-[10px] text-warm-400">7일 교환/반품</p>
+              </div>
+            </div>
+
+            <!-- 상품 설명 -->
+            <div class="mt-8 pt-6 border-t border-warm-200">
+              <p class="text-[12px] text-warm-500 leading-[1.9] font-light">
+                ${p.description}
+                <br /><br />
+                <span class="text-warm-400">· 소재: ${p.material}<br />· 제조국: 대한민국</span>
+              </p>
             </div>
           </div>
-        `;
-      }).join('');
+        </div>
+      </section>
+    `;
+  }
+
+  // Product detail helpers
+  function pdSwitchImage(productId, index, thumbEl) {
+    const p = getProduct(productId);
+    pdState.imageIndex = index;
+    const img = document.getElementById('pd-main-img');
+    img.style.opacity = '0';
+    setTimeout(() => { img.src = p.images[index]; img.style.opacity = '1'; }, 200);
+    document.querySelectorAll('.thumb-wrap').forEach(w => w.classList.remove('active'));
+    thumbEl.classList.add('active');
+  }
+
+  function pdSelectColor(productId, idx) {
+    const p = getProduct(productId);
+    pdState.selectedColor = idx;
+    document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.color-chip')[idx].classList.add('active');
+    document.getElementById('pd-color-label').textContent = p.colors[idx].name;
+  }
+
+  function pdSelectSize(idx, btn) {
+    pdState.selectedSize = idx;
+    document.querySelectorAll('#pd-sizes .chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function pdChangeQty(delta) {
+    pdState.qty = Math.max(1, Math.min(99, pdState.qty + delta));
+    document.getElementById('pd-qty').textContent = pdState.qty;
+  }
+
+  function pdAddToCart(productId) {
+    const p = getProduct(productId);
+    const sizes = ['S','M','L'];
+    const color = p.colors[pdState.selectedColor].name;
+    const size = sizes[pdState.selectedSize];
+
+    const existing = cart.find(item => item.productId === productId && item.color === color && item.size === size);
+    if (existing) { existing.qty += pdState.qty; }
+    else {
+      cart.push({ productId, name: p.name, price: p.price, color, size, qty: pdState.qty, image: p.images[0] });
+    }
+    saveCart(); updateCartBadge();
+    showToast('장바구니에 담았습니다');
+  }
+
+  function pdBuyNow(productId) {
+    pdAddToCart(productId);
+    location.hash = '#cart';
+  }
+
+  // ============================================================
+  //  PAGE: CART
+  // ============================================================
+  function renderCart(el) {
+    if (cart.length === 0) {
+      el.innerHTML = `
+        <section class="py-20 text-center fade-in">
+          <svg class="w-16 h-16 mx-auto text-warm-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/></svg>
+          <p class="text-warm-400 mb-2">장바구니가 비어 있습니다</p>
+          <a href="#home" class="text-[13px] text-warm-600 underline underline-offset-4">쇼핑하러 가기</a>
+        </section>
+      `;
+      return;
     }
 
-    // ========================================
-    //  오버레이 외부 클릭 닫기
-    // ========================================
-    document.querySelectorAll('.overlay').forEach(overlay => {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === this) this.classList.add('hidden');
-      });
+    const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const shippingFee = subtotal >= 100000 ? 0 : 3000;
+    const total = subtotal + shippingFee;
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <h1 class="font-serif text-2xl font-semibold text-warm-900 italic mb-8">장바구니</h1>
+        <div class="space-y-4 mb-8">
+          ${cart.map((item, idx) => `
+            <div class="flex items-center gap-4 bg-white border border-warm-200 rounded-lg p-4">
+              <a href="#product/${item.productId}" class="w-16 h-20 bg-warm-100 rounded flex-shrink-0 overflow-hidden">
+                <img src="${item.image.replace('w=600&h=800','w=100&h=130')}" alt="${item.name}" class="w-full h-full object-cover rounded" />
+              </a>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-warm-800 truncate">${item.name}</p>
+                <p class="text-[11px] text-warm-400 mt-0.5">${item.color} / ${item.size}</p>
+                <div class="flex items-center gap-0 mt-2">
+                  <button class="qty-btn rounded-l text-xs" onclick="cartUpdateQty(${idx},-1)" style="width:28px;height:28px;">−</button>
+                  <div class="w-10 h-[28px] flex items-center justify-center border-t border-b border-warm-200 text-xs font-semibold bg-white text-warm-800">${item.qty}</div>
+                  <button class="qty-btn rounded-r text-xs" onclick="cartUpdateQty(${idx},1)" style="width:28px;height:28px;">+</button>
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <p class="text-sm font-bold text-warm-800">${fmt(item.price * item.qty)}</p>
+                <button class="text-[10px] text-warm-400 hover:text-rose-500 mt-2 underline underline-offset-2 transition-colors bg-transparent border-none cursor-pointer" onclick="cartRemove(${idx})">삭제</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- 합계 -->
+        <div class="bg-white border border-warm-200 rounded-lg p-6 space-y-3 mb-6">
+          <div class="flex justify-between text-sm">
+            <span class="text-warm-500">상품 금액</span>
+            <span class="text-warm-800 font-semibold">${fmt(subtotal)}</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-warm-500">배송비</span>
+            <span class="text-warm-800 font-semibold">${shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(shippingFee)}</span>
+          </div>
+          ${shippingFee > 0 ? `<p class="text-[11px] text-warm-400 font-light">${fmt(100000 - subtotal)} 더 담으면 무료배송!</p>` : ''}
+          <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
+            <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
+            <span class="font-serif text-2xl font-bold text-warm-800">${fmt(total)}</span>
+          </div>
+        </div>
+
+        <button class="btn-primary w-full" onclick="location.hash='#checkout'">주문하기</button>
+      </section>
+    `;
+  }
+
+  function cartUpdateQty(idx, delta) {
+    cart[idx].qty = Math.max(1, cart[idx].qty + delta);
+    saveCart(); renderCart(document.getElementById('page-content'));
+    updateCartBadge();
+  }
+
+  function cartRemove(idx) {
+    cart.splice(idx, 1);
+    saveCart(); renderCart(document.getElementById('page-content'));
+    updateCartBadge();
+  }
+
+  // ============================================================
+  //  PAGE: CHECKOUT
+  // ============================================================
+  function renderCheckout(el) {
+    if (cart.length === 0) { location.hash = '#cart'; return; }
+
+    const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const shippingFee = subtotal >= 100000 ? 0 : 3000;
+    const total = subtotal + shippingFee;
+
+    const userName = currentUser ? currentUser.name : '';
+    const userPhone = currentUser ? currentUser.phone : '';
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <h1 class="font-serif text-2xl font-semibold text-warm-900 italic mb-2">주문서</h1>
+        <p class="text-[12px] text-warm-400 font-light mb-8">주문 정보를 입력하고 구매를 완료해주세요.</p>
+
+        <!-- 주문 상품 요약 -->
+        <div class="bg-warm-100/50 border border-warm-200 rounded-lg p-5 mb-8">
+          <p class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 mb-3">주문 상품</p>
+          <div class="space-y-2">
+            ${cart.map(item => `
+              <div class="flex justify-between text-sm">
+                <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
+                <span class="font-semibold text-warm-800">${fmt(item.price * item.qty)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <div class="border-t border-warm-200 mt-3 pt-3 flex justify-between">
+            <span class="text-sm text-warm-500">배송비</span>
+            <span class="text-sm font-semibold text-warm-800">${shippingFee === 0 ? '무료' : fmt(shippingFee)}</span>
+          </div>
+          <div class="border-t border-warm-200 mt-3 pt-3 flex justify-between items-center">
+            <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
+            <span class="font-serif text-xl font-bold text-warm-800">${fmt(total)}</span>
+          </div>
+        </div>
+
+        <!-- 입력 폼 -->
+        <form id="checkout-form" onsubmit="return false;" class="space-y-5 max-w-xl">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">이름 <span class="text-rose-400">*</span></label>
+            <input id="co-name" type="text" class="input-field" placeholder="홍길동" value="${escapeHtml(userName)}" required />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호 <span class="text-rose-400">*</span></label>
+            <input id="co-phone" type="tel" class="input-field" placeholder="010-1234-5678" value="${escapeHtml(userPhone)}" required />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">유튜브 / 소셜 닉네임</label>
+            <input id="co-social" type="text" class="input-field" placeholder="@chicmood_viewer" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송지 주소 <span class="text-rose-400">*</span></label>
+            <input id="co-address" type="text" class="input-field" placeholder="서울특별시 강남구 테헤란로 123, 8층" required />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송 요청사항</label>
+            <textarea id="co-memo" class="input-field resize-none" rows="3" placeholder="부재 시 경비실에 맡겨주세요."></textarea>
+          </div>
+
+          <div class="bg-warm-100/50 border border-warm-200 rounded-lg p-4 text-[12px] text-warm-500 font-light leading-relaxed">
+            <p class="font-semibold text-warm-600 mb-1">입금 안내</p>
+            <p>· 입금계좌: <span class="font-semibold">신한은행 110-123-456789 예금주 지선미</span></p>
+            <p>· 주문 후 24시간 이내 입금해주세요.</p>
+            <p>· 입금 확인 후 주문조회에서 "입금완료" 버튼을 눌러주세요.</p>
+          </div>
+
+          <button class="btn-primary w-full mt-4" onclick="submitCheckout()">구매하기 · ${fmt(total)}</button>
+        </form>
+      </section>
+    `;
+  }
+
+  function submitCheckout() {
+    const name = document.getElementById('co-name').value.trim();
+    const phone = document.getElementById('co-phone').value.trim();
+    const address = document.getElementById('co-address').value.trim();
+
+    if (!name) { showToast('이름을 입력해주세요'); document.getElementById('co-name').focus(); return; }
+    if (!phone) { showToast('전화번호를 입력해주세요'); document.getElementById('co-phone').focus(); return; }
+    if (!address) { showToast('배송지 주소를 입력해주세요'); document.getElementById('co-address').focus(); return; }
+
+    const social = document.getElementById('co-social').value.trim();
+    const memo = document.getElementById('co-memo').value.trim();
+    const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const shippingFee = subtotal >= 100000 ? 0 : 3000;
+    const total = subtotal + shippingFee;
+    const orderNo = genOrderNo();
+
+    const order = {
+      orderNo, name, phone, social, address, memo,
+      subtotal, shippingFee, total,
+      status: '입금대기',
+      items: cart.map(i => ({ productId: i.productId, name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price, subtotal: i.price * i.qty })),
+      createdAt: new Date().toISOString()
+    };
+
+    const orders = getOrders();
+    orders.push(order);
+    saveOrders(orders);
+
+    // Show loading
+    document.getElementById('overlay-loading').classList.remove('hidden');
+
+    setTimeout(() => {
+      document.getElementById('overlay-loading').classList.add('hidden');
+
+      // Show completion
+      document.getElementById('complete-order-no').textContent = orderNo;
+      document.getElementById('complete-total').textContent = fmt(total);
+      document.getElementById('complete-items').innerHTML = order.items.map(item => `
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
+          <span class="font-semibold text-warm-800">${fmt(item.subtotal)}</span>
+        </div>
+      `).join('') + (shippingFee > 0 ? `
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-warm-600">배송비</span>
+          <span class="font-semibold text-warm-800">${fmt(shippingFee)}</span>
+        </div>
+      ` : '');
+
+      document.getElementById('overlay-complete').classList.remove('hidden');
+
+      // Clear cart
+      cart = [];
+      saveCart();
+      updateCartBadge();
+    }, 3000);
+  }
+
+  function closeComplete() {
+    document.getElementById('overlay-complete').classList.add('hidden');
+    location.hash = '#home';
+  }
+
+  // ============================================================
+  //  PAGE: LOOKUP (주문 조회)
+  // ============================================================
+  function renderLookup(el) {
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <div class="max-w-lg mx-auto">
+          <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-2">주문 내역 조회</h1>
+          <p class="text-[12px] text-warm-400 text-center mb-8 font-light">주문 시 입력한 이름과 전화번호 뒤 4자리를 입력해주세요.</p>
+
+          <div class="space-y-4 mb-6">
+            <input id="lk-name" type="text" class="input-field" placeholder="이름" />
+            <input id="lk-phone" type="text" class="input-field" maxlength="4" placeholder="전화번호 뒤 4자리" />
+            <button class="btn-primary w-full" onclick="doLookup()">조회하기</button>
+          </div>
+
+          <div id="lookup-result" class="mt-8"></div>
+
+          <div class="mt-12 text-center border-t border-warm-200 pt-8">
+            <p class="text-[12px] text-warm-400 mb-3">주문 관련 문의가 있으신가요?</p>
+            <a href="https://pf.kakao.com/_xkIxcxj" target="_blank" rel="noopener" class="btn-outline inline-flex items-center gap-2 text-[13px]">
+              💬 카카오톡 문의하기
+            </a>
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
+  function doLookup() {
+    const name = document.getElementById('lk-name').value.trim();
+    const phoneLast4 = document.getElementById('lk-phone').value.trim();
+    const resultEl = document.getElementById('lookup-result');
+
+    if (!name || !phoneLast4) { showToast('이름과 전화번호 뒤 4자리를 입력해주세요'); return; }
+    if (phoneLast4.length !== 4 || !/^\d{4}$/.test(phoneLast4)) { showToast('전화번호 뒤 4자리(숫자)를 정확히 입력해주세요'); return; }
+
+    const orders = getOrders();
+    const matched = orders.filter(o => o.name === name && o.phone.slice(-4) === phoneLast4);
+
+    if (matched.length === 0) {
+      resultEl.innerHTML = `
+        <div class="text-center py-12 fade-in">
+          <svg class="w-12 h-12 mx-auto text-warm-200 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p class="text-sm text-warm-400">일치하는 주문 내역이 없습니다.</p>
+          <p class="text-[11px] text-warm-300 mt-1">이름과 전화번호를 다시 확인해주세요.</p>
+        </div>
+      `;
+      return;
+    }
+
+    matched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    resultEl.innerHTML = matched.map(order => {
+      const d = new Date(order.createdAt);
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const statusClass = 'status-' + order.status;
+      const canConfirm = order.status === '입금대기';
+
+      return `
+        <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4 slide-up">
+          <div class="flex justify-between items-start mb-4">
+            <div>
+              <p class="text-[11px] text-warm-400 mb-0.5">${dateStr}</p>
+              <p class="text-sm font-bold text-warm-800">${order.orderNo}</p>
+            </div>
+            <span class="status-badge ${statusClass}">${order.status}</span>
+          </div>
+          <div class="space-y-1.5 mb-4">
+            ${order.items.map(item => `
+              <div class="flex justify-between items-center text-sm">
+                <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
+                <span class="font-semibold text-warm-800">${fmt(item.subtotal)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
+            <span class="text-[11px] text-warm-400">총 결제금액 (배송비 ${order.shippingFee === 0 ? '무료' : fmt(order.shippingFee)} 포함)</span>
+            <span class="font-serif text-base font-bold text-warm-800">${fmt(order.total)}</span>
+          </div>
+          <div class="border-t border-warm-100 pt-3 mt-3 space-y-1">
+            <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${escapeHtml(order.address)}</p>
+            ${order.memo ? `<p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">요청사항</span> ${escapeHtml(order.memo)}</p>` : ''}
+          </div>
+          ${canConfirm ? `
+            <button class="btn-primary w-full mt-4 text-[13px]" onclick="confirmDeposit('${order.orderNo}')">입금완료 (확인요청)</button>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function confirmDeposit(orderNo) {
+    const orders = getOrders();
+    const order = orders.find(o => o.orderNo === orderNo);
+    if (order) {
+      order.status = '확인요청';
+      saveOrders(orders);
+      showToast('입금 확인 요청이 전송되었습니다');
+      doLookup();
+    }
+  }
+
+  // ============================================================
+  //  PAGE: REGISTER (회원가입)
+  // ============================================================
+  function renderRegister(el) {
+    if (currentUser) { location.hash = '#mypage'; return; }
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <div class="max-w-sm mx-auto">
+          <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-2">회원가입</h1>
+          <p class="text-[12px] text-warm-400 text-center mb-8 font-light">간편하게 가입하고 주문을 관리하세요.</p>
+
+          <form onsubmit="return false;" class="space-y-5">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">이름 <span class="text-rose-400">*</span></label>
+              <input id="reg-name" type="text" class="input-field" placeholder="홍길동" required />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호 <span class="text-rose-400">*</span></label>
+              <input id="reg-phone" type="tel" class="input-field" placeholder="010-1234-5678" required />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">비밀번호 (숫자 4자리) <span class="text-rose-400">*</span></label>
+              <input id="reg-pw" type="password" class="input-field" maxlength="4" placeholder="●●●●" inputmode="numeric" pattern="[0-9]{4}" required />
+            </div>
+            <button class="btn-primary w-full" onclick="doRegister()">가입하기</button>
+          </form>
+
+          <p class="text-center mt-6 text-[12px] text-warm-400">이미 회원이신가요? <a href="#login" class="text-warm-700 underline underline-offset-4 font-medium">로그인</a></p>
+        </div>
+      </section>
+    `;
+  }
+
+  function doRegister() {
+    const name = document.getElementById('reg-name').value.trim();
+    const phone = document.getElementById('reg-phone').value.trim();
+    const pw = document.getElementById('reg-pw').value.trim();
+
+    if (!name) { showToast('이름을 입력해주세요'); return; }
+    if (!phone) { showToast('전화번호를 입력해주세요'); return; }
+    if (!pw || pw.length !== 4 || !/^\d{4}$/.test(pw)) { showToast('비밀번호는 숫자 4자리로 입력해주세요'); return; }
+
+    const users = getUsers();
+    if (users.find(u => u.phone === phone)) { showToast('이미 가입된 전화번호입니다'); return; }
+
+    users.push({ name, phone, password: pw });
+    saveUsers(users);
+
+    currentUser = { name, phone };
+    localStorage.setItem('chicmood_current_user', JSON.stringify(currentUser));
+    updateAuthNav();
+
+    showToast('회원가입이 완료되었습니다');
+    location.hash = '#mypage';
+  }
+
+  // ============================================================
+  //  PAGE: LOGIN
+  // ============================================================
+  function renderLogin(el) {
+    if (currentUser) { location.hash = '#mypage'; return; }
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <div class="max-w-sm mx-auto">
+          <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-2">로그인</h1>
+          <p class="text-[12px] text-warm-400 text-center mb-8 font-light">전화번호와 비밀번호로 로그인하세요.</p>
+
+          <form onsubmit="return false;" class="space-y-5">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호</label>
+              <input id="login-phone" type="tel" class="input-field" placeholder="010-1234-5678" required />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">비밀번호 (숫자 4자리)</label>
+              <input id="login-pw" type="password" class="input-field" maxlength="4" placeholder="●●●●" inputmode="numeric" required />
+            </div>
+            <button class="btn-primary w-full" onclick="doLogin()">로그인</button>
+          </form>
+
+          <p class="text-center mt-6 text-[12px] text-warm-400">아직 회원이 아니신가요? <a href="#register" class="text-warm-700 underline underline-offset-4 font-medium">회원가입</a></p>
+        </div>
+      </section>
+    `;
+  }
+
+  function doLogin() {
+    const phone = document.getElementById('login-phone').value.trim();
+    const pw = document.getElementById('login-pw').value.trim();
+
+    if (!phone || !pw) { showToast('전화번호와 비밀번호를 입력해주세요'); return; }
+
+    const users = getUsers();
+    const user = users.find(u => u.phone === phone && u.password === pw);
+
+    if (!user) { showToast('전화번호 또는 비밀번호가 일치하지 않습니다'); return; }
+
+    currentUser = { name: user.name, phone: user.phone };
+    localStorage.setItem('chicmood_current_user', JSON.stringify(currentUser));
+    updateAuthNav();
+
+    showToast(`${user.name}님, 환영합니다!`);
+    location.hash = '#mypage';
+  }
+
+  // ============================================================
+  //  PAGE: MYPAGE
+  // ============================================================
+  function renderMypage(el) {
+    if (!currentUser) { location.hash = '#login'; return; }
+
+    const orders = getOrders().filter(o => o.phone === currentUser.phone && o.name === currentUser.name);
+    orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <div class="max-w-lg mx-auto">
+          <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-8">마이페이지</h1>
+
+          <!-- 회원 정보 -->
+          <div class="bg-white border border-warm-200 rounded-lg p-6 mb-8">
+            <div class="flex items-center gap-4 mb-4">
+              <div class="w-12 h-12 rounded-full bg-warm-200 flex items-center justify-center">
+                <span class="font-serif text-lg font-bold text-warm-700">${currentUser.name.charAt(0)}</span>
+              </div>
+              <div>
+                <p class="font-semibold text-warm-800">${escapeHtml(currentUser.name)}</p>
+                <p class="text-[12px] text-warm-400">${escapeHtml(currentUser.phone)}</p>
+              </div>
+            </div>
+            <button class="btn-outline w-full text-[13px]" onclick="doLogout()">로그아웃</button>
+          </div>
+
+          <!-- 주문 내역 -->
+          <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-6">My Orders</p>
+
+          ${orders.length === 0 ? `
+            <div class="text-center py-12">
+              <p class="text-warm-400 text-sm">주문 내역이 없습니다.</p>
+              <a href="#home" class="text-[13px] text-warm-600 underline underline-offset-4 mt-2 inline-block">쇼핑하러 가기</a>
+            </div>
+          ` : orders.map(order => {
+            const d = new Date(order.createdAt);
+            const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+            const statusClass = 'status-' + order.status;
+            return `
+              <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4">
+                <div class="flex justify-between items-start mb-3">
+                  <div>
+                    <p class="text-[11px] text-warm-400 mb-0.5">${dateStr}</p>
+                    <p class="text-sm font-bold text-warm-800">${order.orderNo}</p>
+                  </div>
+                  <span class="status-badge ${statusClass}">${order.status}</span>
+                </div>
+                <div class="space-y-1.5">
+                  ${order.items.map(item => `
+                    <div class="flex justify-between items-center text-sm">
+                      <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
+                      <span class="font-semibold text-warm-800">${fmt(item.subtotal)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="border-t border-warm-100 mt-3 pt-3 flex justify-between items-center">
+                  <span class="text-[11px] text-warm-400">총 결제금액</span>
+                  <span class="font-serif text-base font-bold text-warm-800">${fmt(order.total)}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function doLogout() {
+    currentUser = null;
+    localStorage.removeItem('chicmood_current_user');
+    updateAuthNav();
+    showToast('로그아웃 되었습니다');
+    location.hash = '#home';
+  }
+
+  // ============================================================
+  //  OVERLAY HANDLERS
+  // ============================================================
+  document.querySelectorAll('.overlay').forEach(overlay => {
+    overlay.addEventListener('click', function(e) {
+      if (e.target === this && this.id === 'overlay-size') {
+        this.classList.add('hidden');
+      }
     });
+  });
   </script>
 
 </body>
