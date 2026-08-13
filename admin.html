@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHICMOOD MANAGEMENT</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['Cormorant Garamond', 'Georgia', 'serif'],
+            sans: ['Noto Sans KR', 'sans-serif']
+          },
+          colors: {
+            warm: {
+              50: '#fdf8f4', 100: '#f9efe6', 200: '#f0dcc8',
+              300: '#e4c5a5', 400: '#d4a574', 500: '#c4884a',
+              600: '#a86e35', 700: '#8a5628', 800: '#6b4220',
+              900: '#4a2e16'
+            },
+            rose: {
+              50: '#fdf2f4', 100: '#f9e0e5', 200: '#f0bfc8',
+              400: '#c97080', 500: '#b85a6c', 600: '#9a4456'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Noto Sans KR', sans-serif; background: #fdf8f4; color: #3d2e22; }
+
+    .fade-in { animation: fadeIn 0.3s ease-out forwards; opacity: 0; }
+    @keyframes fadeIn { to { opacity: 1; } }
+
+    .spinner { width: 32px; height: 32px; border: 3px solid #f0dcc8; border-top-color: #8a5628; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .input-field { width: 100%; padding: 10px 14px; border: 1.5px solid #e4c5a5; border-radius: 6px; background: #fff; font-size: 13px; transition: border-color 0.2s; outline: none; font-family: 'Noto Sans KR', sans-serif; color: #3d2e22; }
+    .input-field:focus { border-color: #8a5628; }
+    .input-field::placeholder { color: #c4b09a; }
+
+    .btn-primary { background: #6b4220; color: #fff; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-primary:hover { background: #8a5628; }
+    .btn-primary:disabled { background: #d4c5a5; cursor: not-allowed; }
+
+    .btn-outline { background: transparent; color: #6b4220; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid #6b4220; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-outline:hover { background: #6b4220; color: #fff; }
+
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn-danger { background: #dc2626; color: #fff; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-danger:hover { background: #b91c1c; }
+
+    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .status-입금대기 { background: #fef1d1; color: #a86e35; }
+    .status-확인요청 { background: #c9daf8; color: #2b5797; }
+    .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
+    .status-배송중 { background: #e4d7f5; color: #5b3a8e; }
+    .status-송장완료 { background: #d1fae5; color: #065f46; }
+    .status-취소 { background: #fee2e2; color: #991b1b; }
+
+    .tab { padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .tab:hover { color: #6b4220; }
+    .tab.active { color: #6b4220; border-bottom-color: #6b4220; font-weight: 700; }
+
+    .filter-tab { padding: 6px 16px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1.5px solid #e4c5a5; background: #fff; color: #a86e35; border-radius: 20px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .filter-tab:hover { border-color: #c4884a; }
+    .filter-tab.active { background: #6b4220; color: #fff; border-color: #6b4220; }
+
+    .card { background: #fff; border: 1px solid #f0dcc8; border-radius: 12px; padding: 20px; }
+
+    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #6b4220; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 11px; font-weight: 600; color: #a86e35; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; border-bottom: 2px solid #f0dcc8; }
+    td { padding: 12px; border-bottom: 1px solid #f9efe6; font-size: 13px; color: #3d2e22; vertical-align: top; }
+    tr:hover td { background: #fdf8f4; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(74,46,22,0.4); backdrop-filter: blur(4px); z-index: 50; display: flex; align-items: center; justify-content: center; }
+    .overlay-content { animation: scaleIn 0.2s ease-out forwards; background: #fff; border-radius: 12px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; margin: 16px; }
+    @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e4c5a5; border-radius: 3px; }
+
+    /* 모바일 사이드바 */
+    .sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 40; display: none; }
+    .sidebar-overlay.open { display: block; }
+    .sidebar { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: #fff; z-index: 45; transition: left 0.3s ease; overflow-y: auto; box-shadow: 2px 0 12px rgba(0,0,0,0.1); }
+    .sidebar.open { left: 0; }
+    .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 12px 20px; font-size: 14px; color: #6b4220; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: 'Noto Sans KR', sans-serif; transition: background 0.15s; }
+    .sidebar-item:hover { background: #fdf8f4; }
+    .sidebar-item.active { background: #f9efe6; color: #4a2e16; font-weight: 700; }
+    .hamburger { display: none; background: none; border: none; color: #fff; cursor: pointer; padding: 4px; }
+    @media (max-width: 768px) {
+      .hamburger { display: flex; align-items: center; }
+      .desktop-tabs { display: none !important; }
+    }
+    @media (min-width: 769px) {
+      .sidebar, .sidebar-overlay { display: none !important; }
+    }
+
+    /* 서브탭 */
+    .sub-tab { padding: 8px 16px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .sub-tab:hover { color: #6b4220; }
+    .sub-tab.active { color: #6b4220; border-bottom-color: #6b4220; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- 헤더 -->
+  <header class="bg-warm-800 text-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-[56px] flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
+        <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
+      </div>
+      <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
+    </div>
+  </header>
+
+  <!-- 모바일 사이드바 -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="p-4 border-b border-warm-200">
+      <span class="font-serif text-lg font-semibold text-warm-800 italic">CHICMOOD</span>
+    </div>
+    <div class="py-2" id="sidebar-menu"></div>
+  </div>
+
+  <!-- 탭 네비게이션 (데스크톱) -->
+  <nav id="main-nav" class="bg-white border-b border-warm-200 hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto desktop-tabs">
+      <button class="tab" data-tab="dashboard" onclick="navigate('dashboard')">대시보드</button>
+      <button class="tab" data-tab="orders" onclick="navigate('orders')">주문관리</button>
+      <button class="tab" data-tab="shipping" onclick="navigate('shipping')">배송관리</button>
+      <button class="tab" data-tab="products" onclick="navigate('products')">상품관리</button>
+      <button class="tab" data-tab="vendors" onclick="navigate('vendors')">거래처관리</button>
+      <button class="tab" data-tab="purchase-orders" onclick="navigate('purchase-orders')">발주관리</button>
+      <button class="tab" data-tab="inventory" onclick="navigate('inventory')">재고관리</button>
+      <button class="tab" data-tab="members" onclick="navigate('members')">회원관리</button>
+      <button class="tab" data-tab="sales" onclick="navigate('sales')">매출관리</button>
+      <button class="tab" data-tab="returns" onclick="navigate('returns')">반품관리</button>
+      <button class="tab" data-tab="broadcasts" onclick="navigate('broadcasts')">방송관리</button>
+      <button class="tab" data-tab="reports" onclick="navigate('reports')">통계</button>
+      <button class="tab" data-tab="system" onclick="navigate('system')">시스템</button>
+    </div>
+  </nav>
+
+  <!-- 메인 -->
+  <main id="page-content" class="max-w-7xl mx-auto px-4 sm:px-6 py-8"></main>
+
+  <script>
+  // ============================================================
+  //  STATE
+  // ============================================================
+  let adminToken = localStorage.getItem('chicmood_admin_token') || null;
+  let adminUser = JSON.parse(localStorage.getItem('chicmood_admin_user') || 'null');
+
+  // ============================================================
+  //  API
+  // ============================================================
+  const API_BASE = '/api';
+
+  async function api(path, options = {}) {
+    const url = API_BASE + path;
+    const headers = { 'Content-Type': 'application/json', ...options.headers };
+    if (adminToken) headers['Authorization'] = 'Bearer ' + adminToken;
+    const res = await fetch(url, { ...options, headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '요청에 실패했습니다');
+    return data;
+  }
+
+  // ============================================================
+  //  UTILS
+  // ============================================================
+  function fmt(n) { return '₩' + Number(n).toLocaleString('ko-KR'); }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+  }
+
+  function showSpinner(el) {
+    el.innerHTML = '<div class="flex justify-center py-20"><div class="spinner"></div></div>';
+  }
+
+  // ============================================================
+  //  ROUTER
+  // ============================================================
+  const NAV_ITEMS = [
+    { key: 'dashboard', label: '대시보드', icon: '📊' },
+    { key: 'orders', label: '주문관리', icon: '📋' },
+    { key: 'shipping', label: '배송관리', icon: '🚚' },
+    { key: 'products', label: '상품관리', icon: '👗' },
+    { key: 'vendors', label: '거래처관리', icon: '🏢' },
+    { key: 'purchase-orders', label: '발주관리', icon: '📦' },
+    { key: 'inventory', label: '재고관리', icon: '📁' },
+    { key: 'members', label: '회원관리', icon: '👥' },
+    { key: 'sales', label: '매출관리', icon: '💰' },
+    { key: 'returns', label: '반품관리', icon: '🔄' },
+    { key: 'broadcasts', label: '방송관리', icon: '📺' },
+    { key: 'reports', label: '통계', icon: '📈' },
+    { key: 'system', label: '시스템', icon: '⚙️' },
+  ];
+
+  function navigate(page) {
+    location.hash = '#' + page;
+    closeSidebar();
+  }
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-overlay').classList.toggle('open');
+  }
+  function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+  }
+
+  function buildSidebarMenu(activePage) {
+    const menu = document.getElementById('sidebar-menu');
+    if (!menu) return;
+    menu.innerHTML = NAV_ITEMS.map(item =>
+      `<button class="sidebar-item ${activePage === item.key ? 'active' : ''}" onclick="navigate('${item.key}')">${item.icon} ${item.label}</button>`
+    ).join('');
+  }
+
+  function router() {
+    const hash = location.hash.slice(1) || '';
+    const content = document.getElementById('page-content');
+
+    if (!adminToken || !adminUser) {
+      document.getElementById('main-nav').classList.add('hidden');
+      document.getElementById('logout-btn').classList.add('hidden');
+      document.getElementById('hamburger-btn').style.display = 'none';
+      renderLogin(content);
+      return;
+    }
+
+    document.getElementById('main-nav').classList.remove('hidden');
+    document.getElementById('logout-btn').classList.remove('hidden');
+    document.getElementById('hamburger-btn').style.display = '';
+
+    // 탭 활성화
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    const page = hash || 'dashboard';
+    const activeTab = document.querySelector(`.tab[data-tab="${page}"]`);
+    if (activeTab) activeTab.classList.add('active');
+    buildSidebarMenu(page);
+
+    switch (page) {
+      case 'dashboard': renderDashboard(content); break;
+      case 'orders': renderOrders(content); break;
+      case 'shipping': renderShipping(content); break;
+      case 'products': renderProducts(content); break;
+      case 'vendors': renderVendors(content); break;
+      case 'purchase-orders': renderPurchaseOrders(content); break;
+      case 'inventory': renderInventory(content); break;
+      case 'members': renderMembers(content); break;
+      case 'sales': renderSales(content); break;
+      case 'returns': renderReturns(content); break;
+      case 'broadcasts': renderBroadcasts(content); break;
+      case 'reports': renderReports(content); break;
+      case 'system': renderSystem(content); break;
+      default: renderDashboard(content);
+    }
+  }
+
+  window.addEventListener('hashchange', router);
+  window.addEventListener('DOMContentLoaded', router);
+
+  // ============================================================
+  //  LOGIN
+  // ============================================================
+  function renderLogin(el) {
+    el.innerHTML = `
+      <div class="max-w-sm mx-auto py-20 fade-in">
+        <div class="text-center mb-8">
+          <h1 class="font-serif text-3xl font-semibold text-warm-900 italic mb-2">CHICMOOD</h1>
+          <p class="text-[12px] text-warm-400 tracking-wider">MANAGEMENT CONSOLE</p>
+        </div>
+        <div class="card">
+          <form onsubmit="return false;" class="space-y-4">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호</label>
+              <input id="login-phone" type="tel" class="input-field" placeholder="01000000000" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">비밀번호</label>
+              <input id="login-pw" type="password" class="input-field" maxlength="4" placeholder="●●●●" inputmode="numeric" />
+            </div>
+            <button class="btn-primary w-full" onclick="doAdminLogin()">관리자 로그인</button>
+          </form>
+        </div>
+      </div>
+    `;
+  }
+
+  async function doAdminLogin() {
+    const phone = document.getElementById('login-phone').value.trim();
+    const pw = document.getElementById('login-pw').value.trim();
+    if (!phone || !pw) { showToast('전화번호와 비밀번호를 입력해주세요'); return; }
+
+    try {
+      const res = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ phone, password: pw })
+      });
+
+      if (res.user.role !== 'admin') {
+        showToast('관리자 권한이 없는 계정입니다');
+        return;
+      }
+
+      adminToken = res.token;
+      adminUser = res.user;
+      localStorage.setItem('chicmood_admin_token', adminToken);
+      localStorage.setItem('chicmood_admin_user', JSON.stringify(adminUser));
+      showToast('관리자 로그인 성공');
+      navigate('dashboard');
+    } catch (e) {
+      showToast(e.message || '로그인에 실패했습니다');
+    }
+  }
+
+  function doLogout() {
+    adminToken = null;
+    adminUser = null;
+    localStorage.removeItem('chicmood_admin_token');
+    localStorage.removeItem('chicmood_admin_user');
+    showToast('로그아웃 되었습니다');
+    navigate('login');
+  }
+
+  // ============================================================
+  //  DASHBOARD
+  // ============================================================
+  async function renderDashboard(el) {
+    showSpinner(el);
+    try {
+      const [stats, ordersRes] = await Promise.all([
+        api('/admin/stats'),
+        api('/admin/orders?limit=5'),
+      ]);
+
+      const statuses = ['입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">대시보드</h2>
+
+          <!-- 오늘 요약 -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="card">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">오늘 주문</p>
+              <p class="font-serif text-2xl font-bold text-warm-800">${stats.todayOrders}건</p>
+            </div>
+            <div class="card">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">오늘 매출</p>
+              <p class="font-serif text-2xl font-bold text-warm-800">${fmt(stats.todayRevenue)}</p>
+            </div>
+            <div class="card">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">전체 주문</p>
+              <p class="font-serif text-2xl font-bold text-warm-800">${stats.totalOrders}건</p>
+            </div>
+            <div class="card">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">전체 매출</p>
+              <p class="font-serif text-2xl font-bold text-warm-800">${fmt(stats.totalRevenue)}</p>
+            </div>
+          </div>
+
+          <!-- 상태별 카운트 -->
+          <div class="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+            ${statuses.map(s => `
+              <div class="card text-center">
+                <span class="status-badge status-${s} mb-2 inline-block">${s}</span>
+                <p class="font-serif text-xl font-bold text-warm-800">${stats.statusCounts[s] || 0}</p>
+                <p class="text-[10px] text-warm-400 mt-0.5">${fmt(stats.statusTotals[s] || 0)}</p>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- 최근 주문 -->
+          <div class="card">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-semibold text-warm-800">최근 주문</h3>
+              <button class="text-[12px] text-warm-500 hover:text-warm-800 bg-transparent border-none cursor-pointer" onclick="navigate('orders')">전체보기 →</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table>
+                <thead>
+                  <tr>
+                    <th>주문번호</th><th>주문자</th><th>금액</th><th>상태</th><th>일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${ordersRes.orders.map(o => {
+                    const d = new Date(o.createdAt);
+                    const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    return `
+                      <tr>
+                        <td class="font-semibold text-warm-800 text-[12px]">${o.orderNo}</td>
+                        <td>${escapeHtml(o.name)}</td>
+                        <td class="font-semibold">${fmt(o.total)}</td>
+                        <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                        <td class="text-warm-400 text-[12px]">${dateStr}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">대시보드를 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  // ============================================================
+  //  ORDERS
+  // ============================================================
+  let orderFilter = 'all';
+  let orderSearch = '';
+  let orderPage = 1;
+
+  async function renderOrders(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: orderPage, limit: 20 });
+      if (orderFilter !== 'all') params.set('status', orderFilter);
+      if (orderSearch) params.set('search', orderSearch);
+
+      const data = await api('/admin/orders?' + params.toString());
+      const statuses = ['all','입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+      const statusLabels = { all: '전체', 입금대기:'입금대기', 확인요청:'확인요청', 결제완료:'결제완료', 배송중:'배송중', 송장완료:'송장완료', 취소:'취소' };
+      const totalPages = Math.ceil(data.total / data.limit);
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">주문관리</h2>
+
+          <!-- 필터 + 검색 -->
+          <div class="flex flex-wrap items-center gap-3 mb-6">
+            <div class="flex flex-wrap gap-2">
+              ${statuses.map(s => `
+                <button class="filter-tab ${orderFilter === s ? 'active' : ''}" onclick="orderFilter='${s}';orderPage=1;renderOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>
+              `).join('')}
+            </div>
+            <div class="flex-1 min-w-[200px]">
+              <input type="text" class="input-field" placeholder="이름, 주문번호, 전화번호 검색..." value="${escapeHtml(orderSearch)}" onkeydown="if(event.key==='Enter'){orderSearch=this.value;orderPage=1;renderOrders(document.getElementById('page-content'))}" />
+            </div>
+          </div>
+
+          <!-- 주문 테이블 -->
+          <div class="card overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>주문번호</th><th>주문자</th><th>상품</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.orders.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.map(o => {
+                  const d = new Date(o.createdAt);
+                  const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                  const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
+                  return `
+                    <tr>
+                      <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
+                      <td class="whitespace-nowrap">
+                        <p class="font-semibold">${escapeHtml(o.name)}</p>
+                        <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
+                      </td>
+                      <td class="text-[12px] text-warm-500 max-w-[200px]">${escapeHtml(itemsSummary)}</td>
+                      <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
+                      <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                      <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
+                      <td class="whitespace-nowrap">
+                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}')">변경</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 페이징 -->
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${orderPage > 1 ? `<button class="btn-outline btn-sm" onclick="orderPage--;renderOrders(document.getElementById('page-content'))">← 이전</button>` : ''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${orderPage} / ${totalPages}</span>
+              ${orderPage < totalPages ? `<button class="btn-outline btn-sm" onclick="orderPage++;renderOrders(document.getElementById('page-content'))">다음 →</button>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">주문 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function openOrderModal(id, orderNo, currentStatus, trackingNo, trackingCarrier) {
+    const statuses = ['입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'order-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문 상태 변경</h3>
+          <button onclick="document.getElementById('order-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-[12px] text-warm-500 mb-4">주문번호: <span class="font-semibold text-warm-800">${orderNo}</span></p>
+        <div class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">주문 상태</label>
+            <select id="modal-status" class="input-field">
+              ${statuses.map(s => `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">택배사</label>
+            <select id="modal-carrier" class="input-field">
+              <option value="">선택</option>
+              <option value="CJ대한통운" ${trackingCarrier === 'CJ대한통운' ? 'selected' : ''}>CJ대한통운</option>
+              <option value="한진택배" ${trackingCarrier === '한진택배' ? 'selected' : ''}>한진택배</option>
+              <option value="롯데택배" ${trackingCarrier === '롯데택배' ? 'selected' : ''}>롯데택배</option>
+              <option value="우체국택배" ${trackingCarrier === '우체국택배' ? 'selected' : ''}>우체국택배</option>
+              <option value="로젠택배" ${trackingCarrier === '로젠택배' ? 'selected' : ''}>로젠택배</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">송장번호</label>
+            <input id="modal-tracking" type="text" class="input-field" placeholder="송장번호 입력" value="${trackingNo}" />
+          </div>
+          <button class="btn-primary w-full" onclick="updateOrder('${id}')">저장</button>
+        </div>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function updateOrder(id) {
+    const status = document.getElementById('modal-status').value;
+    const trackingNo = document.getElementById('modal-tracking').value.trim();
+    const trackingCarrier = document.getElementById('modal-carrier').value;
+
+    try {
+      await api('/admin/orders/' + id, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, trackingNo, trackingCarrier })
+      });
+      document.getElementById('order-modal').remove();
+      showToast('주문 상태가 변경되었습니다');
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '상태 변경에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  SHIPPING (배송관리 + 로젠택배 엑셀)
+  // ============================================================
+  let shippingFilter = '결제완료';
+  let shippingFrom = '';
+  let shippingTo = '';
+  let shippingPage = 1;
+  let shippingChecked = new Set();
+
+  async function renderShipping(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: shippingPage, limit: 50 });
+      if (shippingFilter !== 'all') params.set('status', shippingFilter);
+      if (shippingFrom) params.set('from', shippingFrom);
+      if (shippingTo) params.set('to', shippingTo);
+
+      const data = await api('/admin/orders?' + params.toString());
+      const statuses = ['all','결제완료','배송중','송장완료'];
+      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송중:'배송중', 송장완료:'송장완료' };
+      const totalPages = Math.ceil(data.total / data.limit);
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
+            <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              로젠택배 엑셀 다운로드
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex flex-wrap gap-2">
+              ${statuses.map(s => `
+                <button class="filter-tab ${shippingFilter === s ? 'active' : ''}" onclick="shippingFilter='${s}';shippingPage=1;shippingChecked.clear();renderShipping(document.getElementById('page-content'))">${statusLabels[s]}</button>
+              `).join('')}
+            </div>
+            <input type="date" class="input-field" style="width:auto;" value="${shippingFrom}" onchange="shippingFrom=this.value;shippingPage=1;renderShipping(document.getElementById('page-content'))" />
+            <span class="text-warm-400">~</span>
+            <input type="date" class="input-field" style="width:auto;" value="${shippingTo}" onchange="shippingTo=this.value;shippingPage=1;renderShipping(document.getElementById('page-content'))" />
+          </div>
+
+          <div class="card overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" onchange="toggleAllShipping(this.checked, ${JSON.stringify(data.orders.map(o=>o.id))})" /></th>
+                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>금액</th><th>상태</th><th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.orders.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.map(o => {
+                  const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
+                  return `
+                    <tr>
+                      <td><input type="checkbox" class="ship-chk" value="${o.id}" ${shippingChecked.has(o.id)?'checked':''} onchange="toggleShippingCheck('${o.id}',this.checked)" /></td>
+                      <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
+                      <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
+                      <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
+                      <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
+                      <td class="text-[12px] text-warm-500 max-w-[180px]">${escapeHtml(itemsSummary)}</td>
+                      <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
+                      <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                      <td class="whitespace-nowrap">
+                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}')">변경</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[12px] text-warm-400 mt-2">선택된 주문: <span id="ship-count">${shippingChecked.size}</span>건</p>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-4">
+              ${shippingPage > 1 ? `<button class="btn-outline btn-sm" onclick="shippingPage--;renderShipping(document.getElementById('page-content'))">← 이전</button>` : ''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${shippingPage} / ${totalPages}</span>
+              ${shippingPage < totalPages ? `<button class="btn-outline btn-sm" onclick="shippingPage++;renderShipping(document.getElementById('page-content'))">다음 →</button>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">배송 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function toggleShippingCheck(id, checked) {
+    if (checked) shippingChecked.add(id); else shippingChecked.delete(id);
+    const cnt = document.getElementById('ship-count');
+    if (cnt) cnt.textContent = shippingChecked.size;
+  }
+  function toggleAllShipping(checked, ids) {
+    ids.forEach(id => { if (checked) shippingChecked.add(id); else shippingChecked.delete(id); });
+    document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
+    const cnt = document.getElementById('ship-count');
+    if (cnt) cnt.textContent = shippingChecked.size;
+  }
+
+  async function downloadLozenExcel() {
+    if (shippingChecked.size === 0) { showToast('엑셀로 내보낼 주문을 선택해주세요'); return; }
+    try {
+      const data = await api('/admin/shipping-excel', {
+        method: 'POST',
+        body: JSON.stringify({ orderIds: Array.from(shippingChecked) })
+      });
+      const rows = data.rows || [];
+      if (rows.length === 0) { showToast('내보낼 데이터가 없습니다'); return; }
+
+      // 로젠택배 엑셀 형식
+      const header = ['수취인명','','주소','전화번호1','전화번호2','수량','배송비','코드','상품상세','','배송메모'];
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '로젠택배');
+
+      // 컬럼 너비 설정
+      ws['!cols'] = [
+        {wch:10},{wch:3},{wch:40},{wch:14},{wch:14},{wch:5},{wch:7},{wch:5},{wch:40},{wch:3},{wch:20}
+      ];
+
+      const today = new Date();
+      const fname = `로젠택배_${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}.xlsx`;
+      XLSX.writeFile(wb, fname);
+      showToast(`${rows.length}건 엑셀 다운로드 완료`);
+    } catch (e) {
+      showToast(e.message || '엑셀 생성에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  MEMBERS (회원관리)
+  // ============================================================
+  let memberSearch = '';
+  let memberPage = 1;
+
+  async function renderMembers(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: memberPage, limit: 20 });
+      if (memberSearch) params.set('search', memberSearch);
+      const data = await api('/admin/members?' + params.toString());
+      const totalPages = Math.ceil(data.total / data.limit);
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">회원관리</h2>
+          <div class="mb-4">
+            <input type="text" class="input-field" style="max-width:400px;" placeholder="이름, 전화번호 검색..." value="${escapeHtml(memberSearch)}" onkeydown="if(event.key==='Enter'){memberSearch=this.value;memberPage=1;renderMembers(document.getElementById('page-content'))}" />
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>이름</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>가입일</th><th>상세</th></tr></thead>
+              <tbody>
+                ${data.members.length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
+                ${data.members.map(m => {
+                  const d = new Date(m.createdAt);
+                  const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+                  return `
+                    <tr>
+                      <td class="font-semibold">${escapeHtml(m.name)}</td>
+                      <td class="text-[12px]">${escapeHtml(m.phone)}</td>
+                      <td>${m.orderCount}건</td>
+                      <td class="font-semibold">${fmt(m.totalSpent)}</td>
+                      <td class="text-warm-400 text-[12px]">${dateStr}</td>
+                      <td><button class="btn-primary btn-sm" onclick="openMemberModal('${m.id}')">상세</button></td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${memberPage > 1 ? `<button class="btn-outline btn-sm" onclick="memberPage--;renderMembers(document.getElementById('page-content'))">← 이전</button>` : ''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${memberPage} / ${totalPages}</span>
+              ${memberPage < totalPages ? `<button class="btn-outline btn-sm" onclick="memberPage++;renderMembers(document.getElementById('page-content'))">다음 →</button>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">회원 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function openMemberModal(userId) {
+    try {
+      const data = await api('/admin/members/' + userId);
+      const m = data.member;
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'member-modal';
+      const d = new Date(m.createdAt);
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+      modal.innerHTML = `
+        <div class="overlay-content p-6" style="max-width:640px;">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">회원 상세</h3>
+            <button onclick="document.getElementById('member-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div><span class="text-[11px] text-warm-400 block">이름</span><span class="font-semibold">${escapeHtml(m.name)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">연락처</span><span>${escapeHtml(m.phone)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role || 'user'}</span></div>
+          </div>
+          <h4 class="font-semibold text-warm-800 mb-3">주문 내역 (${m.orders.length}건)</h4>
+          <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto;">
+            <table>
+              <thead><tr><th>주문번호</th><th>금액</th><th>상태</th><th>일시</th></tr></thead>
+              <tbody>
+                ${m.orders.map(o => {
+                  const od = new Date(o.createdAt);
+                  const ods = `${String(od.getMonth()+1).padStart(2,'0')}/${String(od.getDate()).padStart(2,'0')}`;
+                  return `<tr><td class="text-[12px]">${o.orderNo}</td><td class="font-semibold">${fmt(o.total)}</td><td><span class="status-badge status-${o.status}">${o.status}</span></td><td class="text-warm-400 text-[12px]">${ods}</td></tr>`;
+                }).join('')}
+                ${m.orders.length === 0 ? '<tr><td colspan="4" class="text-center text-warm-400 py-4">주문 내역이 없습니다</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    } catch (e) {
+      showToast(e.message || '회원 정보를 불러올 수 없습니다');
+    }
+  }
+
+  // ============================================================
+  //  PRODUCTS
+  // ============================================================
+  async function renderProducts(el) {
+    showSpinner(el);
+    try {
+      const products = await api('/admin/products');
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">상품관리</h2>
+            <button class="btn-primary" onclick="openProductModal()">+ 상품 등록</button>
+          </div>
+
+          <div class="card overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>가격</th><th>할인</th><th>색상</th><th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${products.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">등록된 상품이 없습니다</td></tr>' : ''}
+                ${products.map(p => `
+                  <tr>
+                    <td class="text-warm-400">${p.id}</td>
+                    <td>
+                      ${p.images[0] ? `<img src="${p.images[0].replace('w=600&h=800','w=60&h=80')}" class="w-10 h-14 object-cover rounded" />` : '<div class="w-10 h-14 bg-warm-100 rounded"></div>'}
+                    </td>
+                    <td class="font-semibold">${escapeHtml(p.name)}</td>
+                    <td class="text-[12px] text-warm-500">${escapeHtml(p.vendorName||'')}</td>
+                    <td class="whitespace-nowrap">${fmt(p.price)}<br><span class="text-[11px] text-warm-400 line-through">${fmt(p.originalPrice)}</span></td>
+                    <td><span class="text-rose-500 font-semibold">${p.discount}%</span></td>
+                    <td>
+                      <div class="flex gap-1">
+                        ${p.colors.map(c => `<span class="w-5 h-5 rounded-full border border-warm-200 inline-block" style="background:${c.hex}" title="${c.name}"></span>`).join('')}
+                      </div>
+                    </td>
+                    <td class="whitespace-nowrap">
+                      <button class="btn-primary btn-sm" onclick='openProductModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>수정</button>
+                      <button class="btn-danger" onclick="deleteProduct(${p.id})">삭제</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">상품 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  // 상품 모달에서 사용할 이미지 URL 목록
+  let pmImageUrls = [];
+
+  let vendorListCache = null;
+  async function openProductModal(product) {
+    const isEdit = !!product;
+    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0 };
+    pmImageUrls = [...p.images];
+
+    // 거래처 목록 로드
+    if (!vendorListCache) {
+      try { vendorListCache = await api('/admin/vendors'); } catch(e) { vendorListCache = []; }
+    }
+    const vendors = vendorListCache;
+
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'product-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${isEdit ? '상품 수정' : '상품 등록'}</h3>
+          <button onclick="document.getElementById('product-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품명 *</label>
+            <input id="pm-name" class="input-field" value="${escapeHtml(p.name)}" placeholder="상품명" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처</label>
+              <select id="pm-vendor" class="input-field">
+                <option value="">선택안함</option>
+                ${vendors.map(v => `<option value="${v.id}" ${p.vendorId==v.id?'selected':''}>${escapeHtml(v.name)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">매입가</label>
+              <input id="pm-cost" type="number" class="input-field" value="${p.costPrice||''}" placeholder="매입가" />
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">판매가 *</label>
+              <input id="pm-price" type="number" class="input-field" value="${p.price}" placeholder="89000" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">원가</label>
+              <input id="pm-original" type="number" class="input-field" value="${p.originalPrice}" placeholder="128000" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">할인(%)</label>
+              <input id="pm-discount" type="number" class="input-field" value="${p.discount}" placeholder="30" />
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">설명</label>
+            <textarea id="pm-desc" class="input-field resize-none" rows="2">${escapeHtml(p.description)}</textarea>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">소재</label>
+            <input id="pm-material" class="input-field" value="${escapeHtml(p.material)}" placeholder="폴리에스터 100%" />
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500">상품 이미지</label>
+              <span id="pm-img-count" class="text-[11px] text-warm-400">${pmImageUrls.length}장</span>
+            </div>
+            <div id="pm-img-preview" class="flex flex-wrap gap-2 mb-2">${pmImageUrls.length > 0 ? '' : ''}</div>
+            <div class="flex gap-2">
+              <label class="btn-outline btn-sm flex items-center gap-1 cursor-pointer" style="padding:8px 14px;">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                파일 선택
+                <input type="file" accept="image/*" multiple class="hidden" onchange="handleImageUpload(this.files)" />
+              </label>
+              <button type="button" class="btn-outline btn-sm" style="padding:8px 14px;" onclick="promptImageUrl()">URL 직접입력</button>
+            </div>
+            <div id="pm-upload-status" class="text-[11px] text-warm-400 mt-1 hidden"></div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상 (이름:헥스코드, 줄바꿈 구분)</label>
+            <textarea id="pm-colors" class="input-field resize-none" rows="3" placeholder="베이지:#d4a574\n네이비:#2c3e6b">${p.colors.map(c => c.name + ':' + c.hex).join('\n')}</textarea>
+          </div>
+          <button class="btn-primary w-full" onclick="saveProduct(${isEdit ? p.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    renderImagePreviews();
+  }
+
+  function renderImagePreviews() {
+    const container = document.getElementById('pm-img-preview');
+    const counter = document.getElementById('pm-img-count');
+    if (!container) return;
+    counter.textContent = pmImageUrls.length + '장';
+    container.innerHTML = pmImageUrls.map((url, i) => `
+      <div class="relative group">
+        <img src="${url.replace('w=600&h=800','w=80&h=100')}" class="w-16 h-20 object-cover rounded border border-warm-200" />
+        <button type="button" onclick="removeProductImage(${i})"
+          class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center cursor-pointer border-none opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+        <span class="absolute bottom-0 left-0 bg-warm-800/70 text-white text-[9px] w-full text-center">${i+1}</span>
+      </div>
+    `).join('');
+  }
+
+  function removeProductImage(idx) {
+    pmImageUrls.splice(idx, 1);
+    renderImagePreviews();
+  }
+
+  function promptImageUrl() {
+    const url = prompt('이미지 URL을 입력하세요:');
+    if (url && url.trim()) {
+      pmImageUrls.push(url.trim());
+      renderImagePreviews();
+    }
+  }
+
+  async function handleImageUpload(files) {
+    if (!files || files.length === 0) return;
+    const statusEl = document.getElementById('pm-upload-status');
+    statusEl.classList.remove('hidden');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      statusEl.textContent = `업로드 중... (${i+1}/${files.length}) ${file.name}`;
+
+      try {
+        // 1. 서명 URL 받기
+        const { signedUrl, token, publicUrl } = await api('/images/upload-url', {
+          method: 'POST',
+          body: JSON.stringify({ filename: file.name, contentType: file.type })
+        });
+
+        // 2. 파일 업로드
+        const uploadRes = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file
+        });
+
+        if (!uploadRes.ok) throw new Error('업로드 실패');
+
+        // 3. 목록에 추가
+        pmImageUrls.push(publicUrl);
+        renderImagePreviews();
+      } catch (e) {
+        showToast(`${file.name} 업로드 실패: ${e.message}`);
+      }
+    }
+    statusEl.textContent = `${files.length}장 업로드 완료`;
+    setTimeout(() => statusEl.classList.add('hidden'), 2000);
+  }
+
+  async function saveProduct(id) {
+    const name = document.getElementById('pm-name').value.trim();
+    const price = parseInt(document.getElementById('pm-price').value);
+    const originalPrice = parseInt(document.getElementById('pm-original').value) || price;
+    const discount = parseInt(document.getElementById('pm-discount').value) || 0;
+    const description = document.getElementById('pm-desc').value.trim();
+    const material = document.getElementById('pm-material').value.trim();
+    const vendorId = document.getElementById('pm-vendor').value ? parseInt(document.getElementById('pm-vendor').value) : null;
+    const costPrice = parseInt(document.getElementById('pm-cost').value) || 0;
+
+    const images = pmImageUrls.filter(Boolean);
+    const colorLines = document.getElementById('pm-colors').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const colors = colorLines.map(line => {
+      const [n, h] = line.split(':');
+      return { name: n.trim(), hex: (h || '').trim() };
+    }).filter(c => c.name && c.hex);
+
+    if (!name || !price) { showToast('상품명과 가격은 필수입니다'); return; }
+
+    try {
+      if (id) {
+        await api('/admin/products/' + id, {
+          method: 'PATCH',
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice })
+        });
+        showToast('상품이 수정되었습니다');
+      } else {
+        await api('/admin/products', {
+          method: 'POST',
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice })
+        });
+        showToast('상품이 등록되었습니다');
+      }
+      document.getElementById('product-modal').remove();
+      renderProducts(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '저장에 실패했습니다');
+    }
+  }
+
+  async function deleteProduct(id) {
+    if (!confirm('이 상품을 삭제하시겠습니까?')) return;
+    try {
+      await api('/admin/products/' + id, { method: 'DELETE' });
+      showToast('상품이 삭제되었습니다');
+      renderProducts(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '삭제에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  BROADCASTS
+  // ============================================================
+  let allProducts = null;
+
+  async function renderBroadcasts(el) {
+    showSpinner(el);
+    try {
+      const [broadcasts, products] = await Promise.all([
+        api('/admin/broadcasts'),
+        allProducts || api('/admin/products'),
+      ]);
+      allProducts = products;
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">방송관리</h2>
+            <button class="btn-primary" onclick="openBroadcastModal()">+ 방송 등록</button>
+          </div>
+
+          <div class="card overflow-x-auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>제목</th><th>날짜</th><th>상태</th><th>상품수</th><th>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${broadcasts.length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">등록된 방송이 없습니다</td></tr>' : ''}
+                ${broadcasts.map(b => {
+                  const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500', upcoming: 'bg-blue-100 text-blue-700' };
+                  const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+                  return `
+                    <tr>
+                      <td class="text-warm-400">${b.id}</td>
+                      <td class="font-semibold">${escapeHtml(b.title)}</td>
+                      <td class="text-warm-500 text-[12px]">${escapeHtml(b.date)}</td>
+                      <td><span class="px-3 py-1 rounded-full text-[11px] font-bold ${statusColors[b.status] || 'bg-warm-100 text-warm-500'}">${statusLabels[b.status] || b.status}</span></td>
+                      <td>${b.productIds.length}개</td>
+                      <td class="whitespace-nowrap">
+                        <button class="btn-primary btn-sm" onclick='openBroadcastModal(${JSON.stringify(b).replace(/'/g,"&#39;")})'>수정</button>
+                        <button class="btn-danger" onclick="deleteBroadcast(${b.id})">삭제</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">방송 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function openBroadcastModal(broadcast) {
+    const isEdit = !!broadcast;
+    const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'upcoming', description: '', productIds: [] };
+    const products = allProducts || [];
+
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'broadcast-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${isEdit ? '방송 수정' : '방송 등록'}</h3>
+          <button onclick="document.getElementById('broadcast-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">방송 제목 *</label>
+            <input id="bm-title" class="input-field" value="${escapeHtml(b.title)}" placeholder="8/15(금) 가을 신상 LIVE" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">날짜 텍스트</label>
+              <input id="bm-date" class="input-field" value="${escapeHtml(b.date)}" placeholder="8월 15일 (금) 오후 8시" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태</label>
+              <select id="bm-status" class="input-field">
+                <option value="upcoming" ${b.status==='upcoming'?'selected':''}>예정</option>
+                <option value="live" ${b.status==='live'?'selected':''}>LIVE</option>
+                <option value="ended" ${b.status==='ended'?'selected':''}>종료</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">설명</label>
+            <textarea id="bm-desc" class="input-field resize-none" rows="2">${escapeHtml(b.description)}</textarea>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품 선택</label>
+            <div class="border border-warm-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+              ${products.map(p => `
+                <label class="flex items-center gap-3 cursor-pointer text-[13px]">
+                  <input type="checkbox" class="bm-product" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
+                  <span class="text-warm-700">${escapeHtml(p.name)}</span>
+                  <span class="text-warm-400 text-[11px]">${fmt(p.price)}</span>
+                </label>
+              `).join('')}
+              ${products.length === 0 ? '<p class="text-warm-400 text-[12px]">등록된 상품이 없습니다</p>' : ''}
+            </div>
+          </div>
+          <button class="btn-primary w-full" onclick="saveBroadcast(${isEdit ? b.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function saveBroadcast(id) {
+    const title = document.getElementById('bm-title').value.trim();
+    const date = document.getElementById('bm-date').value.trim();
+    const status = document.getElementById('bm-status').value;
+    const description = document.getElementById('bm-desc').value.trim();
+    const productIds = Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value));
+
+    if (!title) { showToast('방송 제목은 필수입니다'); return; }
+
+    try {
+      if (id) {
+        await api('/admin/broadcasts/' + id, {
+          method: 'PATCH',
+          body: JSON.stringify({ title, date, status, description, productIds })
+        });
+        showToast('방송이 수정되었습니다');
+      } else {
+        await api('/admin/broadcasts', {
+          method: 'POST',
+          body: JSON.stringify({ title, date, status, description, productIds })
+        });
+        showToast('방송이 등록되었습니다');
+      }
+      document.getElementById('broadcast-modal').remove();
+      renderBroadcasts(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '저장에 실패했습니다');
+    }
+  }
+
+  async function deleteBroadcast(id) {
+    if (!confirm('이 방송을 삭제하시겠습니까?')) return;
+    try {
+      await api('/admin/broadcasts/' + id, { method: 'DELETE' });
+      showToast('방송이 삭제되었습니다');
+      renderBroadcasts(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '삭제에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  VENDORS (거래처관리)
+  // ============================================================
+  async function renderVendors(el) {
+    showSpinner(el);
+    try {
+      const vendors = await api('/admin/vendors');
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">거래처관리</h2>
+            <button class="btn-primary" onclick="openVendorModal()">+ 거래처 등록</button>
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>ID</th><th>거래처명</th><th>담당자</th><th>연락처</th><th>이메일</th><th>상품수</th><th>상태</th><th>관리</th></tr></thead>
+              <tbody>
+                ${vendors.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">등록된 거래처가 없습니다</td></tr>' : ''}
+                ${vendors.map(v => `
+                  <tr>
+                    <td class="text-warm-400">${v.id}</td>
+                    <td class="font-semibold">${escapeHtml(v.name)}</td>
+                    <td>${escapeHtml(v.contact||'')}</td>
+                    <td class="text-[12px]">${escapeHtml(v.phone||'')}</td>
+                    <td class="text-[12px]">${escapeHtml(v.email||'')}</td>
+                    <td>${v.productCount || 0}개</td>
+                    <td><span class="status-badge ${v.isActive ? 'status-결제완료' : 'status-취소'}">${v.isActive ? '활성' : '비활성'}</span></td>
+                    <td class="whitespace-nowrap">
+                      <button class="btn-primary btn-sm" onclick='openVendorModal(${JSON.stringify(v).replace(/'/g,"&#39;")})'>수정</button>
+                      <button class="btn-danger" onclick="deleteVendor(${v.id})">삭제</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">거래처 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function openVendorModal(vendor) {
+    const isEdit = !!vendor;
+    const v = vendor || { name:'', contact:'', phone:'', email:'', address:'', bankInfo:'', memo:'', isActive:true };
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'vendor-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${isEdit ? '거래처 수정' : '거래처 등록'}</h3>
+          <button onclick="document.getElementById('vendor-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처명 *</label>
+            <input id="vm-name" class="input-field" value="${escapeHtml(v.name)}" placeholder="거래처명" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">담당자</label>
+              <input id="vm-contact" class="input-field" value="${escapeHtml(v.contact||'')}" placeholder="담당자명" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">연락처</label>
+              <input id="vm-phone" class="input-field" value="${escapeHtml(v.phone||'')}" placeholder="010-0000-0000" />
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">이메일</label>
+            <input id="vm-email" type="email" class="input-field" value="${escapeHtml(v.email||'')}" placeholder="vendor@email.com" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">주소</label>
+            <input id="vm-address" class="input-field" value="${escapeHtml(v.address||'')}" placeholder="주소" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">입금계좌</label>
+            <input id="vm-bank" class="input-field" value="${escapeHtml(v.bankInfo||'')}" placeholder="은행 계좌번호 예금주" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+            <textarea id="vm-memo" class="input-field resize-none" rows="2">${escapeHtml(v.memo||'')}</textarea>
+          </div>
+          <button class="btn-primary w-full" onclick="saveVendor(${isEdit ? v.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function saveVendor(id) {
+    const name = document.getElementById('vm-name').value.trim();
+    if (!name) { showToast('거래처명은 필수입니다'); return; }
+    const body = {
+      name,
+      contact: document.getElementById('vm-contact').value.trim(),
+      phone: document.getElementById('vm-phone').value.trim(),
+      email: document.getElementById('vm-email').value.trim(),
+      address: document.getElementById('vm-address').value.trim(),
+      bankInfo: document.getElementById('vm-bank').value.trim(),
+      memo: document.getElementById('vm-memo').value.trim(),
+    };
+    try {
+      if (id) {
+        await api('/admin/vendors/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+        showToast('거래처가 수정되었습니다');
+      } else {
+        await api('/admin/vendors', { method: 'POST', body: JSON.stringify(body) });
+        showToast('거래처가 등록되었습니다');
+      }
+      document.getElementById('vendor-modal').remove();
+      renderVendors(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function deleteVendor(id) {
+    if (!confirm('이 거래처를 삭제하시겠습니까?')) return;
+    try {
+      await api('/admin/vendors/' + id, { method: 'DELETE' });
+      showToast('거래처가 삭제되었습니다');
+      renderVendors(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  PURCHASE ORDERS (발주관리)
+  // ============================================================
+  let poFilter = 'all';
+  let poPage = 1;
+
+  async function renderPurchaseOrders(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: poPage, limit: 20 });
+      if (poFilter !== 'all') params.set('status', poFilter);
+      const data = await api('/admin/purchase-orders?' + params.toString());
+      const totalPages = Math.ceil(data.total / data.limit);
+      const statuses = ['all','발주대기','발주완료','입고중','입고완료','취소'];
+      const statusLabels = { all:'전체', 발주대기:'발주대기', 발주완료:'발주완료', 입고중:'입고중', 입고완료:'입고완료', 취소:'취소' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">발주관리</h2>
+            <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-4">
+            ${statuses.map(s => `<button class="filter-tab ${poFilter===s?'active':''}" onclick="poFilter='${s}';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>발주번호</th><th>거래처</th><th>상태</th><th>금액</th><th>발주일</th><th>관리</th></tr></thead>
+              <tbody>
+                ${(data.purchaseOrders||[]).length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">발주서가 없습니다</td></tr>' : ''}
+                ${(data.purchaseOrders||[]).map(po => {
+                  const d = po.orderedAt ? new Date(po.orderedAt) : (po.createdAt ? new Date(po.createdAt) : null);
+                  const ds = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '-';
+                  return `
+                    <tr>
+                      <td class="font-semibold text-warm-800 text-[12px]">${escapeHtml(po.poNo)}</td>
+                      <td>${escapeHtml(po.vendorName||'')}</td>
+                      <td><span class="status-badge status-${po.status==='입고완료'?'송장완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                      <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
+                      <td class="text-warm-400 text-[12px]">${ds}</td>
+                      <td><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button></td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${poPage > 1 ? `<button class="btn-outline btn-sm" onclick="poPage--;renderPurchaseOrders(document.getElementById('page-content'))">← 이전</button>` : ''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${poPage} / ${totalPages}</span>
+              ${poPage < totalPages ? `<button class="btn-outline btn-sm" onclick="poPage++;renderPurchaseOrders(document.getElementById('page-content'))">다음 →</button>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">발주 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  let poItems = [];
+  async function openPOModal() {
+    poItems = [{ productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
+    let vendors = [];
+    try { vendors = await api('/admin/vendors'); } catch(e) {}
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'po-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6" style="max-width:640px;">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">발주서 작성</h3>
+          <button onclick="document.getElementById('po-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처 *</label>
+            <select id="po-vendor" class="input-field">
+              <option value="">선택</option>
+              ${vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+            <textarea id="po-memo" class="input-field resize-none" rows="2"></textarea>
+          </div>
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500">발주 품목</label>
+              <button type="button" class="btn-outline btn-sm" onclick="addPOItem()">+ 품목 추가</button>
+            </div>
+            <div id="po-items-list"></div>
+          </div>
+          <button class="btn-primary w-full" onclick="savePO()">발주서 생성</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    renderPOItems();
+  }
+
+  function addPOItem() { poItems.push({ productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }); renderPOItems(); }
+  function removePOItem(i) { poItems.splice(i,1); renderPOItems(); }
+  function renderPOItems() {
+    const list = document.getElementById('po-items-list');
+    if (!list) return;
+    list.innerHTML = poItems.map((item,i) => `
+      <div class="border border-warm-200 rounded p-3 mb-2 relative">
+        ${poItems.length > 1 ? `<button type="button" onclick="removePOItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
+        <div class="grid grid-cols-5 gap-2">
+          <input class="input-field col-span-2" placeholder="상품명" value="${escapeHtml(item.productName)}" onchange="poItems[${i}].productName=this.value" />
+          <input class="input-field" placeholder="색상" value="${escapeHtml(item.colorName)}" onchange="poItems[${i}].colorName=this.value" />
+          <input class="input-field" placeholder="사이즈" value="${escapeHtml(item.sizeName)}" onchange="poItems[${i}].sizeName=this.value" />
+          <div class="grid grid-cols-2 gap-1">
+            <input type="number" class="input-field" placeholder="수량" value="${item.qty}" onchange="poItems[${i}].qty=parseInt(this.value)||1" />
+            <input type="number" class="input-field" placeholder="매입가" value="${item.costPrice}" onchange="poItems[${i}].costPrice=parseInt(this.value)||0" />
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function savePO() {
+    const vendorId = document.getElementById('po-vendor').value;
+    if (!vendorId) { showToast('거래처를 선택해주세요'); return; }
+    const memo = document.getElementById('po-memo').value.trim();
+    const items = poItems.filter(i => i.productName);
+    if (items.length === 0) { showToast('품목을 최소 1개 입력해주세요'); return; }
+    try {
+      await api('/admin/purchase-orders', {
+        method: 'POST',
+        body: JSON.stringify({ vendorId: parseInt(vendorId), memo, items })
+      });
+      showToast('발주서가 생성되었습니다');
+      document.getElementById('po-modal').remove();
+      renderPurchaseOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '발주서 생성에 실패했습니다'); }
+  }
+
+  async function openPODetailModal(poId) {
+    try {
+      const data = await api('/admin/purchase-orders/' + poId);
+      const po = data.purchaseOrder;
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'po-detail-modal';
+      const statuses = ['발주대기','발주완료','입고중','입고완료','취소'];
+      modal.innerHTML = `
+        <div class="overlay-content p-6" style="max-width:640px;">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">발주 상세 - ${escapeHtml(po.poNo)}</h3>
+            <button onclick="document.getElementById('po-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div><span class="text-[11px] text-warm-400 block">거래처</span><span class="font-semibold">${escapeHtml(po.vendorName||'')}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">총 금액</span><span class="font-semibold">${fmt(po.totalAmount||0)}</span></div>
+          </div>
+          <div class="mb-4">
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
+            <select id="po-detail-status" class="input-field">
+              ${statuses.map(s => `<option value="${s}" ${s===po.status?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <h4 class="font-semibold text-warm-800 mb-2 text-[13px]">발주 품목</h4>
+          <div class="overflow-x-auto mb-4">
+            <table>
+              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th><th>매입가</th><th>소계</th></tr></thead>
+              <tbody>
+                ${(po.items||[]).map(it => `
+                  <tr>
+                    <td>${escapeHtml(it.productName)}</td>
+                    <td>${escapeHtml(it.colorName||'')}</td>
+                    <td>${escapeHtml(it.sizeName||'')}</td>
+                    <td>${it.qty}</td>
+                    <td>${fmt(it.costPrice)}</td>
+                    <td class="font-semibold">${fmt(it.subtotal)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          <button class="btn-primary w-full" onclick="updatePOStatus(${po.id})">저장</button>
+        </div>
+      `;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    } catch (e) { showToast(e.message || '발주 상세를 불러올 수 없습니다'); }
+  }
+
+  async function updatePOStatus(poId) {
+    const status = document.getElementById('po-detail-status').value;
+    try {
+      await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify({ status }) });
+      showToast('발주 상태가 변경되었습니다');
+      document.getElementById('po-detail-modal').remove();
+      renderPurchaseOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '상태 변경에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  SALES (매출관리)
+  // ============================================================
+  let salesTab = 'daily';
+  let salesFrom = '';
+  let salesTo = '';
+
+  async function renderSales(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ type: salesTab });
+      if (salesFrom) params.set('from', salesFrom);
+      if (salesTo) params.set('to', salesTo);
+      const data = await api('/admin/sales?' + params.toString());
+
+      const tabs = ['daily','monthly','product','broadcast'];
+      const tabLabels = { daily:'일별', monthly:'월별', product:'상품별', broadcast:'방송별' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">매출관리</h2>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-1">
+              ${tabs.map(t => `<button class="sub-tab ${salesTab===t?'active':''}" onclick="salesTab='${t}';renderSales(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
+            </div>
+            <input type="date" class="input-field" style="width:auto;" value="${salesFrom}" onchange="salesFrom=this.value;renderSales(document.getElementById('page-content'))" />
+            <span class="text-warm-400">~</span>
+            <input type="date" class="input-field" style="width:auto;" value="${salesTo}" onchange="salesTo=this.value;renderSales(document.getElementById('page-content'))" />
+          </div>
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="card text-center">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">총 매출</p>
+              <p class="font-serif text-xl font-bold text-warm-800">${fmt(data.summary?.totalRevenue||0)}</p>
+            </div>
+            <div class="card text-center">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">주문수</p>
+              <p class="font-serif text-xl font-bold text-warm-800">${data.summary?.orderCount||0}건</p>
+            </div>
+            <div class="card text-center">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">평균 주문액</p>
+              <p class="font-serif text-xl font-bold text-warm-800">${fmt(data.summary?.avgOrder||0)}</p>
+            </div>
+          </div>
+          <div class="card overflow-x-auto">
+            ${renderSalesTable(salesTab, data.rows||[])}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">매출 데이터를 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function renderSalesTable(type, rows) {
+    if (type === 'daily' || type === 'monthly') {
+      return `<table><thead><tr><th>기간</th><th>주문수</th><th>매출</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${r.period}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    if (type === 'product') {
+      return `<table><thead><tr><th>상품명</th><th>판매수량</th><th>매출</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    if (type === 'broadcast') {
+      return `<table><thead><tr><th>방송</th><th>주문수</th><th>매출</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.broadcastTitle)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    return '';
+  }
+
+  // ============================================================
+  //  INVENTORY (재고관리)
+  // ============================================================
+  let invPage = 1;
+
+  async function renderInventory(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: invPage, limit: 30 });
+      const data = await api('/admin/inventory?' + params.toString());
+      const totalPages = Math.ceil(data.total / data.limit);
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
+            <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>현재고</th><th>관리</th></tr></thead>
+              <tbody>
+                ${(data.inventory||[]).length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-12">재고 데이터가 없습니다</td></tr>':''}
+                ${(data.inventory||[]).map(inv => `
+                  <tr>
+                    <td class="font-semibold">${escapeHtml(inv.productName)}</td>
+                    <td>${escapeHtml(inv.colorName||'-')}</td>
+                    <td>${escapeHtml(inv.sizeName||'-')}</td>
+                    <td class="${inv.stockQty<=5?'text-red-600 font-bold':'font-semibold'}">${inv.stockQty}</td>
+                    <td><button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${invPage>1?`<button class="btn-outline btn-sm" onclick="invPage--;renderInventory(document.getElementById('page-content'))">← 이전</button>`:''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${invPage} / ${totalPages}</span>
+              ${invPage<totalPages?`<button class="btn-outline btn-sm" onclick="invPage++;renderInventory(document.getElementById('page-content'))">다음 →</button>`:''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">재고 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function openInventoryModal() {
+    let products = [];
+    try { products = await api('/admin/products'); } catch(e) {}
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'inv-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">입고 / 재고 등록</h3>
+          <button onclick="document.getElementById('inv-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품 *</label>
+            <select id="inv-product" class="input-field">
+              <option value="">선택</option>
+              ${products.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상</label>
+              <input id="inv-color" class="input-field" placeholder="색상명" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
+              <input id="inv-size" class="input-field" placeholder="사이즈" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">수량 *</label>
+              <input id="inv-qty" type="number" class="input-field" placeholder="수량" value="0" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">유형</label>
+              <select id="inv-type" class="input-field">
+                <option value="in">입고</option>
+                <option value="adjust">재고조정</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유</label>
+            <input id="inv-reason" class="input-field" placeholder="사유 입력" />
+          </div>
+          <button class="btn-primary w-full" onclick="saveInventory()">저장</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function saveInventory() {
+    const productId = document.getElementById('inv-product').value;
+    if (!productId) { showToast('상품을 선택해주세요'); return; }
+    const body = {
+      productId: parseInt(productId),
+      colorName: document.getElementById('inv-color').value.trim(),
+      sizeName: document.getElementById('inv-size').value.trim(),
+      qty: parseInt(document.getElementById('inv-qty').value) || 0,
+      type: document.getElementById('inv-type').value,
+      reason: document.getElementById('inv-reason').value.trim(),
+    };
+    if (body.qty === 0) { showToast('수량을 입력해주세요'); return; }
+    try {
+      await api('/admin/inventory', { method: 'POST', body: JSON.stringify(body) });
+      showToast('재고가 등록되었습니다');
+      document.getElementById('inv-modal').remove();
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function openInventoryAdjustModal(invId, currentQty, productName) {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'inv-adjust-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 조정</h3>
+          <button onclick="document.getElementById('inv-adjust-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-[13px] mb-4"><span class="font-semibold">${escapeHtml(productName)}</span> - 현재고: <span class="font-bold">${currentQty}</span></p>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">조정 후 수량</label>
+            <input id="inv-adj-qty" type="number" class="input-field" value="${currentQty}" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유</label>
+            <input id="inv-adj-reason" class="input-field" placeholder="조정 사유" />
+          </div>
+          <button class="btn-primary w-full" onclick="adjustInventory(${invId})">조정</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function adjustInventory(invId) {
+    const qty = parseInt(document.getElementById('inv-adj-qty').value);
+    const reason = document.getElementById('inv-adj-reason').value.trim();
+    try {
+      await api('/admin/inventory/' + invId, { method: 'PATCH', body: JSON.stringify({ stockQty: qty, reason }) });
+      showToast('재고가 조정되었습니다');
+      document.getElementById('inv-adjust-modal').remove();
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '조정에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  RETURNS (반품/교환/취소)
+  // ============================================================
+  let retFilter = 'all';
+  let retPage = 1;
+
+  async function renderReturns(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: retPage, limit: 20 });
+      if (retFilter !== 'all') params.set('status', retFilter);
+      const data = await api('/admin/returns?' + params.toString());
+      const totalPages = Math.ceil(data.total / data.limit);
+      const statuses = ['all','접수','처리중','회수중','완료','거부'];
+      const statusLabels = { all:'전체', 접수:'접수', 처리중:'처리중', 회수중:'회수중', 완료:'완료', 거부:'거부' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">반품/교환/취소</h2>
+            <button class="btn-primary" onclick="openReturnModal()">+ 접수 등록</button>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-4">
+            ${statuses.map(s => `<button class="filter-tab ${retFilter===s?'active':''}" onclick="retFilter='${s}';retPage=1;renderReturns(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>접수번호</th><th>주문번호</th><th>유형</th><th>상태</th><th>환불액</th><th>사유</th><th>관리</th></tr></thead>
+              <tbody>
+                ${(data.returns||[]).length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-12">접수 내역이 없습니다</td></tr>':''}
+                ${(data.returns||[]).map(r => `
+                  <tr>
+                    <td class="font-semibold text-warm-800 text-[12px]">${escapeHtml(r.returnNo)}</td>
+                    <td class="text-[12px]">${escapeHtml(r.orderNo||'')}</td>
+                    <td><span class="status-badge ${r.type==='반품'?'status-확인요청':r.type==='교환'?'status-배송중':'status-취소'}">${r.type}</span></td>
+                    <td><span class="status-badge ${r.status==='완료'?'status-송장완료':r.status==='거부'?'status-취소':'status-결제완료'}">${r.status}</span></td>
+                    <td class="font-semibold">${fmt(r.refundAmount||0)}</td>
+                    <td class="text-[12px] text-warm-500 max-w-[150px]">${escapeHtml(r.reason||'')}</td>
+                    <td><button class="btn-primary btn-sm" onclick="openReturnDetailModal(${r.id})">상세</button></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${retPage>1?`<button class="btn-outline btn-sm" onclick="retPage--;renderReturns(document.getElementById('page-content'))">← 이전</button>`:''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${retPage} / ${totalPages}</span>
+              ${retPage<totalPages?`<button class="btn-outline btn-sm" onclick="retPage++;renderReturns(document.getElementById('page-content'))">다음 →</button>`:''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">반품 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function openReturnModal() {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'return-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">반품/교환/취소 접수</h3>
+          <button onclick="document.getElementById('return-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">주문번호 *</label>
+            <input id="ret-order-no" class="input-field" placeholder="주문번호 입력" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">유형 *</label>
+            <select id="ret-type" class="input-field">
+              <option value="반품">반품</option>
+              <option value="교환">교환</option>
+              <option value="취소">취소</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유 *</label>
+            <textarea id="ret-reason" class="input-field resize-none" rows="2" placeholder="사유를 입력해주세요"></textarea>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">환불 금액</label>
+            <input id="ret-refund" type="number" class="input-field" placeholder="0" value="0" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+            <textarea id="ret-memo" class="input-field resize-none" rows="2"></textarea>
+          </div>
+          <button class="btn-primary w-full" onclick="saveReturn()">접수</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function saveReturn() {
+    const orderNo = document.getElementById('ret-order-no').value.trim();
+    if (!orderNo) { showToast('주문번호를 입력해주세요'); return; }
+    const reason = document.getElementById('ret-reason').value.trim();
+    if (!reason) { showToast('사유를 입력해주세요'); return; }
+    try {
+      await api('/admin/returns', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderNo,
+          type: document.getElementById('ret-type').value,
+          reason,
+          refundAmount: parseInt(document.getElementById('ret-refund').value) || 0,
+          memo: document.getElementById('ret-memo').value.trim(),
+        })
+      });
+      showToast('접수가 완료되었습니다');
+      document.getElementById('return-modal').remove();
+      renderReturns(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '접수에 실패했습니다'); }
+  }
+
+  async function openReturnDetailModal(retId) {
+    try {
+      const data = await api('/admin/returns/' + retId);
+      const r = data.returnData;
+      const statuses = ['접수','처리중','회수중','완료','거부'];
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'ret-detail-modal';
+      modal.innerHTML = `
+        <div class="overlay-content p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(r.returnNo)}</h3>
+            <button onclick="document.getElementById('ret-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div><span class="text-[11px] text-warm-400 block">유형</span><span class="font-semibold">${r.type}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">환불액</span><span class="font-semibold">${fmt(r.refundAmount||0)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">사유</span><span>${escapeHtml(r.reason||'')}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">메모</span><span>${escapeHtml(r.memo||'')}</span></div>
+          </div>
+          <div class="mb-4">
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
+            <select id="ret-detail-status" class="input-field">
+              ${statuses.map(s => `<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn-primary w-full" onclick="updateReturnStatus(${r.id})">저장</button>
+        </div>
+      `;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
+  }
+
+  async function updateReturnStatus(retId) {
+    const status = document.getElementById('ret-detail-status').value;
+    try {
+      await api('/admin/returns/' + retId, { method: 'PATCH', body: JSON.stringify({ status }) });
+      showToast('상태가 변경되었습니다');
+      document.getElementById('ret-detail-modal').remove();
+      renderReturns(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '상태 변경에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  REPORTS (통계/리포트)
+  // ============================================================
+  let reportTab = 'sales-ranking';
+
+  async function renderReports(el) {
+    showSpinner(el);
+    try {
+      const data = await api('/admin/reports?type=' + reportTab);
+      const tabs = ['sales-ranking','customer','broadcast'];
+      const tabLabels = { 'sales-ranking':'판매 랭킹', customer:'고객 분석', broadcast:'방송 분석' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">통계/리포트</h2>
+          <div class="flex gap-1 mb-6">
+            ${tabs.map(t => `<button class="sub-tab ${reportTab===t?'active':''}" onclick="reportTab='${t}';renderReports(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
+          </div>
+          <div class="card overflow-x-auto">
+            ${renderReportTable(reportTab, data.rows||[])}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">리포트를 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function renderReportTable(type, rows) {
+    if (type === 'sales-ranking') {
+      return `<table><thead><tr><th>#</th><th>상품명</th><th>판매수량</th><th>매출</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    if (type === 'customer') {
+      return `<table><thead><tr><th>#</th><th>고객명</th><th>주문수</th><th>총 구매액</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.name)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.totalSpent)}</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    if (type === 'broadcast') {
+      return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.title)}</td><td class="text-[12px]">${escapeHtml(r.date||'')}</td><td>${r.status}</td><td>${r.productCount}개</td></tr>`).join('')}
+      </tbody></table>`;
+    }
+    return '';
+  }
+
+  // ============================================================
+  //  SYSTEM (시스템관리)
+  // ============================================================
+  let sysTab = 'settings';
+
+  async function renderSystem(el) {
+    showSpinner(el);
+    const tabs = ['settings','admin-users','logs'];
+    const tabLabels = { settings:'택배/계좌 설정', 'admin-users':'관리자 계정', logs:'활동 로그' };
+    try {
+      if (sysTab === 'settings') {
+        const data = await api('/admin/settings');
+        const shipping = data.shipping || {};
+        const bank = data.bank || {};
+        el.innerHTML = `
+          <div class="fade-in">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div class="card">
+                <h3 class="font-semibold text-warm-800 mb-4">택배 설정</h3>
+                <form onsubmit="return false;" class="space-y-3">
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">기본 택배사</label><input id="sys-carrier" class="input-field" value="${escapeHtml(shipping.carrier||'')}" /></div>
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">배송비</label><input id="sys-fee" type="number" class="input-field" value="${shipping.fee||0}" /></div>
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">무료배송 기준</label><input id="sys-free" type="number" class="input-field" value="${shipping.freeThreshold||0}" /></div>
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">코드</label><input id="sys-code" class="input-field" value="${escapeHtml(shipping.code||'')}" /></div>
+                  <button class="btn-primary w-full" onclick="saveShippingSettings()">저장</button>
+                </form>
+              </div>
+              <div class="card">
+                <h3 class="font-semibold text-warm-800 mb-4">입금계좌 설정</h3>
+                <form onsubmit="return false;" class="space-y-3">
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">은행</label><input id="sys-bank" class="input-field" value="${escapeHtml(bank.bankName||'')}" /></div>
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">계좌번호</label><input id="sys-account" class="input-field" value="${escapeHtml(bank.accountNo||'')}" /></div>
+                  <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">예금주</label><input id="sys-holder" class="input-field" value="${escapeHtml(bank.holder||'')}" /></div>
+                  <button class="btn-primary w-full" onclick="saveBankSettings()">저장</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (sysTab === 'admin-users') {
+        const data = await api('/admin/admin-users');
+        el.innerHTML = `
+          <div class="fade-in">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="card">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-semibold text-warm-800">관리자 계정</h3>
+                <button class="btn-primary btn-sm" onclick="openAdminUserModal()">+ 관리자 추가</button>
+              </div>
+              <table>
+                <thead><tr><th>이름</th><th>전화번호</th><th>역할</th><th>가입일</th></tr></thead>
+                <tbody>
+                  ${(data.users||[]).map(u => {
+                    const d = new Date(u.createdAt);
+                    return `<tr><td class="font-semibold">${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td><td>${u.role}</td><td class="text-warm-400 text-[12px]">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</td></tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (sysTab === 'logs') {
+        const data = await api('/admin/logs?limit=50');
+        el.innerHTML = `
+          <div class="fade-in">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="card overflow-x-auto">
+              <table>
+                <thead><tr><th>일시</th><th>관리자</th><th>액션</th><th>대상</th><th>상세</th></tr></thead>
+                <tbody>
+                  ${(data.logs||[]).length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-8">로그가 없습니다</td></tr>':''}
+                  ${(data.logs||[]).map(l => {
+                    const d = new Date(l.createdAt);
+                    const ds = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    return `<tr><td class="text-warm-400 text-[12px] whitespace-nowrap">${ds}</td><td>${escapeHtml(l.userName||'')}</td><td>${escapeHtml(l.action)}</td><td class="text-[12px]">${escapeHtml(l.targetType||'')} ${escapeHtml(l.targetId||'')}</td><td class="text-[11px] text-warm-400 max-w-[200px]">${escapeHtml(JSON.stringify(l.detail||{}))}</td></tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">시스템 설정을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function saveShippingSettings() {
+    try {
+      await api('/admin/settings', { method: 'PATCH', body: JSON.stringify({
+        key: 'shipping',
+        value: {
+          carrier: document.getElementById('sys-carrier').value.trim(),
+          fee: parseInt(document.getElementById('sys-fee').value) || 0,
+          freeThreshold: parseInt(document.getElementById('sys-free').value) || 0,
+          code: document.getElementById('sys-code').value.trim(),
+        }
+      })});
+      showToast('택배 설정이 저장되었습니다');
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function saveBankSettings() {
+    try {
+      await api('/admin/settings', { method: 'PATCH', body: JSON.stringify({
+        key: 'bank',
+        value: {
+          bankName: document.getElementById('sys-bank').value.trim(),
+          accountNo: document.getElementById('sys-account').value.trim(),
+          holder: document.getElementById('sys-holder').value.trim(),
+        }
+      })});
+      showToast('계좌 설정이 저장되었습니다');
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  function openAdminUserModal() {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'admin-user-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">관리자 추가</h3>
+          <button onclick="document.getElementById('admin-user-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">전화번호 *</label><input id="au-phone" class="input-field" placeholder="01012345678" /></div>
+          <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">이름 *</label><input id="au-name" class="input-field" placeholder="이름" /></div>
+          <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">비밀번호 (4자리) *</label><input id="au-pw" type="password" class="input-field" maxlength="4" placeholder="●●●●" /></div>
+          <button class="btn-primary w-full" onclick="saveAdminUser()">추가</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function saveAdminUser() {
+    const phone = document.getElementById('au-phone').value.trim();
+    const name = document.getElementById('au-name').value.trim();
+    const password = document.getElementById('au-pw').value.trim();
+    if (!phone || !name || !password) { showToast('모든 필드를 입력해주세요'); return; }
+    try {
+      await api('/admin/admin-users', { method: 'POST', body: JSON.stringify({ phone, name, password }) });
+      showToast('관리자가 추가되었습니다');
+      document.getElementById('admin-user-modal').remove();
+      renderSystem(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '추가에 실패했습니다'); }
+  }
+  </script>
+</body>
+</html>
