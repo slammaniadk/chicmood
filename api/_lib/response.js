@@ -1,14 +1,16 @@
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization',
 };
 
 function ok(res, data, status = 200) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   return res.status(status).json(data);
 }
 
 function fail(res, message, status = 400) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   return res.status(status).json({ error: message });
 }
 
