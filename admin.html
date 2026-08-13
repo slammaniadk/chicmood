@@ -373,20 +373,20 @@
           <!-- 오늘 요약 -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div class="card">
-              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">오늘 주문</p>
-              <p class="font-serif text-2xl font-bold text-warm-800">${stats.todayOrders}건</p>
+              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">오늘 주문</p>
+              <p class="text-3xl font-bold text-warm-800">${stats.todayOrders}<span class="text-lg ml-0.5">건</span></p>
             </div>
             <div class="card">
-              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">오늘 매출</p>
-              <p class="font-serif text-2xl font-bold text-warm-800">${fmt(stats.todayRevenue)}</p>
+              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">오늘 매출</p>
+              <p class="text-3xl font-bold text-warm-800">${fmt(stats.todayRevenue)}</p>
             </div>
             <div class="card">
-              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">전체 주문</p>
-              <p class="font-serif text-2xl font-bold text-warm-800">${stats.totalOrders}건</p>
+              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">전체 주문</p>
+              <p class="text-3xl font-bold text-warm-800">${stats.totalOrders}<span class="text-lg ml-0.5">건</span></p>
             </div>
             <div class="card">
-              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">전체 매출</p>
-              <p class="font-serif text-2xl font-bold text-warm-800">${fmt(stats.totalRevenue)}</p>
+              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">전체 매출</p>
+              <p class="text-3xl font-bold text-warm-800">${fmt(stats.totalRevenue)}</p>
             </div>
           </div>
 
@@ -395,8 +395,8 @@
             ${statuses.map(s => `
               <div class="card text-center">
                 <span class="status-badge status-${s} mb-2 inline-block">${s}</span>
-                <p class="font-serif text-xl font-bold text-warm-800">${stats.statusCounts[s] || 0}</p>
-                <p class="text-[10px] text-warm-400 mt-0.5">${fmt(stats.statusTotals[s] || 0)}</p>
+                <p class="text-2xl font-bold text-warm-800">${stats.statusCounts[s] || 0}</p>
+                <p class="text-[11px] text-warm-400 mt-0.5">${fmt(stats.statusTotals[s] || 0)}</p>
               </div>
             `).join('')}
           </div>
