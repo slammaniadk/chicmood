@@ -1202,41 +1202,75 @@ async function handleReturnDetail(req, res, id) {
 async function handleReports(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { type = 'sales-ranking' } = req.query || {};
+  const { type = 'sales-ranking', from, to } = req.query || {};
   let rows = [];
+  let summary = {};
+
+  // 날짜 범위 적용된 주문 조회
+  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at').neq('status', '취소');
+  if (from) orderQuery = orderQuery.gte('created_at', from + 'T00:00:00');
+  if (to) orderQuery = orderQuery.lte('created_at', to + 'T23:59:59');
+  const { data: orders } = await orderQuery;
+  const orderIds = (orders || []).map(o => o.id);
 
   if (type === 'sales-ranking') {
-    const { data: items } = await supabaseAdmin.from('order_items').select('name, qty, subtotal');
+    let items = [];
+    if (orderIds.length > 0) {
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('name, qty, subtotal').in('order_id', orderIds);
+      items = itemsData || [];
+    }
     const grouped = {};
-    (items || []).forEach(i => {
+    items.forEach(i => {
       if (!grouped[i.name]) grouped[i.name] = { totalQty: 0, revenue: 0 };
       grouped[i.name].totalQty += i.qty;
       grouped[i.name].revenue += i.subtotal;
     });
     rows = Object.entries(grouped).sort((a, b) => b[1].revenue - a[1].revenue)
       .map(([productName, v]) => ({ productName, ...v }));
+    const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+    const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
+    summary = { totalRevenue, totalQty, productCount: rows.length, top: rows[0]?.productName || '-' };
   } else if (type === 'customer') {
-    const { data: orders } = await supabaseAdmin.from('orders').select('user_id, name, total').neq('status', '취소');
     const grouped = {};
     (orders || []).forEach(o => {
       const key = o.user_id || o.name;
-      if (!grouped[key]) grouped[key] = { name: o.name, orderCount: 0, totalSpent: 0 };
+      if (!grouped[key]) grouped[key] = { name: o.name, orderCount: 0, totalSpent: 0, lastOrderAt: null };
       grouped[key].orderCount++;
       grouped[key].totalSpent += o.total;
+      if (!grouped[key].lastOrderAt || o.created_at > grouped[key].lastOrderAt) grouped[key].lastOrderAt = o.created_at;
     });
     rows = Object.values(grouped).sort((a, b) => b.totalSpent - a.totalSpent);
+    const totalCustomers = rows.length;
+    const totalSpent = rows.reduce((s, r) => s + r.totalSpent, 0);
+    const avgSpent = totalCustomers > 0 ? Math.round(totalSpent / totalCustomers) : 0;
+    summary = { totalCustomers, totalSpent, avgSpent, topCustomer: rows[0]?.name || '-' };
   } else if (type === 'broadcast') {
     const { data: broadcasts } = await supabaseAdmin
       .from('broadcasts')
       .select('id, title, date_text, status, broadcast_products(product_id)')
       .order('id', { ascending: false });
-    rows = (broadcasts || []).map(b => ({
-      title: b.title, date: b.date_text, status: b.status,
-      productCount: (b.broadcast_products || []).length,
-    }));
+    // 방송별 매출 계산
+    let allItems = [];
+    if (orderIds.length > 0) {
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
+      allItems = itemsData || [];
+    }
+    rows = (broadcasts || []).map(b => {
+      const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
+      const matched = allItems.filter(i => bProductIds.includes(i.product_id));
+      return {
+        title: b.title, date: b.date_text, status: b.status,
+        productCount: bProductIds.length,
+        salesQty: matched.reduce((s, i) => s + i.qty, 0),
+        revenue: matched.reduce((s, i) => s + i.subtotal, 0),
+      };
+    });
+    const totalBcRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+    const topBc = rows.reduce((best, r) => r.revenue > (best?.revenue || 0) ? r : best, null);
+    summary = { totalBroadcasts: rows.length, totalBcRevenue, topBroadcast: topBc?.title || '-' };
   }
 
-  return ok(res, { rows });
+  return ok(res, { rows, summary });
 }
 
 // ============================================================

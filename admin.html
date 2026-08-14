@@ -2568,22 +2568,83 @@
   //  REPORTS (통계/리포트)
   // ============================================================
   let reportTab = 'sales-ranking';
+  let rptFrom = '';
+  let rptTo = '';
+
+  function downloadReportCsv() {
+    const table = document.querySelector('#page-content table');
+    if (!table) return;
+    const csvRows = [];
+    table.querySelectorAll('tr').forEach(tr => {
+      const cells = [];
+      tr.querySelectorAll('th, td').forEach(td => cells.push('"' + td.innerText.replace(/"/g, '""') + '"'));
+      csvRows.push(cells.join(','));
+    });
+    const csv = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const tabLabels = { 'sales-ranking':'판매랭킹', customer:'고객분석', broadcast:'방송분석' };
+    link.download = `통계_${tabLabels[reportTab]}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
 
   async function renderReports(el) {
     showSpinner(el);
     try {
-      const data = await api('/admin/reports?type=' + reportTab);
+      const params = new URLSearchParams({ type: reportTab });
+      if (rptFrom) params.set('from', rptFrom);
+      if (rptTo) params.set('to', rptTo);
+      const data = await api('/admin/reports?' + params.toString());
       const tabs = ['sales-ranking','customer','broadcast'];
       const tabLabels = { 'sales-ranking':'판매 랭킹', customer:'고객 분석', broadcast:'방송 분석' };
+      const s = data.summary || {};
+
+      let summaryHtml = '';
+      if (reportTab === 'sales-ranking') {
+        summaryHtml = `
+          <div class="grid grid-cols-4 gap-3 mb-6">
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 매출</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalRevenue||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 판매수량</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalQty||0}개</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">상품 종류</p><p class="font-sans text-lg font-bold text-warm-800">${s.productCount||0}개</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">1위 상품</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.top||'-')}</p></div>
+          </div>`;
+      } else if (reportTab === 'customer') {
+        summaryHtml = `
+          <div class="grid grid-cols-4 gap-3 mb-6">
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 고객수</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalCustomers||0}명</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 구매액</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalSpent||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">고객당 평균</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.avgSpent||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">1위 고객</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.topCustomer||'-')}</p></div>
+          </div>`;
+      } else if (reportTab === 'broadcast') {
+        summaryHtml = `
+          <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 방송수</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalBroadcasts||0}회</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 매출</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalBcRevenue||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">최고 방송</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.topBroadcast||'-')}</p></div>
+          </div>`;
+      }
 
       el.innerHTML = `
         <div class="fade-in">
           <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">통계/리포트</h2>
-          <div class="flex gap-1 mb-6">
-            ${tabs.map(t => `<button class="sub-tab ${reportTab===t?'active':''}" onclick="reportTab='${t}';renderReports(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-1">
+              ${tabs.map(t => `<button class="sub-tab ${reportTab===t?'active':''}" onclick="reportTab='${t}';renderReports(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
+            </div>
+            <input type="date" class="input-field" style="width:auto;" value="${rptFrom}" onchange="rptFrom=this.value;renderReports(document.getElementById('page-content'))" />
+            <span class="text-warm-400">~</span>
+            <input type="date" class="input-field" style="width:auto;" value="${rptTo}" onchange="rptTo=this.value;renderReports(document.getElementById('page-content'))" />
+            <button onclick="downloadReportCsv()" class="btn-outline btn-sm flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              CSV
+            </button>
           </div>
+          ${summaryHtml}
           <div class="card overflow-x-auto">
-            ${renderReportTable(reportTab, data.rows||[])}
+            ${renderReportTable(reportTab, data.rows||[], s)}
           </div>
         </div>
       `;
@@ -2592,23 +2653,30 @@
     }
   }
 
-  function renderReportTable(type, rows) {
+  function renderReportTable(type, rows, summary) {
     if (type === 'sales-ranking') {
-      return `<table><thead><tr><th>#</th><th>상품명</th><th>판매수량</th><th>매출</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      const total = summary.totalRevenue || 1;
+      return `<table><thead><tr><th>#</th><th>상품명</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${(r.revenue/total*100).toFixed(1)}%</td></tr>`).join('')}
       </tbody></table>`;
     }
     if (type === 'customer') {
-      return `<table><thead><tr><th>#</th><th>고객명</th><th>주문수</th><th>총 구매액</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.name)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.totalSpent)}</td></tr>`).join('')}
+      const total = summary.totalSpent || 1;
+      return `<table><thead><tr><th>#</th><th>고객명</th><th>주문수</th><th>총 구매액</th><th>평균</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="6" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map((r,i) => {
+          const avg = r.orderCount > 0 ? Math.round(r.totalSpent / r.orderCount) : 0;
+          return `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.name)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.totalSpent)}</td><td class="text-[12px]">${fmt(avg)}</td><td class="text-warm-500 text-[12px]">${(r.totalSpent/total*100).toFixed(1)}%</td></tr>`;
+        }).join('')}
       </tbody></table>`;
     }
     if (type === 'broadcast') {
-      return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.title)}</td><td class="text-[12px]">${escapeHtml(r.date||'')}</td><td>${r.status}</td><td>${r.productCount}개</td></tr>`).join('')}
+      const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+      const totalRev = summary.totalBcRevenue || 1;
+      return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.title)}</td><td class="text-[12px]">${escapeHtml(r.date||'')}</td><td class="text-[12px]">${statusLabels[r.status]||r.status}</td><td>${r.productCount}개</td><td>${r.salesQty||0}개</td><td class="font-semibold">${fmt(r.revenue||0)}</td><td class="text-warm-500 text-[12px]">${r.revenue > 0 ? (r.revenue/totalRev*100).toFixed(1)+'%' : '-'}</td></tr>`).join('')}
       </tbody></table>`;
     }
     return '';
