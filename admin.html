@@ -2686,6 +2686,7 @@
   //  SYSTEM (시스템관리)
   // ============================================================
   let sysTab = 'settings';
+  let logPage = 1, logFrom = '', logTo = '', logAction = '';
 
   async function renderSystem(el) {
     showSpinner(el);
@@ -2725,21 +2726,30 @@
         `;
       } else if (sysTab === 'admin-users') {
         const data = await api('/admin/admin-users');
+        const myId = adminUser?.id;
         el.innerHTML = `
           <div class="fade-in">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
             <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="card mb-4">
+              <div class="flex justify-between items-center mb-2">
+                <h3 class="font-semibold text-warm-800">내 계정</h3>
+                <button class="btn-outline btn-sm" onclick="openChangeMyPasswordModal()">비밀번호 변경</button>
+              </div>
+              <p class="text-[13px] text-warm-500">${escapeHtml(adminUser?.name||'')} (${escapeHtml(adminUser?.phone||'')})</p>
+            </div>
             <div class="card">
               <div class="flex justify-between items-center mb-4">
-                <h3 class="font-semibold text-warm-800">관리자 계정</h3>
+                <h3 class="font-semibold text-warm-800">관리자 계정 (${(data.users||[]).length}명)</h3>
                 <button class="btn-primary btn-sm" onclick="openAdminUserModal()">+ 관리자 추가</button>
               </div>
               <table>
-                <thead><tr><th>이름</th><th>전화번호</th><th>역할</th><th>가입일</th></tr></thead>
+                <thead><tr><th>이름</th><th>전화번호</th><th>역할</th><th>가입일</th><th>관리</th></tr></thead>
                 <tbody>
                   ${(data.users||[]).map(u => {
                     const d = new Date(u.createdAt);
-                    return `<tr><td class="font-semibold">${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td><td>${u.role}</td><td class="text-warm-400 text-[12px]">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</td></tr>`;
+                    const isMe = u.id === myId;
+                    return `<tr><td class="font-semibold">${escapeHtml(u.name)}${isMe?' <span class="text-[10px] text-rose-400">(나)</span>':''}</td><td>${escapeHtml(u.phone)}</td><td>${u.role}</td><td class="text-warm-400 text-[12px]">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</td><td class="space-x-1">${isMe?'<span class="text-warm-300 text-[11px]">-</span>':`<button class="text-[11px] text-blue-500 hover:underline bg-transparent border-none cursor-pointer" onclick="resetAdminPassword('${u.id}','${escapeHtml(u.name)}')">PW초기화</button><button class="text-[11px] text-red-400 hover:underline bg-transparent border-none cursor-pointer" onclick="demoteAdmin('${u.id}','${escapeHtml(u.name)}')">권한해제</button>`}</td></tr>`;
                   }).join('')}
                 </tbody>
               </table>
@@ -2747,12 +2757,25 @@
           </div>
         `;
       } else if (sysTab === 'logs') {
-        const data = await api('/admin/logs?limit=50');
+        let qp = `limit=30&page=${logPage}`;
+        if (logFrom) qp += `&from=${logFrom}`;
+        if (logTo) qp += `&to=${logTo}`;
+        if (logAction) qp += `&action=${encodeURIComponent(logAction)}`;
+        const data = await api('/admin/logs?' + qp);
+        const total = data.total || 0;
+        const totalPages = Math.ceil(total / 30) || 1;
+        const actionOptions = ['LOGIN','CREATE','UPDATE','DELETE','STATUS_CHANGE'];
         el.innerHTML = `
           <div class="fade-in">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
             <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
             <div class="card overflow-x-auto">
+              <div class="flex flex-wrap gap-2 mb-4 items-end">
+                <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">시작일</label><input type="date" class="input-field text-[13px]" value="${logFrom}" onchange="logFrom=this.value;logPage=1;renderSystem(document.getElementById('page-content'))" /></div>
+                <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">종료일</label><input type="date" class="input-field text-[13px]" value="${logTo}" onchange="logTo=this.value;logPage=1;renderSystem(document.getElementById('page-content'))" /></div>
+                <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">액션</label><select class="input-field text-[13px]" onchange="logAction=this.value;logPage=1;renderSystem(document.getElementById('page-content'))"><option value="">전체</option>${actionOptions.map(a=>`<option value="${a}" ${logAction===a?'selected':''}>${a}</option>`).join('')}</select></div>
+                <span class="text-[12px] text-warm-400 ml-auto">총 ${total}건</span>
+              </div>
               <table>
                 <thead><tr><th>일시</th><th>관리자</th><th>액션</th><th>대상</th><th>상세</th></tr></thead>
                 <tbody>
@@ -2760,10 +2783,11 @@
                   ${(data.logs||[]).map(l => {
                     const d = new Date(l.createdAt);
                     const ds = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                    return `<tr><td class="text-warm-400 text-[12px] whitespace-nowrap">${ds}</td><td>${escapeHtml(l.userName||'')}</td><td>${escapeHtml(l.action)}</td><td class="text-[12px]">${escapeHtml(l.targetType||'')} ${escapeHtml(l.targetId||'')}</td><td class="text-[11px] text-warm-400 max-w-[200px]">${escapeHtml(JSON.stringify(l.detail||{}))}</td></tr>`;
+                    return `<tr><td class="text-warm-400 text-[12px] whitespace-nowrap">${ds}</td><td>${escapeHtml(l.userName||'')}</td><td><span class="text-[11px] px-1.5 py-0.5 rounded bg-warm-100 text-warm-600">${escapeHtml(l.action)}</span></td><td class="text-[12px]">${escapeHtml(l.targetType||'')} ${escapeHtml(l.targetId||'')}</td><td class="text-[11px] text-warm-400 max-w-[200px]">${escapeHtml(JSON.stringify(l.detail||{}))}</td></tr>`;
                   }).join('')}
                 </tbody>
               </table>
+              ${totalPages > 1 ? `<div class="flex justify-center items-center gap-2 mt-4">${logPage > 1 ? `<button class="btn-outline btn-sm" onclick="logPage--;renderSystem(document.getElementById('page-content'))">← 이전</button>` : ''}<span class="text-[13px] text-warm-500">${logPage} / ${totalPages}</span>${logPage < totalPages ? `<button class="btn-outline btn-sm" onclick="logPage++;renderSystem(document.getElementById('page-content'))">다음 →</button>` : ''}</div>` : ''}
             </div>
           </div>
         `;
@@ -2835,6 +2859,56 @@
       document.getElementById('admin-user-modal').remove();
       renderSystem(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '추가에 실패했습니다'); }
+  }
+
+  async function resetAdminPassword(userId, userName) {
+    if (!confirm(`${userName}님의 비밀번호를 0000으로 초기화하시겠습니까?`)) return;
+    try {
+      await api('/admin/admin-users', { method: 'PATCH', body: JSON.stringify({ userId, action: 'reset-password' }) });
+      showToast(`${userName}님 비밀번호가 0000으로 초기화되었습니다`);
+    } catch (e) { showToast(e.message || '초기화에 실패했습니다'); }
+  }
+
+  async function demoteAdmin(userId, userName) {
+    if (!confirm(`${userName}님의 관리자 권한을 해제하시겠습니까?\n일반 사용자로 변경됩니다.`)) return;
+    try {
+      await api('/admin/admin-users', { method: 'PATCH', body: JSON.stringify({ userId, action: 'demote' }) });
+      showToast(`${userName}님의 관리자 권한이 해제되었습니다`);
+      renderSystem(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '권한 해제에 실패했습니다'); }
+  }
+
+  function openChangeMyPasswordModal() {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'change-pw-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">비밀번호 변경</h3>
+          <button onclick="document.getElementById('change-pw-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">새 비밀번호 (4자리) *</label><input id="cpw-new" type="password" class="input-field" maxlength="4" placeholder="●●●●" /></div>
+          <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">비밀번호 확인 *</label><input id="cpw-confirm" type="password" class="input-field" maxlength="4" placeholder="●●●●" /></div>
+          <button class="btn-primary w-full" onclick="changeMyPassword()">변경</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function changeMyPassword() {
+    const pw = document.getElementById('cpw-new').value.trim();
+    const pwConfirm = document.getElementById('cpw-confirm').value.trim();
+    if (!pw) { showToast('새 비밀번호를 입력해주세요'); return; }
+    if (pw !== pwConfirm) { showToast('비밀번호가 일치하지 않습니다'); return; }
+    try {
+      await api('/admin/admin-users', { method: 'PATCH', body: JSON.stringify({ userId: adminUser.id, action: 'reset-password', newPassword: pw }) });
+      showToast('비밀번호가 변경되었습니다');
+      document.getElementById('change-pw-modal').remove();
+    } catch (e) { showToast(e.message || '변경에 실패했습니다'); }
   }
   </script>
 </body>

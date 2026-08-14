@@ -1319,6 +1319,23 @@ async function handleAdminUsers(req, res) {
     return ok(res, { id: data.id }, 201);
   }
 
+  if (req.method === 'PATCH') {
+    const { userId, action, newPassword } = req.body;
+    if (!userId) return fail(res, 'userId는 필수입니다');
+    if (action === 'reset-password') {
+      const pw = newPassword || '0000';
+      const { error } = await supabaseAdmin.from('users').update({ password: pw }).eq('id', userId);
+      if (error) return fail(res, error.message, 500);
+      return ok(res, { message: '비밀번호가 초기화되었습니다' });
+    }
+    if (action === 'demote') {
+      const { error } = await supabaseAdmin.from('users').update({ role: 'user' }).eq('id', userId);
+      if (error) return fail(res, error.message, 500);
+      return ok(res, { message: '관리자 권한이 해제되었습니다' });
+    }
+    return fail(res, '알 수 없는 액션입니다');
+  }
+
   return fail(res, 'Method not allowed', 405);
 }
 
@@ -1328,11 +1345,18 @@ async function handleAdminUsers(req, res) {
 async function handleLogs(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { limit = '50' } = req.query || {};
+  const { limit = '30', page = '1', from, to, action } = req.query || {};
   const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
+  const pageNum = Math.max(1, parseInt(page));
+  const offset = (pageNum - 1) * limitNum;
 
-  const { data, error } = await supabaseAdmin.from('admin_logs')
-    .select('*').order('created_at', { ascending: false }).limit(limitNum);
+  let query = supabaseAdmin.from('admin_logs').select('*', { count: 'exact' });
+  if (from) query = query.gte('created_at', from);
+  if (to) query = query.lte('created_at', to + 'T23:59:59');
+  if (action) query = query.eq('action', action);
+  query = query.order('created_at', { ascending: false }).range(offset, offset + limitNum - 1);
+
+  const { data, error, count } = await query;
   if (error) return fail(res, error.message, 500);
 
   const logs = (data || []).map(l => ({
@@ -1340,5 +1364,5 @@ async function handleLogs(req, res) {
     action: l.action, targetType: l.target_type, targetId: l.target_id,
     detail: l.detail, createdAt: l.created_at,
   }));
-  return ok(res, { logs });
+  return ok(res, { logs, total: count || 0, page: pageNum, limit: limitNum });
 }
