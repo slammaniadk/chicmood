@@ -6,6 +6,7 @@
   <title>CHICMOOD MANAGEMENT</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <script>
@@ -356,6 +357,9 @@
   // ============================================================
   //  DASHBOARD
   // ============================================================
+  let _salesChart = null;
+  let _salesData = {};
+
   async function renderDashboard(el) {
     showSpinner(el);
     try {
@@ -365,68 +369,148 @@
       ]);
 
       const statuses = ['입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+      const topProducts = stats.topProducts || [];
+      const statusColorMap = {
+        '입금대기': '#f59e0b', '확인요청': '#3b82f6', '결제완료': '#10b981',
+        '배송중': '#8b5cf6', '송장완료': '#059669', '취소': '#ef4444',
+      };
+
+      // Prep chart data for 3 views
+      const ds = stats.dailySales || {}, ms = stats.monthlySales || {}, ys = stats.yearlySales || {};
+      _salesData = {
+        daily:   { labels: Object.keys(ds), revenue: Object.keys(ds).map(k => ds[k].revenue), orders: Object.keys(ds).map(k => ds[k].orders) },
+        monthly: { labels: Object.keys(ms).map(k => k.replace(/^\d{4}\./, '')), revenue: Object.keys(ms).map(k => ms[k].revenue), orders: Object.keys(ms).map(k => ms[k].orders) },
+        yearly:  { labels: Object.keys(ys), revenue: Object.keys(ys).map(k => ys[k].revenue), orders: Object.keys(ys).map(k => ys[k].orders) },
+      };
+
+      const now = new Date();
+      const dateStr = now.getFullYear() + '.' + String(now.getMonth()+1).padStart(2,'0') + '.' + String(now.getDate()).padStart(2,'0');
 
       el.innerHTML = `
         <div class="fade-in">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">대시보드</h2>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">대시보드</h2>
+            <p class="text-[12px] text-warm-400">${dateStr}</p>
+          </div>
 
-          <!-- 오늘 요약 -->
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <div class="card">
-              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">오늘 주문</p>
-              <p class="text-3xl font-bold text-warm-800">${stats.todayOrders}<span class="text-lg ml-0.5">건</span></p>
+          <!-- 매출 요약 -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div class="rounded-xl p-4 bg-gradient-to-br from-amber-50 to-orange-100 border border-amber-200/60">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-semibold tracking-wider text-amber-600 uppercase">오늘 매출</p>
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 10v1"/></svg>
+              </div>
+              <p class="text-xl font-bold text-amber-900">${fmt(stats.todayRevenue)}</p>
+              <p class="text-[10px] text-amber-600 mt-0.5">${stats.todayOrders}건</p>
             </div>
-            <div class="card">
-              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">오늘 매출</p>
-              <p class="text-3xl font-bold text-warm-800">${fmt(stats.todayRevenue)}</p>
+            <div class="rounded-xl p-4 bg-gradient-to-br from-emerald-50 to-green-100 border border-emerald-200/60">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">이번달 매출</p>
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </div>
+              <p class="text-xl font-bold text-emerald-900">${fmt(stats.monthRevenue)}</p>
+              <p class="text-[10px] text-emerald-600 mt-0.5">${stats.monthOrders}건</p>
             </div>
-            <div class="card">
-              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">전체 주문</p>
-              <p class="text-3xl font-bold text-warm-800">${stats.totalOrders}<span class="text-lg ml-0.5">건</span></p>
+            <div class="rounded-xl p-4 bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200/60">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-semibold tracking-wider text-blue-600 uppercase">올해 매출</p>
+                <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              </div>
+              <p class="text-xl font-bold text-blue-900">${fmt(stats.yearRevenue)}</p>
+              <p class="text-[10px] text-blue-600 mt-0.5">${stats.yearOrders}건</p>
             </div>
-            <div class="card">
-              <p class="text-[12px] font-semibold tracking-wider text-warm-400 uppercase mb-2">전체 매출</p>
-              <p class="text-3xl font-bold text-warm-800">${fmt(stats.totalRevenue)}</p>
+            <div class="rounded-xl p-4 bg-gradient-to-br from-rose-50 to-pink-100 border border-rose-200/60">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[10px] font-semibold tracking-wider text-rose-600 uppercase">누적 매출</p>
+                <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+              </div>
+              <p class="text-xl font-bold text-rose-900">${fmt(stats.totalRevenue)}</p>
+              <p class="text-[10px] text-rose-600 mt-0.5">${stats.totalOrders}건 · 회원 ${stats.totalMembers || 0}명</p>
             </div>
           </div>
 
-          <!-- 상태별 카운트 -->
-          <div class="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-            ${statuses.map(s => `
-              <div class="card text-center">
-                <span class="status-badge status-${s} mb-2 inline-block">${s}</span>
-                <p class="text-2xl font-bold text-warm-800">${stats.statusCounts[s] || 0}</p>
-                <p class="text-[11px] text-warm-400 mt-0.5">${fmt(stats.statusTotals[s] || 0)}</p>
+          <!-- 매출 동향 차트 -->
+          <div class="card mb-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-semibold text-warm-800 text-[14px]">매출 동향</h3>
+              <div class="flex gap-1">
+                <button class="sales-tab px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border-none bg-warm-800 text-white" data-tab="daily" onclick="switchSalesChart('daily')">일별</button>
+                <button class="sales-tab px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border-none bg-transparent text-warm-400 hover:bg-warm-100" data-tab="monthly" onclick="switchSalesChart('monthly')">월별</button>
+                <button class="sales-tab px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border-none bg-transparent text-warm-400 hover:bg-warm-100" data-tab="yearly" onclick="switchSalesChart('yearly')">년별</button>
               </div>
-            `).join('')}
+            </div>
+            <div style="height:180px;position:relative;">
+              <canvas id="chart-sales-trend"></canvas>
+            </div>
+          </div>
+
+          <!-- 주문현황 + 인기상품 -->
+          <div class="grid lg:grid-cols-2 gap-4 mb-4">
+            <div class="card">
+              <h3 class="font-semibold text-warm-800 mb-3 text-[14px]">주문 상태</h3>
+              <div class="flex items-start gap-5">
+                <div class="flex-shrink-0" style="width:120px;height:120px;">
+                  <canvas id="chart-status"></canvas>
+                </div>
+                <div class="flex-1 space-y-1">
+                  ${statuses.map(s => {
+                    const count = stats.statusCounts[s] || 0;
+                    const pct = stats.totalOrders > 0 ? Math.round(count / stats.totalOrders * 100) : 0;
+                    return `
+                      <div class="flex items-center justify-between text-[12px] cursor-pointer hover:bg-warm-50 rounded px-2 py-1 -mx-2 transition-colors" onclick="navigate('orders')">
+                        <div class="flex items-center gap-1.5">
+                          <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${statusColorMap[s]}"></span>
+                          <span class="text-warm-600">${s}</span>
+                        </div>
+                        <span class="font-bold text-warm-800">${count}<span class="font-normal text-warm-400 text-[10px] ml-1">${pct}%</span></span>
+                      </div>`;
+                  }).join('')}
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="font-semibold text-warm-800 mb-3 text-[14px]">인기 상품 TOP 5</h3>
+              ${topProducts.length > 0 ? `
+              <div class="space-y-2.5">
+                ${topProducts.map((p, i) => {
+                  const maxRev = topProducts[0].revenue;
+                  const barPct = maxRev > 0 ? Math.round(p.revenue / maxRev * 100) : 0;
+                  return `
+                    <div>
+                      <div class="flex items-center justify-between mb-0.5">
+                        <span class="text-[12px] text-warm-700 truncate flex-1"><span class="font-bold mr-1 ${i < 3 ? 'text-warm-800' : 'text-warm-400'}">${i+1}.</span>${escapeHtml(p.name)}</span>
+                        <span class="text-[11px] font-semibold text-warm-800 ml-2 flex-shrink-0">${fmt(p.revenue)}</span>
+                      </div>
+                      <div class="h-1 bg-warm-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full" style="width:${barPct}%;background:linear-gradient(90deg,#d4a574,#8a5628)"></div>
+                      </div>
+                    </div>`;
+                }).join('')}
+              </div>
+              ` : '<p class="text-[12px] text-warm-400 py-6 text-center">판매 데이터가 없습니다</p>'}
+            </div>
           </div>
 
           <!-- 최근 주문 -->
           <div class="card">
-            <div class="flex justify-between items-center mb-4">
-              <h3 class="font-semibold text-warm-800">최근 주문</h3>
-              <button class="text-[12px] text-warm-500 hover:text-warm-800 bg-transparent border-none cursor-pointer" onclick="navigate('orders')">전체보기 →</button>
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="font-semibold text-warm-800 text-[14px]">최근 주문</h3>
+              <button class="text-[11px] text-warm-500 hover:text-warm-800 bg-transparent border-none cursor-pointer" onclick="navigate('orders')">전체보기 →</button>
             </div>
             <div class="overflow-x-auto">
               <table>
-                <thead>
-                  <tr>
-                    <th>주문번호</th><th>주문자</th><th>금액</th><th>상태</th><th>일시</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>주문번호</th><th>주문자</th><th>금액</th><th>상태</th><th>일시</th></tr></thead>
                 <tbody>
                   ${ordersRes.orders.map(o => {
                     const d = new Date(o.createdAt);
-                    const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                    return `
-                      <tr>
+                    const ds = String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+                    return `<tr>
                         <td class="font-semibold text-warm-800 text-[12px]">${o.orderNo}</td>
                         <td>${escapeHtml(o.name)}</td>
                         <td class="font-semibold">${fmt(o.total)}</td>
                         <td><span class="status-badge status-${o.status}">${o.status}</span></td>
-                        <td class="text-warm-400 text-[12px]">${dateStr}</td>
-                      </tr>
-                    `;
+                        <td class="text-warm-400 text-[12px]">${ds}</td>
+                      </tr>`;
                   }).join('')}
                 </tbody>
               </table>
@@ -434,9 +518,57 @@
           </div>
         </div>
       `;
+
+      // Init donut chart
+      _initDonut(stats, statuses, statusColorMap);
+      // Init sales chart (default: daily)
+      switchSalesChart('daily');
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">대시보드를 불러오는 중 오류가 발생했습니다.</p>';
     }
+  }
+
+  function switchSalesChart(view) {
+    if (typeof Chart === 'undefined') return;
+    document.querySelectorAll('.sales-tab').forEach(t => {
+      if (t.dataset.tab === view) { t.className = 'sales-tab px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border-none bg-warm-800 text-white'; }
+      else { t.className = 'sales-tab px-3 py-1 rounded-full text-[11px] font-medium cursor-pointer border-none bg-transparent text-warm-400 hover:bg-warm-100'; }
+    });
+    if (_salesChart) { _salesChart.destroy(); _salesChart = null; }
+    const d = _salesData[view];
+    if (!d || !d.labels.length) return;
+    const ctx = document.getElementById('chart-sales-trend');
+    if (!ctx) return;
+    _salesChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: d.labels, datasets: [
+        { label: '매출', data: d.revenue, backgroundColor: 'rgba(138,86,40,0.65)', borderRadius: 4, yAxisID: 'y', order: 2 },
+        { label: '주문수', data: d.orders, type: 'line', borderColor: '#d4a574', backgroundColor: 'rgba(212,165,116,0.08)', borderWidth: 2, pointBackgroundColor: '#d4a574', pointBorderColor: '#fff', pointBorderWidth: 2, pointRadius: 3, fill: true, tension: 0.3, yAxisID: 'y1', order: 1 },
+      ]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#4a2e16', cornerRadius: 8, padding: 8, titleFont: { size: 11 }, bodyFont: { size: 11 }, callbacks: { label: c => c.dataset.label === '매출' ? ' \u20a9' + c.raw.toLocaleString() : ' ' + c.raw + '건' } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#d4a574', maxRotation: 0 } },
+          y: { position: 'left', grid: { color: 'rgba(228,197,165,0.12)' }, ticks: { font: { size: 10 }, color: '#8a5628', callback: v => v >= 100000000 ? (v/100000000).toFixed(1)+'억' : v >= 10000 ? Math.round(v/10000)+'만' : v.toLocaleString() }, beginAtZero: true },
+          y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 10 }, color: '#d4a574', stepSize: 1 }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  function _initDonut(stats, statuses, colorMap) {
+    if (typeof Chart === 'undefined') return;
+    const ctx = document.getElementById('chart-status');
+    if (!ctx) return;
+    const data = statuses.map(s => stats.statusCounts[s] || 0);
+    const has = data.some(v => v > 0);
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: statuses, datasets: [{ data: has ? data : [1], backgroundColor: has ? statuses.map(s => colorMap[s]) : ['#e5e7eb'], borderWidth: 0, hoverOffset: 3 }] },
+      options: { responsive: true, maintainAspectRatio: true, cutout: '60%', plugins: { legend: { display: false }, tooltip: { enabled: has, backgroundColor: '#4a2e16', cornerRadius: 6, padding: 6, callbacks: { label: c => ' '+c.label+': '+c.raw+'건' } } } },
+    });
   }
 
   // ============================================================
@@ -1237,15 +1369,32 @@
   // ============================================================
   //  VENDORS (거래처관리)
   // ============================================================
+  let vendorSearch = '';
+  let vendorFilter = 'all'; // all, active, inactive
+
   async function renderVendors(el) {
     showSpinner(el);
     try {
-      const vendors = await api('/admin/vendors');
+      const params = new URLSearchParams();
+      if (vendorSearch) params.set('search', vendorSearch);
+      if (vendorFilter === 'active') params.set('isActive', 'true');
+      else if (vendorFilter === 'inactive') params.set('isActive', 'false');
+      const qs = params.toString();
+      const vendors = await api('/admin/vendors' + (qs ? '?' + qs : ''));
+      const filters = ['all', 'active', 'inactive'];
+      const filterLabels = { all: '전체', active: '활성', inactive: '비활성' };
+
       el.innerHTML = `
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">거래처관리</h2>
             <button class="btn-primary" onclick="openVendorModal()">+ 거래처 등록</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-2">
+              ${filters.map(f => `<button class="filter-tab ${vendorFilter===f?'active':''}" onclick="vendorFilter='${f}';renderVendors(document.getElementById('page-content'))">${filterLabels[f]}</button>`).join('')}
+            </div>
+            <input type="text" class="input-field" style="max-width:300px;" placeholder="거래처명, 담당자, 연락처 검색..." value="${escapeHtml(vendorSearch)}" onkeydown="if(event.key==='Enter'){vendorSearch=this.value;renderVendors(document.getElementById('page-content'))}" />
           </div>
           <div class="card overflow-x-auto">
             <table>
@@ -1255,12 +1404,14 @@
                 ${vendors.map(v => `
                   <tr>
                     <td class="text-warm-400">${v.id}</td>
-                    <td class="font-semibold">${escapeHtml(v.name)}</td>
+                    <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openVendorDetail(${v.id})">${escapeHtml(v.name)}</td>
                     <td>${escapeHtml(v.contact||'')}</td>
                     <td class="text-[12px]">${escapeHtml(v.phone||'')}</td>
                     <td class="text-[12px]">${escapeHtml(v.email||'')}</td>
                     <td>${v.productCount || 0}개</td>
-                    <td><span class="status-badge ${v.isActive ? 'status-결제완료' : 'status-취소'}">${v.isActive ? '활성' : '비활성'}</span></td>
+                    <td>
+                      <span class="status-badge ${v.isActive ? 'status-결제완료' : 'status-취소'} cursor-pointer" onclick="toggleVendorActive(${v.id}, ${!v.isActive})">${v.isActive ? '활성' : '비활성'}</span>
+                    </td>
                     <td class="whitespace-nowrap">
                       <button class="btn-primary btn-sm" onclick='openVendorModal(${JSON.stringify(v).replace(/'/g,"&#39;")})'>수정</button>
                       <button class="btn-danger" onclick="deleteVendor(${v.id})">삭제</button>
@@ -1274,6 +1425,97 @@
       `;
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">거래처 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function toggleVendorActive(id, isActive) {
+    try {
+      await api('/admin/vendors/' + id, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+      showToast(isActive ? '거래처가 활성화되었습니다' : '거래처가 비활성화되었습니다');
+      renderVendors(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '변경에 실패했습니다'); }
+  }
+
+  async function openVendorDetail(id) {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'vendor-detail-modal';
+    modal.innerHTML = '<div class="overlay-content p-6" style="max-width:700px;"><div class="flex justify-center py-12"><div class="spinner"></div></div></div>';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    try {
+      const data = await api('/admin/vendors/' + id);
+      const v = data.vendor;
+      const products = data.products || [];
+      const pos = data.purchaseOrders || [];
+      const totalPO = pos.reduce((s, po) => s + (po.totalAmount || 0), 0);
+
+      document.querySelector('#vendor-detail-modal .overlay-content').innerHTML = `
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(v.name)}</h3>
+          <button onclick="document.getElementById('vendor-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+
+        <!-- 기본 정보 -->
+        <div class="grid grid-cols-2 gap-x-6 gap-y-3 mb-6 text-[13px]">
+          <div><span class="text-warm-400">담당자</span> <span class="ml-2 font-medium">${escapeHtml(v.contact||'-')}</span></div>
+          <div><span class="text-warm-400">연락처</span> <span class="ml-2 font-medium">${escapeHtml(v.phone||'-')}</span></div>
+          <div><span class="text-warm-400">이메일</span> <span class="ml-2 font-medium">${escapeHtml(v.email||'-')}</span></div>
+          <div><span class="text-warm-400">상태</span> <span class="ml-2"><span class="status-badge ${v.isActive?'status-결제완료':'status-취소'}">${v.isActive?'활성':'비활성'}</span></span></div>
+          <div class="col-span-2"><span class="text-warm-400">주소</span> <span class="ml-2 font-medium">${escapeHtml(v.address||'-')}</span></div>
+          <div class="col-span-2"><span class="text-warm-400">입금계좌</span> <span class="ml-2 font-medium">${escapeHtml(v.bankInfo||'-')}</span></div>
+          ${v.memo ? `<div class="col-span-2"><span class="text-warm-400">메모</span> <span class="ml-2">${escapeHtml(v.memo)}</span></div>` : ''}
+        </div>
+
+        <!-- 연결 상품 -->
+        <div class="mb-6">
+          <h4 class="text-[12px] font-semibold tracking-wider text-warm-500 uppercase mb-3">연결 상품 (${products.length})</h4>
+          ${products.length === 0
+            ? '<p class="text-[13px] text-warm-400 py-4 text-center">연결된 상품이 없습니다</p>'
+            : `<div class="card overflow-x-auto p-0"><table>
+                <thead><tr><th>이미지</th><th>상품명</th><th>판매가</th><th>매입가</th></tr></thead>
+                <tbody>
+                  ${products.map(p => `
+                    <tr>
+                      <td>${p.image ? `<img src="${p.image}" class="w-10 h-10 object-cover rounded" />` : '<div class="w-10 h-10 bg-warm-100 rounded"></div>'}</td>
+                      <td class="font-medium">${escapeHtml(p.name)}</td>
+                      <td>${fmt(p.price)}</td>
+                      <td>${fmt(p.costPrice)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table></div>`
+          }
+        </div>
+
+        <!-- 발주 내역 -->
+        <div>
+          <h4 class="text-[12px] font-semibold tracking-wider text-warm-500 uppercase mb-3">발주 내역 (${pos.length}) &mdash; 총 ${fmt(totalPO)}</h4>
+          ${pos.length === 0
+            ? '<p class="text-[13px] text-warm-400 py-4 text-center">발주 내역이 없습니다</p>'
+            : `<div class="card overflow-x-auto p-0"><table>
+                <thead><tr><th>발주번호</th><th>상태</th><th>금액</th><th>일자</th></tr></thead>
+                <tbody>
+                  ${pos.map(po => {
+                    const d = po.orderedAt ? new Date(po.orderedAt) : (po.createdAt ? new Date(po.createdAt) : null);
+                    const ds = d ? d.toLocaleDateString('ko-KR') : '-';
+                    return `
+                      <tr>
+                        <td class="font-medium text-[12px]">${escapeHtml(po.poNo)}</td>
+                        <td><span class="status-badge status-${po.status==='입고완료'?'송장완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                        <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
+                        <td class="text-warm-400 text-[12px]">${ds}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table></div>`
+          }
+        </div>
+      `;
+    } catch (e) {
+      document.querySelector('#vendor-detail-modal .overlay-content').innerHTML = '<p class="py-12 text-center text-warm-400">거래처 정보를 불러올 수 없습니다.</p>';
     }
   }
 

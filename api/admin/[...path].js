@@ -45,36 +45,71 @@ async function handleStats(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+  const thisYear = now.getFullYear(), thisMonth = now.getMonth(), thisDate = now.getDate();
 
-  const [ordersRes, todayRes] = await Promise.all([
-    supabaseAdmin.from('orders').select('status, total'),
-    supabaseAdmin.from('orders').select('id, total').gte('created_at', todayStart).lt('created_at', todayEnd),
+  const [ordersRes, itemsRes, membersRes] = await Promise.all([
+    supabaseAdmin.from('orders').select('status, total, created_at'),
+    supabaseAdmin.from('order_items').select('name, qty, subtotal'),
+    supabaseAdmin.from('users').select('id', { count: 'exact', head: true }),
   ]);
 
   if (ordersRes.error) return fail(res, ordersRes.error.message, 500);
 
   const allOrders = ordersRes.data || [];
-  const todayOrders = todayRes.data || [];
+  const statusCounts = {}, statusTotals = {};
+  let totalRevenue = 0, todayOrders = 0, todayRevenue = 0;
+  let monthOrders = 0, monthRevenue = 0, yearOrders = 0, yearRevenue = 0;
 
-  const statusCounts = {};
-  const statusTotals = {};
-  let totalRevenue = 0;
+  // Prep daily buckets (14 days)
+  const dailySales = {};
+  for (let i = 13; i >= 0; i--) {
+    const dd = new Date(thisYear, thisMonth, thisDate - i);
+    dailySales[`${String(dd.getMonth()+1).padStart(2,'0')}/${String(dd.getDate()).padStart(2,'0')}`] = { orders: 0, revenue: 0 };
+  }
+  // Prep monthly buckets (12 months)
+  const monthlySales = {};
+  for (let i = 11; i >= 0; i--) {
+    const dd = new Date(thisYear, thisMonth - i, 1);
+    monthlySales[`${dd.getFullYear()}.${String(dd.getMonth()+1).padStart(2,'0')}`] = { orders: 0, revenue: 0 };
+  }
+  const yearlySales = {};
 
+  // Single pass
   allOrders.forEach(o => {
     statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
     statusTotals[o.status] = (statusTotals[o.status] || 0) + o.total;
     totalRevenue += o.total;
+    const d = new Date(o.created_at);
+    const y = d.getFullYear(), m = d.getMonth(), dt = d.getDate();
+    if (y === thisYear) { yearOrders++; yearRevenue += o.total; if (m === thisMonth) { monthOrders++; monthRevenue += o.total; if (dt === thisDate) { todayOrders++; todayRevenue += o.total; } } }
+    const dayKey = `${String(m+1).padStart(2,'0')}/${String(dt).padStart(2,'0')}`;
+    if (dailySales[dayKey]) { dailySales[dayKey].orders++; dailySales[dayKey].revenue += o.total; }
+    const mKey = `${y}.${String(m+1).padStart(2,'0')}`;
+    if (monthlySales[mKey]) { monthlySales[mKey].orders++; monthlySales[mKey].revenue += o.total; }
+    const yKey = `${y}`;
+    if (!yearlySales[yKey]) yearlySales[yKey] = { orders: 0, revenue: 0 };
+    yearlySales[yKey].orders++; yearlySales[yKey].revenue += o.total;
   });
 
+  // Top products
+  const productAgg = {};
+  (itemsRes.data || []).forEach(item => {
+    if (!productAgg[item.name]) productAgg[item.name] = { qty: 0, revenue: 0 };
+    productAgg[item.name].qty += item.qty;
+    productAgg[item.name].revenue += item.subtotal;
+  });
+  const topProducts = Object.entries(productAgg)
+    .map(([name, d]) => ({ name, ...d }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
   return ok(res, {
-    totalOrders: allOrders.length,
-    totalRevenue,
-    todayOrders: todayOrders.length,
-    todayRevenue: todayOrders.reduce((s, o) => s + o.total, 0),
-    statusCounts,
-    statusTotals,
+    totalOrders: allOrders.length, totalRevenue,
+    todayOrders, todayRevenue, monthOrders, monthRevenue, yearOrders, yearRevenue,
+    statusCounts, statusTotals,
+    dailySales, monthlySales, yearlySales,
+    topProducts,
+    totalMembers: membersRes.count || 0,
   });
 }
 
@@ -475,10 +510,19 @@ async function handleMemberDetail(req, res, id) {
 // ============================================================
 async function handleVendors(req, res) {
   if (req.method === 'GET') {
-    const { data: vendors, error } = await supabaseAdmin
+    const { search, isActive } = req.query || {};
+
+    let query = supabaseAdmin
       .from('vendors')
       .select('*')
       .order('id', { ascending: false });
+
+    if (isActive === 'true') query = query.eq('is_active', true);
+    else if (isActive === 'false') query = query.eq('is_active', false);
+
+    if (search) query = query.or(`name.ilike.%${search}%,contact.ilike.%${search}%,phone.ilike.%${search}%`);
+
+    const { data: vendors, error } = await query;
     if (error) return fail(res, error.message, 500);
 
     // 거래처별 상품 수 집계
@@ -513,6 +557,42 @@ async function handleVendors(req, res) {
 }
 
 async function handleVendorDetail(req, res, id) {
+  if (req.method === 'GET') {
+    const { data: vendor, error } = await supabaseAdmin.from('vendors').select('*').eq('id', id).single();
+    if (error || !vendor) return fail(res, '거래처를 찾을 수 없습니다', 404);
+
+    // 연결된 상품 목록
+    const { data: products } = await supabaseAdmin
+      .from('products')
+      .select('id, name, price, cost_price, product_images(image_url, sort_order)')
+      .eq('vendor_id', id)
+      .order('id', { ascending: false });
+
+    // 발주 내역
+    const { data: purchaseOrders } = await supabaseAdmin
+      .from('purchase_orders')
+      .select('id, po_no, status, total_amount, ordered_at, created_at')
+      .eq('vendor_id', id)
+      .order('id', { ascending: false })
+      .limit(20);
+
+    return ok(res, {
+      vendor: {
+        id: vendor.id, name: vendor.name, contact: vendor.contact, phone: vendor.phone,
+        email: vendor.email, address: vendor.address, bankInfo: vendor.bank_info,
+        memo: vendor.memo, isActive: vendor.is_active, createdAt: vendor.created_at,
+      },
+      products: (products || []).map(p => ({
+        id: p.id, name: p.name, price: p.price, costPrice: p.cost_price || 0,
+        image: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order)[0]?.image_url || '',
+      })),
+      purchaseOrders: (purchaseOrders || []).map(po => ({
+        id: po.id, poNo: po.po_no, status: po.status,
+        totalAmount: po.total_amount, orderedAt: po.ordered_at, createdAt: po.created_at,
+      })),
+    });
+  }
+
   if (req.method === 'PATCH') {
     const { name, contact, phone, email, address, bankInfo, memo, isActive } = req.body;
     const update = {};
