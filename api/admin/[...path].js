@@ -803,10 +803,9 @@ async function handlePurchaseOrderDetail(req, res, id) {
 async function handleSales(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { type = 'daily', from, to } = req.query || {};
+  const { type = 'daily', from, to, search } = req.query || {};
 
   let query = supabaseAdmin.from('orders').select('id, total, status, created_at');
-  // 취소 제외
   query = query.neq('status', '취소');
   if (from) query = query.gte('created_at', from + 'T00:00:00');
   if (to) query = query.lte('created_at', to + 'T23:59:59');
@@ -817,7 +816,26 @@ async function handleSales(req, res) {
   const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
   const orderCount = orders.length;
   const avgOrder = orderCount > 0 ? Math.round(totalRevenue / orderCount) : 0;
-  const summary = { totalRevenue, orderCount, avgOrder };
+
+  // 이전 기간 비교 (from/to 모두 설정 시)
+  let prevRevenue = null, prevOrderCount = null;
+  if (from && to) {
+    const fromDate = new Date(from + 'T00:00:00');
+    const toDate = new Date(to + 'T23:59:59');
+    const duration = toDate - fromDate;
+    const prevToDate = new Date(fromDate.getTime() - 1);
+    const prevFromDate = new Date(prevToDate.getTime() - duration);
+    const prevFromStr = prevFromDate.toISOString().split('T')[0];
+    const prevToStr = prevToDate.toISOString().split('T')[0];
+    const { data: prevOrders } = await supabaseAdmin.from('orders')
+      .select('total').neq('status', '취소')
+      .gte('created_at', prevFromStr + 'T00:00:00')
+      .lte('created_at', prevToStr + 'T23:59:59');
+    prevRevenue = (prevOrders || []).reduce((s, o) => s + o.total, 0);
+    prevOrderCount = (prevOrders || []).length;
+  }
+
+  const summary = { totalRevenue, orderCount, avgOrder, prevRevenue, prevOrderCount };
 
   let rows = [];
 
@@ -855,9 +873,35 @@ async function handleSales(req, res) {
       grouped[i.name].revenue += i.subtotal;
     });
     rows = Object.entries(grouped).sort((a, b) => b[1].revenue - a[1].revenue).map(([productName, v]) => ({ productName, ...v }));
+    if (search) {
+      const s = search.toLowerCase();
+      rows = rows.filter(r => r.productName.toLowerCase().includes(s));
+    }
   } else if (type === 'broadcast') {
-    const { data: broadcasts } = await supabaseAdmin.from('broadcasts').select('id, title, date_text').order('id', { ascending: false });
-    rows = (broadcasts || []).map(b => ({ broadcastTitle: b.title, orderCount: 0, revenue: 0 }));
+    const { data: broadcasts } = await supabaseAdmin
+      .from('broadcasts')
+      .select('id, title, date_text, broadcast_products(product_id)')
+      .order('id', { ascending: false });
+    // 방송별 매출 계산: broadcast_products 상품과 order_items 매칭
+    const orderIds = orders.map(o => o.id);
+    let allItems = [];
+    if (orderIds.length > 0) {
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
+      allItems = itemsData || [];
+    }
+    rows = (broadcasts || []).map(b => {
+      const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
+      const matchedItems = allItems.filter(i => bProductIds.includes(i.product_id));
+      return {
+        broadcastTitle: b.title,
+        orderCount: matchedItems.length,
+        revenue: matchedItems.reduce((s, i) => s + i.subtotal, 0),
+      };
+    });
+    if (search) {
+      const s = search.toLowerCase();
+      rows = rows.filter(r => r.broadcastTitle.toLowerCase().includes(s));
+    }
   }
 
   return ok(res, { summary, rows });

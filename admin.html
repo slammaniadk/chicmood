@@ -1834,6 +1834,37 @@
   let salesTab = 'daily';
   let salesFrom = '';
   let salesTo = '';
+  let salesSearch = '';
+  let _salesRows = []; // 엑셀 다운로드용
+
+  function salesChangeHtml(current, prev) {
+    if (prev === null || prev === undefined) return '';
+    if (prev === 0 && current === 0) return '';
+    if (prev === 0) return '<span class="text-[10px] text-green-600 ml-1">NEW</span>';
+    const pct = Math.round(((current - prev) / prev) * 100);
+    if (pct > 0) return `<span class="text-[10px] text-green-600 ml-1">\u25B2${pct}%</span>`;
+    if (pct < 0) return `<span class="text-[10px] text-red-500 ml-1">\u25BC${Math.abs(pct)}%</span>`;
+    return '<span class="text-[10px] text-warm-400 ml-1">0%</span>';
+  }
+
+  function downloadSalesCsv() {
+    const table = document.querySelector('#page-content table');
+    if (!table) return;
+    const csvRows = [];
+    table.querySelectorAll('tr').forEach(tr => {
+      const cells = [];
+      tr.querySelectorAll('th, td').forEach(td => cells.push('"' + td.innerText.replace(/"/g, '""') + '"'));
+      csvRows.push(cells.join(','));
+    });
+    const csv = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const tabLabels = { daily:'일별', monthly:'월별', product:'상품별', broadcast:'방송별' };
+    link.download = `매출_${tabLabels[salesTab]}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
 
   async function renderSales(el) {
     showSpinner(el);
@@ -1841,38 +1872,52 @@
       const params = new URLSearchParams({ type: salesTab });
       if (salesFrom) params.set('from', salesFrom);
       if (salesTo) params.set('to', salesTo);
+      if (salesSearch && (salesTab === 'product' || salesTab === 'broadcast')) params.set('search', salesSearch);
       const data = await api('/admin/sales?' + params.toString());
+      _salesRows = data.rows || [];
 
       const tabs = ['daily','monthly','product','broadcast'];
       const tabLabels = { daily:'일별', monthly:'월별', product:'상품별', broadcast:'방송별' };
+      const s = data.summary || {};
+      const showSearch = salesTab === 'product' || salesTab === 'broadcast';
 
       el.innerHTML = `
         <div class="fade-in">
           <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">매출관리</h2>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
-              ${tabs.map(t => `<button class="sub-tab ${salesTab===t?'active':''}" onclick="salesTab='${t}';renderSales(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
+              ${tabs.map(t => `<button class="sub-tab ${salesTab===t?'active':''}" onclick="salesTab='${t}';salesSearch='';renderSales(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
             </div>
             <input type="date" class="input-field" style="width:auto;" value="${salesFrom}" onchange="salesFrom=this.value;renderSales(document.getElementById('page-content'))" />
             <span class="text-warm-400">~</span>
             <input type="date" class="input-field" style="width:auto;" value="${salesTo}" onchange="salesTo=this.value;renderSales(document.getElementById('page-content'))" />
+            <button onclick="downloadSalesCsv()" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              CSV
+            </button>
           </div>
+          ${showSearch ? `
+          <div class="mb-4">
+            <input type="text" class="input-field" placeholder="${salesTab==='product'?'상품명':'방송명'} 검색..." value="${escapeHtml(salesSearch)}" onkeydown="if(event.key==='Enter'){salesSearch=this.value;renderSales(document.getElementById('page-content'))}" />
+          </div>` : ''}
           <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="card text-center">
+            <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">총 매출</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(data.summary?.totalRevenue||0)}</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(s.totalRevenue||0)}</p>
+              ${salesChangeHtml(s.totalRevenue, s.prevRevenue)}
             </div>
-            <div class="card text-center">
+            <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">주문수</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${data.summary?.orderCount||0}건</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${s.orderCount||0}건</p>
+              ${salesChangeHtml(s.orderCount, s.prevOrderCount)}
             </div>
-            <div class="card text-center">
+            <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">평균 주문액</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(data.summary?.avgOrder||0)}</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(s.avgOrder||0)}</p>
             </div>
           </div>
           <div class="card overflow-x-auto">
-            ${renderSalesTable(salesTab, data.rows||[])}
+            ${renderSalesTable(salesTab, _salesRows, s.totalRevenue)}
           </div>
         </div>
       `;
@@ -1881,7 +1926,7 @@
     }
   }
 
-  function renderSalesTable(type, rows) {
+  function renderSalesTable(type, rows, totalRevenue) {
     if (type === 'daily' || type === 'monthly') {
       return `<table><thead><tr><th>기간</th><th>주문수</th><th>매출</th></tr></thead><tbody>
         ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
@@ -1889,15 +1934,21 @@
       </tbody></table>`;
     }
     if (type === 'product') {
-      return `<table><thead><tr><th>상품명</th><th>판매수량</th><th>매출</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      return `<table><thead><tr><th>상품명</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => {
+          const pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100).toFixed(1) : '0.0';
+          return `<tr><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
+        }).join('')}
       </tbody></table>`;
     }
     if (type === 'broadcast') {
-      return `<table><thead><tr><th>방송</th><th>주문수</th><th>매출</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.broadcastTitle)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      return `<table><thead><tr><th>방송</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => {
+          const pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100).toFixed(1) : '0.0';
+          return `<tr><td class="font-semibold">${escapeHtml(r.broadcastTitle)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
+        }).join('')}
       </tbody></table>`;
     }
     return '';
