@@ -1609,12 +1609,14 @@
   // ============================================================
   let poFilter = 'all';
   let poPage = 1;
+  let poSearch = '';
 
   async function renderPurchaseOrders(el) {
     showSpinner(el);
     try {
       const params = new URLSearchParams({ page: poPage, limit: 20 });
       if (poFilter !== 'all') params.set('status', poFilter);
+      if (poSearch) params.set('search', poSearch);
       const data = await api('/admin/purchase-orders?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
       const statuses = ['all','발주대기','발주완료','입고중','입고완료','취소'];
@@ -1626,23 +1628,27 @@
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">발주관리</h2>
             <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
           </div>
-          <div class="flex flex-wrap gap-2 mb-4">
-            ${statuses.map(s => `<button class="filter-tab ${poFilter===s?'active':''}" onclick="poFilter='${s}';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex flex-wrap gap-2">
+              ${statuses.map(s => `<button class="filter-tab ${poFilter===s?'active':''}" onclick="poFilter='${s}';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+            </div>
+            <input type="text" class="input-field" style="max-width:260px;" placeholder="발주번호, 거래처명 검색..." value="${escapeHtml(poSearch)}" onkeydown="if(event.key==='Enter'){poSearch=this.value;poPage=1;renderPurchaseOrders(document.getElementById('page-content'))}" />
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>발주번호</th><th>거래처</th><th>상태</th><th>금액</th><th>발주일</th><th>관리</th></tr></thead>
+              <thead><tr><th>발주번호</th><th>거래처</th><th>상태</th><th>금액</th><th>메모</th><th>발주일</th><th>관리</th></tr></thead>
               <tbody>
-                ${(data.purchaseOrders||[]).length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">발주서가 없습니다</td></tr>' : ''}
+                ${(data.purchaseOrders||[]).length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">발주서가 없습니다</td></tr>' : ''}
                 ${(data.purchaseOrders||[]).map(po => {
                   const d = po.orderedAt ? new Date(po.orderedAt) : (po.createdAt ? new Date(po.createdAt) : null);
                   const ds = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '-';
                   return `
                     <tr>
-                      <td class="font-semibold text-warm-800 text-[12px]">${escapeHtml(po.poNo)}</td>
+                      <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openPODetailModal(${po.id})">${escapeHtml(po.poNo)}</td>
                       <td>${escapeHtml(po.vendorName||'')}</td>
                       <td><span class="status-badge status-${po.status==='입고완료'?'송장완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
+                      <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
                       <td><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button></td>
                     </tr>

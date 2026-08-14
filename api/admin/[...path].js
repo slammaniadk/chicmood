@@ -625,7 +625,7 @@ async function handleVendorDetail(req, res, id) {
 // ============================================================
 async function handlePurchaseOrders(req, res) {
   if (req.method === 'GET') {
-    const { status, page = '1', limit = '20' } = req.query || {};
+    const { status, search, page = '1', limit = '20' } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -637,11 +637,27 @@ async function handlePurchaseOrders(req, res) {
       .range(offset, offset + limitNum - 1);
 
     if (status && status !== 'all') query = query.eq('status', status);
+    if (search) query = query.ilike('po_no', `%${search}%`);
 
     const { data, error, count } = await query;
     if (error) return fail(res, error.message, 500);
 
-    const result = (data || []).map(po => ({
+    // search가 거래처명일 수 있으므로 클라이언트에서 필터 (po_no로 못찾으면 vendor name 매칭)
+    let filtered = data || [];
+    if (search && filtered.length === 0) {
+      // po_no 매칭 실패 시 vendor name으로 재검색
+      const retryQuery = supabaseAdmin
+        .from('purchase_orders')
+        .select('*, vendors!inner(name)', { count: 'exact' })
+        .ilike('vendors.name', `%${search}%`)
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+      if (status && status !== 'all') retryQuery.eq('status', status);
+      const retry = await retryQuery;
+      if (!retry.error) { filtered = retry.data || []; }
+    }
+
+    const result = filtered.map(po => ({
       id: po.id, poNo: po.po_no, vendorId: po.vendor_id,
       vendorName: po.vendors ? po.vendors.name : '', status: po.status,
       totalAmount: po.total_amount, memo: po.memo,

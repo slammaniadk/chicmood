@@ -35,7 +35,7 @@ module.exports = async function handler(req, res) {
 
   if (error) return fail(res, error.message, 500);
 
-  const token = signToken({ id: user.id, name: user.name, phone: user.phone });
+  const token = signToken({ id: user.id, name: user.name, phone: user.phone, role: 'user' });
 
   return ok(res, {
     token,

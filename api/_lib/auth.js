@@ -20,4 +20,13 @@ function getUserFromRequest(req) {
   return verifyToken(auth.slice(7));
 }
 
-module.exports = { signToken, verifyToken, getUserFromRequest };
+function requireAdmin(req, res, fail) {
+  const user = getUserFromRequest(req);
+  if (!user || user.role !== 'admin') {
+    fail(res, '관리자 권한이 필요합니다', 403);
+    return null;
+  }
+  return user;
+}
+
+module.exports = { signToken, verifyToken, getUserFromRequest, requireAdmin };

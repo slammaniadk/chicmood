@@ -1,6 +1,11 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/admin/:path*", "destination": "/api/admin/[...path]" },
+    { "source": "/api/broadcasts/:id", "destination": "/api/broadcasts/[id]" },
+    { "source": "/api/products/:id", "destination": "/api/products/[id]" },
+    { "source": "/api/orders/lookup", "destination": "/api/orders/lookup" },
+    { "source": "/api/orders/:orderNo", "destination": "/api/orders/[orderNo]" },
+    { "source": "/admin", "destination": "/admin.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -8,7 +13,7 @@
       "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PATCH,OPTIONS" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PATCH,DELETE,OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
       ]
     }
