@@ -499,27 +499,35 @@ async function handleMembers(req, res) {
   const { data: users, error, count } = await query;
   if (error) return fail(res, error.message, 500);
 
-  // 각 회원의 주문 수와 총 구매액 집계
+  // 각 회원의 주문 통계 집계
   const userIds = users.map(u => u.id);
   let orderStats = {};
   if (userIds.length > 0) {
-    const { data: orders } = await supabaseAdmin.from('orders').select('user_id, total').in('user_id', userIds);
+    const { data: orders } = await supabaseAdmin.from('orders').select('user_id, total, created_at').in('user_id', userIds);
     (orders || []).forEach(o => {
-      if (!orderStats[o.user_id]) orderStats[o.user_id] = { count: 0, total: 0 };
+      if (!orderStats[o.user_id]) orderStats[o.user_id] = { count: 0, total: 0, lastOrderAt: null };
       orderStats[o.user_id].count++;
       orderStats[o.user_id].total += o.total;
+      if (!orderStats[o.user_id].lastOrderAt || o.created_at > orderStats[o.user_id].lastOrderAt) {
+        orderStats[o.user_id].lastOrderAt = o.created_at;
+      }
     });
   }
 
-  const members = users.map(u => ({
-    id: u.id,
-    name: u.name,
-    phone: u.phone,
-    role: u.role,
-    orderCount: (orderStats[u.id] || {}).count || 0,
-    totalSpent: (orderStats[u.id] || {}).total || 0,
-    createdAt: u.created_at,
-  }));
+  const members = users.map(u => {
+    const stats = orderStats[u.id] || { count: 0, total: 0, lastOrderAt: null };
+    return {
+      id: u.id,
+      name: u.name,
+      phone: u.phone,
+      role: u.role,
+      orderCount: stats.count,
+      totalSpent: stats.total,
+      avgOrder: stats.count > 0 ? Math.round(stats.total / stats.count) : 0,
+      lastOrderAt: stats.lastOrderAt,
+      createdAt: u.created_at,
+    };
+  });
 
   return ok(res, { members, total: count, page: pageNum, limit: limitNum });
 }

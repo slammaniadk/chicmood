@@ -869,20 +869,23 @@
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>이름</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>가입일</th><th>상세</th></tr></thead>
+              <thead><tr><th>이름</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>평균 주문가</th><th>최근 주문</th><th>가입일</th></tr></thead>
               <tbody>
-                ${data.members.length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
+                ${data.members.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
                 ${data.members.map(m => {
                   const d = new Date(m.createdAt);
                   const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+                  const lastOrder = m.lastOrderAt ? new Date(m.lastOrderAt) : null;
+                  const lastOrderStr = lastOrder ? `${lastOrder.getMonth()+1}/${lastOrder.getDate()}` : '-';
                   return `
                     <tr>
-                      <td class="font-semibold">${escapeHtml(m.name)}</td>
+                      <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openMemberModal('${m.id}')">${escapeHtml(m.name)}</td>
                       <td class="text-[12px]">${escapeHtml(m.phone)}</td>
                       <td>${m.orderCount}건</td>
                       <td class="font-semibold">${fmt(m.totalSpent)}</td>
+                      <td class="text-[12px]">${m.avgOrder > 0 ? fmt(m.avgOrder) : '-'}</td>
+                      <td class="text-warm-400 text-[12px]">${lastOrderStr}</td>
                       <td class="text-warm-400 text-[12px]">${dateStr}</td>
-                      <td><button class="btn-primary btn-sm" onclick="openMemberModal('${m.id}')">상세</button></td>
                     </tr>
                   `;
                 }).join('')}
@@ -918,13 +921,27 @@
             <h3 class="font-serif text-lg font-semibold text-warm-800 italic">회원 상세</h3>
             <button onclick="document.getElementById('member-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
           </div>
-          <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="grid grid-cols-2 gap-4 mb-4">
             <div><span class="text-[11px] text-warm-400 block">이름</span><span class="font-semibold">${escapeHtml(m.name)}</span></div>
             <div><span class="text-[11px] text-warm-400 block">연락처</span><span>${escapeHtml(m.phone)}</span></div>
             <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
-            <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role || 'user'}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role === 'admin' ? '관리자' : '일반회원'}</span></div>
           </div>
-          <h4 class="font-semibold text-warm-800 mb-3">주문 내역 (${m.orders.length}건)</h4>
+          <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 주문</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${m.orders.length}건</p>
+            </div>
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 구매액</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${fmt(m.orders.reduce((s,o)=>s+o.total,0))}</p>
+            </div>
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">평균 주문가</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${m.orders.length>0 ? fmt(Math.round(m.orders.reduce((s,o)=>s+o.total,0)/m.orders.length)) : '-'}</p>
+            </div>
+          </div>
+          <h4 class="font-semibold text-warm-800 mb-3 text-[13px]">주문 내역</h4>
           <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto;">
             <table>
               <thead><tr><th>주문번호</th><th>금액</th><th>상태</th><th>일시</th></tr></thead>
