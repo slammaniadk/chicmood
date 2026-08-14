@@ -1916,7 +1916,6 @@
               <button class="filter-tab ${invTab==='log'?'active':''}" onclick="invTab='log';renderInventory(document.getElementById('page-content'))">입출고 이력</button>
             </div>
             <input type="text" class="input-field" style="max-width:260px;" placeholder="상품명 검색..." value="${escapeHtml(invSearch)}" onkeydown="if(event.key==='Enter'){invSearch=this.value;invPage=1;renderInventory(document.getElementById('page-content'))}" />
-            ${lowStockCount > 0 ? `<span class="text-[12px] text-red-600 font-semibold">부족 ${lowStockCount}건</span>` : ''}
           </div>
           <div class="card overflow-x-auto">
             <table>
@@ -1928,7 +1927,7 @@
                     <td class="font-semibold">${escapeHtml(inv.productName)}</td>
                     <td>${escapeHtml(inv.colorName||'-')}</td>
                     <td>${escapeHtml(inv.sizeName||'-')}</td>
-                    <td class="${inv.stockQty<=5?'text-red-600 font-bold':'font-semibold'}">${inv.stockQty}${inv.stockQty<=5?' <span class="text-[10px]">부족</span>':''}</td>
+                    <td class="font-semibold">${inv.stockQty}</td>
                     <td class="whitespace-nowrap">
                       <button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button>
                       <button class="btn-outline btn-sm" onclick="openInventoryHistory(${inv.id},'${escapeHtml(inv.productName)}')">이력</button>
