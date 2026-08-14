@@ -353,11 +353,16 @@ async function handleProductDetail(req, res, id) {
 // ============================================================
 async function handleBroadcasts(req, res) {
   if (req.method === 'GET') {
-    const { data: broadcasts, error } = await supabaseAdmin
+    const { search, status: filterStatus } = req.query || {};
+    let query = supabaseAdmin
       .from('broadcasts')
       .select('*, broadcast_products(product_id)')
       .order('id', { ascending: false });
 
+    if (filterStatus && filterStatus !== 'all') query = query.eq('status', filterStatus);
+    if (search) query = query.ilike('title', `%${search}%`);
+
+    const { data: broadcasts, error } = await query;
     if (error) return fail(res, error.message, 500);
 
     const result = broadcasts.map(b => ({
@@ -399,6 +404,38 @@ async function handleBroadcasts(req, res) {
 //  BROADCAST DETAIL (PATCH / DELETE)
 // ============================================================
 async function handleBroadcastDetail(req, res, id) {
+  if (req.method === 'GET') {
+    const { data: b, error } = await supabaseAdmin
+      .from('broadcasts')
+      .select('*, broadcast_products(product_id, products(id, name, price))')
+      .eq('id', id).single();
+    if (error || !b) return fail(res, '방송을 찾을 수 없습니다', 404);
+
+    // 방송 연결 상품의 매출 계산
+    const productIds = (b.broadcast_products || []).map(bp => bp.product_id);
+    let salesData = { orderCount: 0, revenue: 0, qty: 0 };
+    if (productIds.length > 0) {
+      const { data: allOrders } = await supabaseAdmin.from('orders').select('id').neq('status', '취소');
+      const orderIds = (allOrders || []).map(o => o.id);
+      if (orderIds.length > 0) {
+        const { data: items } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds).in('product_id', productIds);
+        (items || []).forEach(i => { salesData.orderCount++; salesData.revenue += i.subtotal; salesData.qty += i.qty; });
+      }
+    }
+
+    const products = (b.broadcast_products || []).map(bp => ({
+      id: bp.products?.id, name: bp.products?.name || '', price: bp.products?.price || 0,
+    }));
+
+    return ok(res, {
+      broadcast: {
+        id: b.id, title: b.title, date: b.date_text, status: b.status,
+        description: b.description, createdAt: b.created_at,
+        products, sales: salesData,
+      }
+    });
+  }
+
   if (req.method === 'PATCH') {
     const { title, date, scheduledAt, status, description, productIds } = req.body;
 

@@ -1231,15 +1231,23 @@
   //  BROADCASTS
   // ============================================================
   let allProducts = null;
+  let bcSearch = '';
+  let bcFilter = 'all';
 
   async function renderBroadcasts(el) {
     showSpinner(el);
     try {
+      const params = new URLSearchParams();
+      if (bcSearch) params.set('search', bcSearch);
+      if (bcFilter !== 'all') params.set('status', bcFilter);
       const [broadcasts, products] = await Promise.all([
-        api('/admin/broadcasts'),
+        api('/admin/broadcasts?' + params.toString()),
         allProducts || api('/admin/products'),
       ]);
       allProducts = products;
+
+      const statuses = ['all','live','upcoming','ended'];
+      const statusTabLabels = { all:'전체', live:'LIVE', upcoming:'예정', ended:'종료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -1247,28 +1255,33 @@
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">방송관리</h2>
             <button class="btn-primary" onclick="openBroadcastModal()">+ 방송 등록</button>
           </div>
-
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-1">
+              ${statuses.map(s => `<button class="filter-tab ${bcFilter===s?'active':''}" onclick="bcFilter='${s}';renderBroadcasts(document.getElementById('page-content'))">${statusTabLabels[s]}</button>`).join('')}
+            </div>
+            <input type="text" class="input-field" style="width:200px;" placeholder="방송 제목 검색" value="${escapeHtml(bcSearch)}" onkeydown="if(event.key==='Enter'){bcSearch=this.value;renderBroadcasts(document.getElementById('page-content'))}" />
+          </div>
           <div class="card overflow-x-auto">
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>제목</th><th>날짜</th><th>상태</th><th>상품수</th><th>관리</th>
+                  <th>제목</th><th>날짜</th><th>상태</th><th>상품수</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${broadcasts.length === 0 ? '<tr><td colspan="6" class="text-center text-warm-400 py-12">등록된 방송이 없습니다</td></tr>' : ''}
+                ${broadcasts.length === 0 ? '<tr><td colspan="5" class="text-center text-warm-400 py-12">등록된 방송이 없습니다</td></tr>' : ''}
                 ${broadcasts.map(b => {
                   const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500', upcoming: 'bg-blue-100 text-blue-700' };
                   const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
                   return `
                     <tr>
-                      <td class="text-warm-400">${b.id}</td>
-                      <td class="font-semibold">${escapeHtml(b.title)}</td>
+                      <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openBroadcastDetailModal(${b.id})">${escapeHtml(b.title)}</td>
                       <td class="text-warm-500 text-[12px]">${escapeHtml(b.date)}</td>
                       <td><span class="px-3 py-1 rounded-full text-[11px] font-bold ${statusColors[b.status] || 'bg-warm-100 text-warm-500'}">${statusLabels[b.status] || b.status}</span></td>
                       <td>${b.productIds.length}개</td>
                       <td class="whitespace-nowrap">
                         <button class="btn-primary btn-sm" onclick='openBroadcastModal(${JSON.stringify(b).replace(/'/g,"&#39;")})'>수정</button>
+                        <button class="btn-outline btn-sm" onclick='copyBroadcast(${JSON.stringify(b).replace(/'/g,"&#39;")})'>복사</button>
                         <button class="btn-danger" onclick="deleteBroadcast(${b.id})">삭제</button>
                       </td>
                     </tr>
@@ -1282,6 +1295,71 @@
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">방송 목록을 불러오는 중 오류가 발생했습니다.</p>';
     }
+  }
+
+  async function openBroadcastDetailModal(bcId) {
+    try {
+      const data = await api('/admin/broadcasts/' + bcId);
+      const b = data.broadcast;
+      const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500', upcoming: 'bg-blue-100 text-blue-700' };
+      const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'bc-detail-modal';
+      modal.innerHTML = `
+        <div class="overlay-content p-6" style="max-width:560px;">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(b.title)}</h3>
+            <button onclick="document.getElementById('bc-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="flex items-center gap-3 mb-4">
+            <span class="px-3 py-1 rounded-full text-[11px] font-bold ${statusColors[b.status] || 'bg-warm-100 text-warm-500'}">${statusLabels[b.status] || b.status}</span>
+            <span class="text-warm-500 text-[13px]">${escapeHtml(b.date||'')}</span>
+          </div>
+          ${b.description ? `<p class="text-[13px] text-warm-600 mb-4">${escapeHtml(b.description)}</p>` : ''}
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">판매수량</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${b.sales.qty}개</p>
+            </div>
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">매출</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${fmt(b.sales.revenue)}</p>
+            </div>
+            <div class="card text-center py-3">
+              <p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">상품수</p>
+              <p class="font-sans text-lg font-bold text-warm-800">${b.products.length}개</p>
+            </div>
+          </div>
+          ${b.products.length > 0 ? `
+          <div>
+            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">연결 상품</p>
+            <div class="border border-warm-200 rounded-lg overflow-hidden">
+              <table class="text-[13px]">
+                <thead><tr><th>상품명</th><th>판매가</th></tr></thead>
+                <tbody>
+                  ${b.products.map(p => `<tr><td>${escapeHtml(p.name)}</td><td class="font-semibold">${fmt(p.price)}</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>` : ''}
+        </div>
+      `;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
+  }
+
+  async function copyBroadcast(b) {
+    if (!confirm(`"${b.title}" 방송을 복사하시겠습니까?`)) return;
+    try {
+      await api('/admin/broadcasts', {
+        method: 'POST',
+        body: JSON.stringify({ title: b.title + ' (복사)', date: b.date, status: 'upcoming', description: b.description, productIds: b.productIds })
+      });
+      showToast('방송이 복사되었습니다');
+      renderBroadcasts(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '복사에 실패했습니다'); }
   }
 
   function openBroadcastModal(broadcast) {
