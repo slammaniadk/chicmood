@@ -1023,7 +1023,16 @@ async function handleInventoryLog(req, res) {
 // ============================================================
 async function handleReturns(req, res) {
   if (req.method === 'GET') {
-    const { status, page = '1', limit = '20' } = req.query || {};
+    const { status, search, lookupOrder, page = '1', limit = '20' } = req.query || {};
+
+    // 주문번호로 주문+상품 조회 (접수 등록 시 사용)
+    if (lookupOrder) {
+      const { data: order } = await supabaseAdmin.from('orders').select('id, order_no, name, total, status').eq('order_no', lookupOrder).single();
+      if (!order) return fail(res, '해당 주문번호를 찾을 수 없습니다', 404);
+      const { data: items } = await supabaseAdmin.from('order_items').select('id, name, color, size, qty, price, subtotal').eq('order_id', order.id);
+      return ok(res, { order: { id: order.id, orderNo: order.order_no, name: order.name, total: order.total, status: order.status, items: items || [] } });
+    }
+
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -1035,29 +1044,48 @@ async function handleReturns(req, res) {
       .range(offset, offset + limitNum - 1);
 
     if (status && status !== 'all') query = query.eq('status', status);
+    if (search) {
+      query = query.or(`return_no.ilike.%${search}%`);
+    }
 
     const { data, error, count } = await query;
     if (error) return fail(res, error.message, 500);
 
-    const result = (data || []).map(r => ({
+    let result = (data || []).map(r => ({
       id: r.id, returnNo: r.return_no, orderId: r.order_id,
       orderNo: r.orders ? r.orders.order_no : '',
       type: r.type, status: r.status, reason: r.reason,
       refundAmount: r.refund_amount, memo: r.memo, createdAt: r.created_at,
     }));
+    // 주문번호 검색 (접수번호 검색 결과가 없을 때 주문번호로도 검색)
+    if (search && result.length === 0) {
+      let q2 = supabaseAdmin.from('returns')
+        .select('*, orders!inner(order_no)', { count: 'exact' })
+        .ilike('orders.order_no', `%${search}%`)
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+      if (status && status !== 'all') q2 = q2.eq('status', status);
+      const { data: d2, count: c2 } = await q2;
+      result = (d2 || []).map(r => ({
+        id: r.id, returnNo: r.return_no, orderId: r.order_id,
+        orderNo: r.orders ? r.orders.order_no : '',
+        type: r.type, status: r.status, reason: r.reason,
+        refundAmount: r.refund_amount, memo: r.memo, createdAt: r.created_at,
+      }));
+      return ok(res, { returns: result, total: c2 || 0, page: pageNum, limit: limitNum });
+    }
+
     return ok(res, { returns: result, total: count, page: pageNum, limit: limitNum });
   }
 
   if (req.method === 'POST') {
-    const { orderNo, type, reason, refundAmount, memo } = req.body;
+    const { orderNo, type, reason, refundAmount, memo, items } = req.body;
     if (!orderNo) return fail(res, '주문번호를 입력해주세요');
     if (!reason) return fail(res, '사유를 입력해주세요');
 
-    // 주문 찾기
     const { data: order } = await supabaseAdmin.from('orders').select('id').eq('order_no', orderNo).single();
     if (!order) return fail(res, '해당 주문번호를 찾을 수 없습니다');
 
-    // 접수번호 생성
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
     const { count } = await supabaseAdmin.from('returns').select('id', { count: 'exact', head: true }).ilike('return_no', `RET-${dateStr}%`);
@@ -1067,6 +1095,17 @@ async function handleReturns(req, res) {
       .insert({ return_no: returnNo, order_id: order.id, type, status: '접수', reason, refund_amount: refundAmount || 0, memo: memo || '' })
       .select('id').single();
     if (error) return fail(res, error.message, 500);
+
+    // 반품 상품 저장
+    if (items && items.length > 0) {
+      const returnItems = items.map(i => ({
+        return_id: data.id, order_item_id: i.orderItemId || null,
+        product_id: i.productId || null, name: i.name,
+        color: i.color || '', size: i.size || '',
+        qty: i.qty, price: i.price || 0,
+      }));
+      await supabaseAdmin.from('return_items').insert(returnItems);
+    }
 
     return ok(res, { id: data.id, returnNo }, 201);
   }
@@ -1078,19 +1117,30 @@ async function handleReturnDetail(req, res, id) {
   if (req.method === 'GET') {
     const { data, error } = await supabaseAdmin
       .from('returns')
-      .select('*, orders(order_no), return_items(*)')
+      .select('*, orders(order_no, name, total, status), return_items(*)')
       .eq('id', id).single();
     if (error || !data) return fail(res, '접수를 찾을 수 없습니다', 404);
+
+    // 원래 주문의 상품 목록도 함께 반환
+    let orderItems = [];
+    if (data.order_id) {
+      const { data: oi } = await supabaseAdmin.from('order_items').select('id, name, color, size, qty, price, subtotal').eq('order_id', data.order_id);
+      orderItems = (oi || []).map(i => ({ id: i.id, name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price, subtotal: i.subtotal }));
+    }
 
     return ok(res, {
       returnData: {
         id: data.id, returnNo: data.return_no, orderId: data.order_id,
         orderNo: data.orders ? data.orders.order_no : '',
+        orderName: data.orders ? data.orders.name : '',
+        orderTotal: data.orders ? data.orders.total : 0,
+        orderStatus: data.orders ? data.orders.status : '',
         type: data.type, status: data.status, reason: data.reason,
         refundAmount: data.refund_amount, memo: data.memo, createdAt: data.created_at,
         items: (data.return_items || []).map(i => ({
           id: i.id, name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price,
         })),
+        orderItems,
       }
     });
   }

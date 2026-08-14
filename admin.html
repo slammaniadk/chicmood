@@ -2229,12 +2229,15 @@
   // ============================================================
   let retFilter = 'all';
   let retPage = 1;
+  let retSearch = '';
+  let _retOrderItems = []; // 접수 등록 시 조회된 주문 상품
 
   async function renderReturns(el) {
     showSpinner(el);
     try {
       const params = new URLSearchParams({ page: retPage, limit: 20 });
       if (retFilter !== 'all') params.set('status', retFilter);
+      if (retSearch) params.set('search', retSearch);
       const data = await api('/admin/returns?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
       const statuses = ['all','접수','처리중','회수중','완료','거부'];
@@ -2246,25 +2249,31 @@
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">반품/교환/취소</h2>
             <button class="btn-primary" onclick="openReturnModal()">+ 접수 등록</button>
           </div>
-          <div class="flex flex-wrap gap-2 mb-4">
-            ${statuses.map(s => `<button class="filter-tab ${retFilter===s?'active':''}" onclick="retFilter='${s}';retPage=1;renderReturns(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-1">
+              ${statuses.map(s => `<button class="filter-tab ${retFilter===s?'active':''}" onclick="retFilter='${s}';retPage=1;renderReturns(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+            </div>
+            <input type="text" class="input-field" style="width:200px;" placeholder="접수번호/주문번호 검색" value="${escapeHtml(retSearch)}" onkeydown="if(event.key==='Enter'){retSearch=this.value;retPage=1;renderReturns(document.getElementById('page-content'))}" />
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>접수번호</th><th>주문번호</th><th>유형</th><th>상태</th><th>환불액</th><th>사유</th><th>관리</th></tr></thead>
+              <thead><tr><th>접수번호</th><th>주문번호</th><th>유형</th><th>상태</th><th>환불액</th><th>사유</th><th>접수일</th></tr></thead>
               <tbody>
                 ${(data.returns||[]).length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-12">접수 내역이 없습니다</td></tr>':''}
-                ${(data.returns||[]).map(r => `
+                ${(data.returns||[]).map(r => {
+                  const d = new Date(r.createdAt);
+                  const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+                  return `
                   <tr>
-                    <td class="font-semibold text-warm-800 text-[12px]">${escapeHtml(r.returnNo)}</td>
+                    <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openReturnDetailModal(${r.id})">${escapeHtml(r.returnNo)}</td>
                     <td class="text-[12px]">${escapeHtml(r.orderNo||'')}</td>
                     <td><span class="status-badge ${r.type==='반품'?'status-확인요청':r.type==='교환'?'status-배송중':'status-취소'}">${r.type}</span></td>
                     <td><span class="status-badge ${r.status==='완료'?'status-송장완료':r.status==='거부'?'status-취소':'status-결제완료'}">${r.status}</span></td>
                     <td class="font-semibold">${fmt(r.refundAmount||0)}</td>
                     <td class="text-[12px] text-warm-500 max-w-[150px]">${escapeHtml(r.reason||'')}</td>
-                    <td><button class="btn-primary btn-sm" onclick="openReturnDetailModal(${r.id})">상세</button></td>
-                  </tr>
-                `).join('')}
+                    <td class="text-warm-400 text-[12px]">${dateStr}</td>
+                  </tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>
@@ -2282,7 +2291,39 @@
     }
   }
 
+  async function lookupReturnOrder() {
+    const orderNo = document.getElementById('ret-order-no').value.trim();
+    if (!orderNo) { showToast('주문번호를 입력해주세요'); return; }
+    try {
+      const data = await api('/admin/returns?lookupOrder=' + encodeURIComponent(orderNo));
+      _retOrderItems = data.order.items || [];
+      const container = document.getElementById('ret-order-items');
+      if (_retOrderItems.length === 0) {
+        container.innerHTML = '<p class="text-warm-400 text-[12px]">주문 상품이 없습니다</p>';
+        return;
+      }
+      container.innerHTML = `
+        <p class="text-[11px] text-warm-500 mb-2">주문자: ${escapeHtml(data.order.name)} / ${fmt(data.order.total)}</p>
+        ${_retOrderItems.map((item, idx) => `
+          <label class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-warm-50 cursor-pointer">
+            <input type="checkbox" class="ret-item-check" data-idx="${idx}" checked />
+            <span class="text-[13px]">${escapeHtml(item.name)}</span>
+            <span class="text-[11px] text-warm-400">${item.color||''}/${item.size||''} x${item.qty}</span>
+            <span class="text-[12px] font-semibold ml-auto">${fmt(item.subtotal)}</span>
+          </label>
+        `).join('')}
+      `;
+      // 환불금액 자동 계산
+      const total = _retOrderItems.reduce((s, i) => s + i.subtotal, 0);
+      document.getElementById('ret-refund').value = total;
+    } catch (e) {
+      document.getElementById('ret-order-items').innerHTML = `<p class="text-red-500 text-[12px]">${e.message || '주문을 찾을 수 없습니다'}</p>`;
+      _retOrderItems = [];
+    }
+  }
+
   async function openReturnModal() {
+    _retOrderItems = [];
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'return-modal';
@@ -2295,7 +2336,13 @@
         <form onsubmit="return false;" class="space-y-4">
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">주문번호 *</label>
-            <input id="ret-order-no" class="input-field" placeholder="주문번호 입력" />
+            <div class="flex gap-2">
+              <input id="ret-order-no" class="input-field flex-1" placeholder="주문번호 입력" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupReturnOrder()}" />
+              <button type="button" class="btn-outline btn-sm" onclick="lookupReturnOrder()">조회</button>
+            </div>
+          </div>
+          <div id="ret-order-items" class="border border-warm-200 rounded-lg p-3 max-h-[200px] overflow-y-auto">
+            <p class="text-warm-400 text-[12px]">주문번호를 입력하고 조회를 눌러주세요</p>
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">유형 *</label>
@@ -2330,6 +2377,18 @@
     if (!orderNo) { showToast('주문번호를 입력해주세요'); return; }
     const reason = document.getElementById('ret-reason').value.trim();
     if (!reason) { showToast('사유를 입력해주세요'); return; }
+
+    // 선택된 상품 수집
+    const checks = document.querySelectorAll('.ret-item-check');
+    const selectedItems = [];
+    checks.forEach(chk => {
+      if (chk.checked) {
+        const idx = parseInt(chk.dataset.idx);
+        const item = _retOrderItems[idx];
+        if (item) selectedItems.push({ orderItemId: item.id, productId: item.product_id, name: item.name, color: item.color, size: item.size, qty: item.qty, price: item.price });
+      }
+    });
+
     try {
       await api('/admin/returns', {
         method: 'POST',
@@ -2339,6 +2398,7 @@
           reason,
           refundAmount: parseInt(document.getElementById('ret-refund').value) || 0,
           memo: document.getElementById('ret-memo').value.trim(),
+          items: selectedItems,
         })
       });
       showToast('접수가 완료되었습니다');
@@ -2352,26 +2412,60 @@
       const data = await api('/admin/returns/' + retId);
       const r = data.returnData;
       const statuses = ['접수','처리중','회수중','완료','거부'];
+      const d = new Date(r.createdAt);
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
       const modal = document.createElement('div');
       modal.className = 'overlay';
       modal.id = 'ret-detail-modal';
       modal.innerHTML = `
-        <div class="overlay-content p-6">
-          <div class="flex justify-between items-center mb-6">
+        <div class="overlay-content p-6" style="max-width:560px;">
+          <div class="flex justify-between items-center mb-4">
             <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(r.returnNo)}</h3>
             <button onclick="document.getElementById('ret-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
           </div>
-          <div class="grid grid-cols-2 gap-4 mb-4">
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div><span class="text-[11px] text-warm-400 block">주문번호</span><span class="font-semibold text-[13px]">${escapeHtml(r.orderNo)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">주문자</span><span class="text-[13px]">${escapeHtml(r.orderName||'')}</span></div>
             <div><span class="text-[11px] text-warm-400 block">유형</span><span class="font-semibold">${r.type}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">접수일</span><span class="text-[13px]">${dateStr}</span></div>
             <div><span class="text-[11px] text-warm-400 block">환불액</span><span class="font-semibold">${fmt(r.refundAmount||0)}</span></div>
-            <div><span class="text-[11px] text-warm-400 block">사유</span><span>${escapeHtml(r.reason||'')}</span></div>
-            <div><span class="text-[11px] text-warm-400 block">메모</span><span>${escapeHtml(r.memo||'')}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">사유</span><span class="text-[13px]">${escapeHtml(r.reason||'')}</span></div>
           </div>
+          ${r.items && r.items.length > 0 ? `
           <div class="mb-4">
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
-            <select id="ret-detail-status" class="input-field">
-              ${statuses.map(s => `<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}
-            </select>
+            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">반품 상품</p>
+            <div class="border border-warm-200 rounded-lg overflow-hidden">
+              <table class="text-[13px]">
+                <thead><tr><th>상품명</th><th>옵션</th><th>수량</th><th>금액</th></tr></thead>
+                <tbody>
+                  ${r.items.map(i => `<tr><td>${escapeHtml(i.name)}</td><td class="text-warm-400">${i.color||''}/${i.size||''}</td><td>${i.qty}</td><td class="font-semibold">${fmt(i.price * i.qty)}</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>` : ''}
+          ${r.orderItems && r.orderItems.length > 0 ? `
+          <div class="mb-4">
+            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">원래 주문 상품</p>
+            <div class="border border-warm-100 rounded-lg overflow-hidden bg-warm-50/50">
+              <table class="text-[12px]">
+                <thead><tr><th>상품명</th><th>옵션</th><th>수량</th><th>금액</th></tr></thead>
+                <tbody>
+                  ${r.orderItems.map(i => `<tr><td>${escapeHtml(i.name)}</td><td class="text-warm-400">${i.color||''}/${i.size||''}</td><td>${i.qty}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>` : ''}
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
+              <select id="ret-detail-status" class="input-field">
+                ${statuses.map(s => `<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+              <textarea id="ret-detail-memo" class="input-field resize-none" rows="2">${escapeHtml(r.memo||'')}</textarea>
+            </div>
           </div>
           <button class="btn-primary w-full" onclick="updateReturnStatus(${r.id})">저장</button>
         </div>
@@ -2383,12 +2477,13 @@
 
   async function updateReturnStatus(retId) {
     const status = document.getElementById('ret-detail-status').value;
+    const memo = document.getElementById('ret-detail-memo').value.trim();
     try {
-      await api('/admin/returns/' + retId, { method: 'PATCH', body: JSON.stringify({ status }) });
-      showToast('상태가 변경되었습니다');
+      await api('/admin/returns/' + retId, { method: 'PATCH', body: JSON.stringify({ status, memo }) });
+      showToast('저장되었습니다');
       document.getElementById('ret-detail-modal').remove();
       renderReturns(document.getElementById('page-content'));
-    } catch (e) { showToast(e.message || '상태 변경에 실패했습니다'); }
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
   }
 
   // ============================================================
