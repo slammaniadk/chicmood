@@ -1843,15 +1843,15 @@
           <div class="grid grid-cols-3 gap-4 mb-6">
             <div class="card text-center">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">총 매출</p>
-              <p class="font-serif text-xl font-bold text-warm-800">${fmt(data.summary?.totalRevenue||0)}</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(data.summary?.totalRevenue||0)}</p>
             </div>
             <div class="card text-center">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">주문수</p>
-              <p class="font-serif text-xl font-bold text-warm-800">${data.summary?.orderCount||0}건</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${data.summary?.orderCount||0}건</p>
             </div>
             <div class="card text-center">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">평균 주문액</p>
-              <p class="font-serif text-xl font-bold text-warm-800">${fmt(data.summary?.avgOrder||0)}</p>
+              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(data.summary?.avgOrder||0)}</p>
             </div>
           </div>
           <div class="card overflow-x-auto">
@@ -1890,19 +1890,33 @@
   //  INVENTORY (재고관리)
   // ============================================================
   let invPage = 1;
+  let invSearch = '';
+  let invTab = 'stock'; // stock or log
 
   async function renderInventory(el) {
     showSpinner(el);
     try {
+      if (invTab === 'log') return renderInventoryLog(el);
+
       const params = new URLSearchParams({ page: invPage, limit: 30 });
+      if (invSearch) params.set('search', invSearch);
       const data = await api('/admin/inventory?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
+      const lowStockCount = (data.inventory||[]).filter(i => i.stockQty <= 5).length;
 
       el.innerHTML = `
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
             <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-2">
+              <button class="filter-tab ${invTab==='stock'?'active':''}" onclick="invTab='stock';renderInventory(document.getElementById('page-content'))">현재고</button>
+              <button class="filter-tab ${invTab==='log'?'active':''}" onclick="invTab='log';renderInventory(document.getElementById('page-content'))">입출고 이력</button>
+            </div>
+            <input type="text" class="input-field" style="max-width:260px;" placeholder="상품명 검색..." value="${escapeHtml(invSearch)}" onkeydown="if(event.key==='Enter'){invSearch=this.value;invPage=1;renderInventory(document.getElementById('page-content'))}" />
+            ${lowStockCount > 0 ? `<span class="text-[12px] text-red-600 font-semibold">부족 ${lowStockCount}건</span>` : ''}
           </div>
           <div class="card overflow-x-auto">
             <table>
@@ -1914,8 +1928,11 @@
                     <td class="font-semibold">${escapeHtml(inv.productName)}</td>
                     <td>${escapeHtml(inv.colorName||'-')}</td>
                     <td>${escapeHtml(inv.sizeName||'-')}</td>
-                    <td class="${inv.stockQty<=5?'text-red-600 font-bold':'font-semibold'}">${inv.stockQty}</td>
-                    <td><button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button></td>
+                    <td class="${inv.stockQty<=5?'text-red-600 font-bold':'font-semibold'}">${inv.stockQty}${inv.stockQty<=5?' <span class="text-[10px]">부족</span>':''}</td>
+                    <td class="whitespace-nowrap">
+                      <button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button>
+                      <button class="btn-outline btn-sm" onclick="openInventoryHistory(${inv.id},'${escapeHtml(inv.productName)}')">이력</button>
+                    </td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -1932,6 +1949,97 @@
       `;
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">재고 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function renderInventoryLog(el) {
+    try {
+      const data = await api('/admin/inventory-log?limit=100');
+      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-확인요청', sale: 'status-배송중' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
+            <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-2">
+              <button class="filter-tab ${invTab==='stock'?'active':''}" onclick="invTab='stock';renderInventory(document.getElementById('page-content'))">현재고</button>
+              <button class="filter-tab ${invTab==='log'?'active':''}" onclick="invTab='log';renderInventory(document.getElementById('page-content'))">입출고 이력</button>
+            </div>
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>일시</th><th>유형</th><th>수량</th><th>사유</th></tr></thead>
+              <tbody>
+                ${(data.logs||[]).length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-12">이력이 없습니다</td></tr>':''}
+                ${(data.logs||[]).map(log => {
+                  const d = new Date(log.created_at);
+                  const ds = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                  const t = log.type || 'in';
+                  return `
+                    <tr>
+                      <td class="text-[12px] text-warm-400">${ds}</td>
+                      <td><span class="status-badge ${typeColors[t]||''}">${typeLabels[t]||t}</span></td>
+                      <td class="font-semibold ${log.qty>0?'text-green-600':'text-red-600'}">${log.qty>0?'+':''}${log.qty}</td>
+                      <td class="text-[12px]">${escapeHtml(log.reason||'')}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">이력을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function openInventoryHistory(invId, productName) {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'inv-history-modal';
+    modal.innerHTML = '<div class="overlay-content p-6" style="max-width:560px;"><div class="flex justify-center py-12"><div class="spinner"></div></div></div>';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    try {
+      const data = await api('/admin/inventory-log?inventoryId=' + invId);
+      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-확인요청', sale: 'status-배송중' };
+
+      document.querySelector('#inv-history-modal .overlay-content').innerHTML = `
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(productName)} 입출고 이력</h3>
+          <button onclick="document.getElementById('inv-history-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>일시</th><th>유형</th><th>수량</th><th>사유</th></tr></thead>
+            <tbody>
+              ${(data.logs||[]).length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">이력이 없습니다</td></tr>':''}
+              ${(data.logs||[]).map(log => {
+                const d = new Date(log.created_at);
+                const ds = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                const t = log.type || 'in';
+                return `
+                  <tr>
+                    <td class="text-[12px] text-warm-400">${ds}</td>
+                    <td><span class="status-badge ${typeColors[t]||''}">${typeLabels[t]||t}</span></td>
+                    <td class="font-semibold ${log.qty>0?'text-green-600':'text-red-600'}">${log.qty>0?'+':''}${log.qty}</td>
+                    <td class="text-[12px]">${escapeHtml(log.reason||'')}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (e) {
+      document.querySelector('#inv-history-modal .overlay-content').innerHTML = '<p class="py-12 text-center text-warm-400">이력을 불러올 수 없습니다.</p>';
     }
   }
 

@@ -814,16 +814,29 @@ async function handleSales(req, res) {
 // ============================================================
 async function handleInventory(req, res) {
   if (req.method === 'GET') {
-    const { page = '1', limit = '30' } = req.query || {};
+    const { search, page = '1', limit = '30' } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
 
-    const { data, error, count } = await supabaseAdmin
-      .from('inventory')
-      .select('*, products(name)', { count: 'exact' })
-      .order('id', { ascending: false })
-      .range(offset, offset + limitNum - 1);
+    let query;
+    if (search) {
+      // 상품명으로 검색 시 inner join 필요
+      query = supabaseAdmin
+        .from('inventory')
+        .select('*, products!inner(name)', { count: 'exact' })
+        .ilike('products.name', `%${search}%`)
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+    } else {
+      query = supabaseAdmin
+        .from('inventory')
+        .select('*, products(name)', { count: 'exact' })
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+    }
+
+    const { data, error, count } = await query;
     if (error) return fail(res, error.message, 500);
 
     const inventory = (data || []).map(inv => ({
@@ -894,8 +907,15 @@ async function handleInventoryDetail(req, res, id) {
 
 async function handleInventoryLog(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
-  const { data, error } = await supabaseAdmin.from('inventory_log')
-    .select('*').order('created_at', { ascending: false }).limit(100);
+  const { inventoryId, limit = '100' } = req.query || {};
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
+
+  let query = supabaseAdmin.from('inventory_log')
+    .select('*').order('created_at', { ascending: false }).limit(limitNum);
+
+  if (inventoryId) query = query.eq('inventory_id', inventoryId);
+
+  const { data, error } = await query;
   if (error) return fail(res, error.message, 500);
   return ok(res, { logs: data || [] });
 }
