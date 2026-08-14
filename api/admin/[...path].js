@@ -175,6 +175,13 @@ async function handleOrderDetail(req, res, id) {
   const validStatuses = ['입금대기', '확인요청', '결제완료', '배송중', '송장완료', '취소'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 상태입니다: ${status}`);
 
+  // 결제완료 전환 시 기존 상태 확인 (중복 차감 방지)
+  let prevStatus = null;
+  if (status === '결제완료' || status === '취소') {
+    const { data: prev } = await supabaseAdmin.from('orders').select('status').eq('id', id).single();
+    if (prev) prevStatus = prev.status;
+  }
+
   const update = {};
   if (status) update.status = status;
   if (trackingNo !== undefined) update.tracking_no = trackingNo;
@@ -192,7 +199,46 @@ async function handleOrderDetail(req, res, id) {
   if (error) return fail(res, error.message, 500);
   if (!data) return fail(res, '주문을 찾을 수 없습니다', 404);
 
+  // 결제완료 전환 시 재고 자동 차감
+  if (status === '결제완료' && prevStatus && prevStatus !== '결제완료') {
+    await deductInventory(id, 'sale');
+  }
+  // 취소 시 결제완료였던 주문이면 재고 복원
+  if (status === '취소' && prevStatus === '결제완료') {
+    await deductInventory(id, 'cancel');
+  }
+
   return ok(res, { id: data.id, orderNo: data.order_no, status: data.status, trackingNo: data.tracking_no, trackingCarrier: data.tracking_carrier });
+}
+
+// 재고 차감/복원 헬퍼
+async function deductInventory(orderId, action) {
+  try {
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size, qty').eq('order_id', orderId);
+    if (!items || items.length === 0) return;
+
+    for (const item of items) {
+      const { data: inv } = await supabaseAdmin.from('inventory')
+        .select('id, stock_qty')
+        .eq('product_id', item.product_id)
+        .eq('color_name', item.color || '')
+        .eq('size_name', item.size || '')
+        .single();
+
+      if (inv) {
+        const diff = action === 'sale' ? -item.qty : item.qty;
+        const newQty = Math.max(0, inv.stock_qty + diff);
+        await supabaseAdmin.from('inventory').update({ stock_qty: newQty, updated_at: new Date().toISOString() }).eq('id', inv.id);
+        await supabaseAdmin.from('inventory_log').insert({
+          inventory_id: inv.id, product_id: item.product_id,
+          type: action === 'sale' ? 'sale' : 'in',
+          qty: diff,
+          reason: action === 'sale' ? '주문 결제완료 자동 차감' : '주문 취소 재고 복원',
+        });
+      }
+    }
+  } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
 }
 
 // ============================================================
