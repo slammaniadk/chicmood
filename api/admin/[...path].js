@@ -210,9 +210,10 @@ async function handleOrderDetail(req, res, id) {
   if (error) return fail(res, error.message, 500);
   if (!data) return fail(res, '주문을 찾을 수 없습니다', 404);
 
-  // 결제완료 전환 시 재고 자동 차감
+  // 결제완료 전환 시 재고 자동 차감 + 자동 발주 생성
   if (status === '결제완료' && prevStatus && prevStatus !== '결제완료') {
     await deductInventory(id, 'sale');
+    await createAutoPurchaseOrders(id);
   }
   // 취소 시 결제완료였던 주문이면 재고 복원
   if (status === '취소' && prevStatus === '결제완료') {
@@ -252,6 +253,123 @@ async function deductInventory(orderId, action) {
   } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
 }
 
+// 자동 발주 생성 헬퍼 (결제완료 시 거래처별 발주서 자동 생성/합산)
+async function createAutoPurchaseOrders(orderId) {
+  try {
+    // 1) 주문 품목 조회
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, name, color, size, qty').eq('order_id', orderId);
+    if (!items || items.length === 0) return;
+
+    // product_id 없는 품목은 발주 대상 아님
+    const validItems = items.filter(i => i.product_id);
+    if (validItems.length === 0) return;
+
+    // 2) 상품 정보 조회 (vendor_id, cost_price, name)
+    const productIds = [...new Set(validItems.map(i => i.product_id))];
+    const { data: products } = await supabaseAdmin.from('products')
+      .select('id, name, vendor_id, cost_price').in('id', productIds);
+    if (!products || products.length === 0) return;
+
+    const productMap = {};
+    products.forEach(p => { productMap[p.id] = p; });
+
+    // 3) vendor_id 기준 그룹핑
+    const vendorGroups = {};
+    for (const item of validItems) {
+      const prod = productMap[item.product_id];
+      if (!prod || !prod.vendor_id) continue;
+      const vid = prod.vendor_id;
+      if (!vendorGroups[vid]) vendorGroups[vid] = [];
+      vendorGroups[vid].push({
+        product_id: item.product_id,
+        product_name: item.name || prod.name,
+        color_name: item.color || '',
+        size_name: item.size || '',
+        qty: item.qty,
+        cost_price: prod.cost_price || 0,
+      });
+    }
+
+    // 4) 거래처별 발주서 생성 또는 기존 발주대기 발주서에 합산
+    for (const [vendorId, poItemsList] of Object.entries(vendorGroups)) {
+      // 기존 '발주대기' 발주서 확인
+      const { data: existingPO } = await supabaseAdmin.from('purchase_orders')
+        .select('id').eq('vendor_id', parseInt(vendorId)).eq('status', '발주대기')
+        .order('id', { ascending: false }).limit(1).single();
+
+      let poId;
+      if (existingPO) {
+        poId = existingPO.id;
+        // 기존 품목 조회하여 동일 품목이면 수량 합산
+        const { data: existingItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, product_id, product_name, color_name, size_name, qty, cost_price')
+          .eq('purchase_order_id', poId);
+
+        for (const newItem of poItemsList) {
+          const match = (existingItems || []).find(ei =>
+            ei.product_id === newItem.product_id &&
+            ei.color_name === newItem.color_name &&
+            ei.size_name === newItem.size_name
+          );
+          if (match) {
+            // 수량 합산
+            const newQty = match.qty + newItem.qty;
+            const newSubtotal = newQty * (match.cost_price || newItem.cost_price);
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, subtotal: newSubtotal }).eq('id', match.id);
+          } else {
+            // 새 품목 추가
+            await supabaseAdmin.from('purchase_order_items').insert({
+              purchase_order_id: poId,
+              product_id: newItem.product_id,
+              product_name: newItem.product_name,
+              color_name: newItem.color_name,
+              size_name: newItem.size_name,
+              qty: newItem.qty,
+              cost_price: newItem.cost_price,
+              subtotal: newItem.qty * newItem.cost_price,
+            });
+          }
+        }
+        // total_amount 재계산
+        const { data: updatedItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('subtotal').eq('purchase_order_id', poId);
+        const newTotal = (updatedItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+        await supabaseAdmin.from('purchase_orders').update({
+          total_amount: newTotal, updated_at: new Date().toISOString()
+        }).eq('id', poId);
+      } else {
+        // 새 발주서 생성
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+        const { count } = await supabaseAdmin.from('purchase_orders')
+          .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
+        const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
+
+        const totalAmount = poItemsList.reduce((s, i) => s + i.qty * i.cost_price, 0);
+        const { data: newPO } = await supabaseAdmin.from('purchase_orders')
+          .insert({ po_no: poNo, vendor_id: parseInt(vendorId), status: '발주대기', total_amount: totalAmount, memo: '자동 생성' })
+          .select('id').single();
+        if (!newPO) continue;
+        poId = newPO.id;
+
+        const insertItems = poItemsList.map(i => ({
+          purchase_order_id: poId,
+          product_id: i.product_id,
+          product_name: i.product_name,
+          color_name: i.color_name,
+          size_name: i.size_name,
+          qty: i.qty,
+          cost_price: i.cost_price,
+          subtotal: i.qty * i.cost_price,
+        }));
+        await supabaseAdmin.from('purchase_order_items').insert(insertItems);
+      }
+    }
+  } catch (e) { /* 자동 발주 생성 실패해도 주문 처리는 유지 */ }
+}
+
 // ============================================================
 //  PRODUCTS LIST / CREATE
 // ============================================================
@@ -275,6 +393,7 @@ async function handleProducts(req, res) {
       vendorId: p.vendor_id,
       vendorName: p.vendors ? p.vendors.name : '',
       costPrice: p.cost_price || 0,
+      wholesalePrice: p.wholesale_price || 0,
       size: p.size || '',
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
@@ -284,13 +403,14 @@ async function handleProducts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size } = req.body;
     if (!name) return fail(res, '상품명은 필수입니다');
 
     const finalPrice = price || costPrice || 0;
     const insertData = { name, price: finalPrice, original_price: originalPrice || finalPrice, discount: discount || 0, description: description || '', material: material || '', size: size || '' };
     if (vendorId) insertData.vendor_id = vendorId;
     if (costPrice) insertData.cost_price = costPrice;
+    if (wholesalePrice !== undefined) insertData.wholesale_price = wholesalePrice;
 
     const { data: product, error } = await supabaseAdmin
       .from('products')
@@ -318,7 +438,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -329,6 +449,7 @@ async function handleProductDetail(req, res, id) {
     if (material !== undefined) update.material = material;
     if (vendorId !== undefined) update.vendor_id = vendorId;
     if (costPrice !== undefined) update.cost_price = costPrice;
+    if (wholesalePrice !== undefined) update.wholesale_price = wholesalePrice;
     if (size !== undefined) update.size = size;
 
     if (Object.keys(update).length > 0) {
@@ -792,6 +913,7 @@ async function handlePurchaseOrders(req, res) {
 
     const poItems = items.map(i => ({
       purchase_order_id: po.id,
+      product_id: i.productId || null,
       product_name: i.productName || '',
       color_name: i.colorName || '',
       size_name: i.sizeName || '',
@@ -822,7 +944,7 @@ async function handlePurchaseOrderDetail(req, res, id) {
         totalAmount: po.total_amount, memo: po.memo,
         orderedAt: po.ordered_at, createdAt: po.created_at,
         items: (po.purchase_order_items || []).map(i => ({
-          id: i.id, productName: i.product_name, colorName: i.color_name,
+          id: i.id, productId: i.product_id, productName: i.product_name, colorName: i.color_name,
           sizeName: i.size_name, qty: i.qty, costPrice: i.cost_price, subtotal: i.subtotal,
         })),
       }
@@ -830,7 +952,7 @@ async function handlePurchaseOrderDetail(req, res, id) {
   }
 
   if (req.method === 'PATCH') {
-    const { status, memo } = req.body;
+    const { status, memo, items } = req.body;
     const update = {};
     if (status) {
       update.status = status;
@@ -840,9 +962,35 @@ async function handlePurchaseOrderDetail(req, res, id) {
     if (memo !== undefined) update.memo = memo;
     update.updated_at = new Date().toISOString();
 
+    // items 배열이 전달되면 기존 품목 삭제 후 새로 삽입
+    if (items && Array.isArray(items)) {
+      await supabaseAdmin.from('purchase_order_items').delete().eq('purchase_order_id', id);
+      if (items.length > 0) {
+        const poItems = items.map(i => ({
+          purchase_order_id: parseInt(id),
+          product_id: i.productId || null,
+          product_name: i.productName || '',
+          color_name: i.colorName || '',
+          size_name: i.sizeName || '',
+          qty: i.qty || 1,
+          cost_price: i.costPrice || 0,
+          subtotal: (i.qty || 1) * (i.costPrice || 0),
+        }));
+        await supabaseAdmin.from('purchase_order_items').insert(poItems);
+      }
+      // total_amount 재계산
+      update.total_amount = items.reduce((s, i) => s + (i.qty || 1) * (i.costPrice || 0), 0);
+    }
+
     const { error } = await supabaseAdmin.from('purchase_orders').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
     return ok(res, { id: parseInt(id) });
+  }
+
+  if (req.method === 'DELETE') {
+    const { error } = await supabaseAdmin.from('purchase_orders').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { deleted: true });
   }
 
   return fail(res, 'Method not allowed', 405);

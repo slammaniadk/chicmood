@@ -989,7 +989,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>가격</th><th>할인</th><th>색상</th><th>관리</th>
+                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>매입가</th><th>도매가</th><th>색상</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -1002,11 +1002,11 @@
                     </td>
                     <td class="font-semibold">${escapeHtml(p.name)}</td>
                     <td class="text-[12px] text-warm-500">${escapeHtml(p.vendorName||'')}</td>
-                    <td class="whitespace-nowrap">${fmt(p.price)}<br><span class="text-[11px] text-warm-400 line-through">${fmt(p.originalPrice)}</span></td>
-                    <td><span class="text-rose-500 font-semibold">${p.discount}%</span></td>
+                    <td class="whitespace-nowrap">${fmt(p.costPrice)}</td>
+                    <td class="whitespace-nowrap">${fmt(p.wholesalePrice||0)}</td>
                     <td>
-                      <div class="flex gap-1">
-                        ${p.colors.map(c => `<span class="w-5 h-5 rounded-full border border-warm-200 inline-block" style="background:${c.hex}" title="${c.name}"></span>`).join('')}
+                      <div class="flex gap-2">
+                        ${p.colors.map(c => `<div class="flex flex-col items-center gap-0.5"><span class="w-5 h-5 rounded-full border border-warm-200 inline-block" style="background:${c.hex}"></span><span class="text-[9px] text-warm-500">${c.name}</span></div>`).join('')}
                       </div>
                     </td>
                     <td class="whitespace-nowrap">
@@ -1067,8 +1067,18 @@
               <input id="pm-cost" type="number" class="input-field" value="${p.costPrice||''}" placeholder="매입가" />
             </div>
             <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
-              <input id="pm-size" class="input-field" value="${escapeHtml(p.size||'')}" placeholder="FREE, S/M/L 등" />
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">도매가</label>
+              <input id="pm-wholesale" type="number" class="input-field" value="${p.wholesalePrice||''}" placeholder="도매가" />
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
+            <div class="flex flex-wrap gap-3 mt-1">
+              ${['FREE','S','M','L','XL','2XL'].map(sz => {
+                const sizes = (p.size||'').split(',').map(s=>s.trim());
+                const checked = sizes.includes(sz) ? 'checked' : '';
+                return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-size-cb" value="${sz}" ${checked} /> ${sz}</label>`;
+              }).join('')}
             </div>
           </div>
           <div>
@@ -1092,8 +1102,26 @@
             <div id="pm-upload-status" class="text-[11px] text-warm-400 mt-1 hidden"></div>
           </div>
           <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상 (줄바꿈 구분)</label>
-            <textarea id="pm-colors" class="input-field resize-none" rows="3" placeholder="베이지\n네이비\n블랙">${p.colors.map(c => c.name).join('\n')}</textarea>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상</label>
+            <div class="flex flex-wrap gap-3 mt-1">
+              ${[
+                {name:'블랙',hex:'#000000'},{name:'화이트',hex:'#FFFFFF'},{name:'그레이',hex:'#808080'},
+                {name:'베이지',hex:'#D4C5A9'},{name:'아이보리',hex:'#FFFFF0'},{name:'크림',hex:'#FFFDD0'},
+                {name:'브라운',hex:'#8B4513'},{name:'카키',hex:'#806B2A'},{name:'네이비',hex:'#000080'},
+                {name:'블루',hex:'#0000FF'},{name:'레드',hex:'#FF0000'},{name:'핑크',hex:'#FFC0CB'},
+                {name:'그린',hex:'#008000'},{name:'옐로우',hex:'#FFD700'},{name:'퍼플',hex:'#800080'},
+                {name:'오렌지',hex:'#FF8C00'},{name:'와인',hex:'#722F37'},{name:'차콜',hex:'#36454F'},
+                {name:'라벤더',hex:'#E6E6FA'},{name:'민트',hex:'#98FF98'},
+                {name:'연청',hex:'#A4C8E1'},{name:'중청',hex:'#4A7FB5'},{name:'진청',hex:'#1B3A5C'},{name:'인디고',hex:'#3F51B5'}
+              ].map(c => {
+                const selected = p.colors.some(pc => pc.name === c.name);
+                return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer">
+                  <input type="checkbox" class="pm-color-cb" value="${c.name}" data-hex="${c.hex}" ${selected?'checked':''} />
+                  <span class="w-3.5 h-3.5 rounded-full border border-warm-300 inline-block" style="background:${c.hex}"></span>
+                  ${c.name}
+                </label>`;
+              }).join('')}
+            </div>
           </div>
           <button class="btn-primary w-full" onclick="saveProduct(${isEdit ? p.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
         </form>
@@ -1173,15 +1201,17 @@
     const material = document.getElementById('pm-material').value.trim();
     const vendorId = document.getElementById('pm-vendor').value ? parseInt(document.getElementById('pm-vendor').value) : null;
     const costPrice = parseInt(document.getElementById('pm-cost').value) || 0;
-    const size = document.getElementById('pm-size').value.trim();
-    const price = costPrice; // 매입가를 판매가로 사용
+    const wholesalePrice = parseInt(document.getElementById('pm-wholesale').value) || 0;
+    const sizeChecked = [...document.querySelectorAll('.pm-size-cb:checked')].map(cb => cb.value);
+    const size = sizeChecked.join(',');
+    const price = costPrice;
     const originalPrice = costPrice;
     const discount = 0;
     const description = '';
 
     const images = pmImageUrls.filter(Boolean);
-    const colorLines = document.getElementById('pm-colors').value.split('\n').map(s => s.trim()).filter(Boolean);
-    const colors = colorLines.map(c => ({ name: c, hex: '#000000' }));
+    const colorCbs = [...document.querySelectorAll('.pm-color-cb:checked')];
+    const colors = colorCbs.map(cb => ({ name: cb.value, hex: cb.dataset.hex }));
 
     if (!name) { showToast('상품명은 필수입니다'); return; }
 
@@ -1189,13 +1219,13 @@
       if (id) {
         await api('/admin/products/' + id, {
           method: 'PATCH',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size })
         });
         showToast('상품이 수정되었습니다');
       } else {
         await api('/admin/products', {
           method: 'POST',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size })
         });
         showToast('상품이 등록되었습니다');
       }
@@ -1727,7 +1757,7 @@
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
-                      <td><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button></td>
+                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button><button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
                     </tr>
                   `;
                 }).join('')}
@@ -1749,10 +1779,13 @@
   }
 
   let poItems = [];
+  let poAllProducts = [];
+
   async function openPOModal() {
-    poItems = [{ productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
+    poItems = [{ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
     let vendors = [];
     try { vendors = await api('/admin/vendors'); } catch(e) {}
+    try { poAllProducts = await api('/admin/products'); } catch(e) { poAllProducts = []; }
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'po-modal';
@@ -1765,7 +1798,7 @@
         <form onsubmit="return false;" class="space-y-4">
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처 *</label>
-            <select id="po-vendor" class="input-field">
+            <select id="po-vendor" class="input-field" onchange="onPOVendorChange()">
               <option value="">선택</option>
               ${vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('')}
             </select>
@@ -1790,33 +1823,80 @@
     renderPOItems();
   }
 
-  function addPOItem() { poItems.push({ productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }); renderPOItems(); }
+  function onPOVendorChange() {
+    // 거래처 변경 시 품목 초기화 후 재렌더
+    poItems = [{ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
+    renderPOItems();
+  }
+
+  function getVendorProducts() {
+    const vendorId = document.getElementById('po-vendor')?.value;
+    if (!vendorId) return poAllProducts;
+    return poAllProducts.filter(p => String(p.vendorId) === String(vendorId));
+  }
+
+  function onPOProductSelect(idx) {
+    const sel = document.getElementById('po-product-sel-' + idx);
+    if (!sel) return;
+    const pid = parseInt(sel.value);
+    const prod = poAllProducts.find(p => p.id === pid);
+    if (prod) {
+      poItems[idx].productId = prod.id;
+      poItems[idx].productName = prod.name;
+      poItems[idx].costPrice = prod.costPrice || 0;
+      // 색상/사이즈 선택 옵션 업데이트
+      renderPOItems();
+    }
+  }
+
+  function addPOItem() { poItems.push({ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }); renderPOItems(); }
   function removePOItem(i) { poItems.splice(i,1); renderPOItems(); }
   function renderPOItems() {
     const list = document.getElementById('po-items-list');
     if (!list) return;
-    list.innerHTML = poItems.map((item,i) => `
+    const vendorProducts = getVendorProducts();
+    list.innerHTML = poItems.map((item,i) => {
+      const selectedProd = poAllProducts.find(p => p.id === item.productId);
+      const colors = selectedProd ? (selectedProd.colors || []) : [];
+      const sizeStr = selectedProd ? (selectedProd.size || '') : '';
+      const sizes = sizeStr ? sizeStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+      return `
       <div class="border border-warm-200 rounded p-3 mb-2 relative">
         ${poItems.length > 1 ? `<button type="button" onclick="removePOItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
-        <div class="grid grid-cols-5 gap-2">
-          <input class="input-field col-span-2" placeholder="상품명" value="${escapeHtml(item.productName)}" onchange="poItems[${i}].productName=this.value" />
-          <input class="input-field" placeholder="색상" value="${escapeHtml(item.colorName)}" onchange="poItems[${i}].colorName=this.value" />
-          <input class="input-field" placeholder="사이즈" value="${escapeHtml(item.sizeName)}" onchange="poItems[${i}].sizeName=this.value" />
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <select id="po-product-sel-${i}" class="input-field" onchange="onPOProductSelect(${i})">
+            <option value="">상품 선택</option>
+            ${vendorProducts.map(p => `<option value="${p.id}" ${p.id===item.productId?'selected':''}>${escapeHtml(p.name)}${p.costPrice ? ' ('+fmt(p.costPrice)+')' : ''}</option>`).join('')}
+          </select>
           <div class="grid grid-cols-2 gap-1">
-            <input type="number" class="input-field" placeholder="수량" value="${item.qty}" onchange="poItems[${i}].qty=parseInt(this.value)||1" />
-            <input type="number" class="input-field" placeholder="매입가" value="${item.costPrice}" onchange="poItems[${i}].costPrice=parseInt(this.value)||0" />
+            ${colors.length > 0 ? `
+              <select class="input-field" onchange="poItems[${i}].colorName=this.value">
+                <option value="">색상</option>
+                ${colors.map(c => `<option value="${escapeHtml(c.name)}" ${c.name===item.colorName?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
+              </select>
+            ` : `<input class="input-field" placeholder="색상" value="${escapeHtml(item.colorName)}" onchange="poItems[${i}].colorName=this.value" />`}
+            ${sizes.length > 0 ? `
+              <select class="input-field" onchange="poItems[${i}].sizeName=this.value">
+                <option value="">사이즈</option>
+                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s===item.sizeName?'selected':''}>${escapeHtml(s)}</option>`).join('')}
+              </select>
+            ` : `<input class="input-field" placeholder="사이즈" value="${escapeHtml(item.sizeName)}" onchange="poItems[${i}].sizeName=this.value" />`}
           </div>
         </div>
+        <div class="grid grid-cols-2 gap-2">
+          <input type="number" class="input-field" placeholder="수량" value="${item.qty}" onchange="poItems[${i}].qty=parseInt(this.value)||1" />
+          <input type="number" class="input-field" placeholder="매입가" value="${item.costPrice}" onchange="poItems[${i}].costPrice=parseInt(this.value)||0" />
+        </div>
       </div>
-    `).join('');
+    `}).join('');
   }
 
   async function savePO() {
     const vendorId = document.getElementById('po-vendor').value;
     if (!vendorId) { showToast('거래처를 선택해주세요'); return; }
     const memo = document.getElementById('po-memo').value.trim();
-    const items = poItems.filter(i => i.productName);
-    if (items.length === 0) { showToast('품목을 최소 1개 입력해주세요'); return; }
+    const items = poItems.filter(i => i.productName || i.productId);
+    if (items.length === 0) { showToast('품목을 최소 1개 선택해주세요'); return; }
     try {
       await api('/admin/purchase-orders', {
         method: 'POST',
@@ -1828,13 +1908,31 @@
     } catch (e) { showToast(e.message || '발주서 생성에 실패했습니다'); }
   }
 
+  let poEditMode = false;
+  let poEditItems = [];
+
   async function openPODetailModal(poId) {
     try {
       const data = await api('/admin/purchase-orders/' + poId);
       const po = data.purchaseOrder;
+      poEditMode = false;
+      poEditItems = (po.items || []).map(it => ({
+        productId: it.productId || null,
+        productName: it.productName || '',
+        colorName: it.colorName || '',
+        sizeName: it.sizeName || '',
+        qty: it.qty || 1,
+        costPrice: it.costPrice || 0,
+      }));
+      // 편집용 상품 목록 로드
+      try { poAllProducts = await api('/admin/products'); } catch(e) { poAllProducts = []; }
       const modal = document.createElement('div');
       modal.className = 'overlay';
       modal.id = 'po-detail-modal';
+      modal.setAttribute('data-po-id', poId);
+      modal.setAttribute('data-po-no', po.poNo);
+      modal.setAttribute('data-vendor-name', po.vendorName || '');
+      modal.setAttribute('data-po-status', po.status);
       const statuses = ['발주대기','발주완료','입고중','입고완료','취소'];
       modal.innerHTML = `
         <div class="overlay-content p-6" style="max-width:640px;">
@@ -1844,7 +1942,7 @@
           </div>
           <div class="grid grid-cols-2 gap-4 mb-4">
             <div><span class="text-[11px] text-warm-400 block">거래처</span><span class="font-semibold">${escapeHtml(po.vendorName||'')}</span></div>
-            <div><span class="text-[11px] text-warm-400 block">총 금액</span><span class="font-semibold">${fmt(po.totalAmount||0)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">총 금액</span><span class="font-semibold" id="po-detail-total">${fmt(po.totalAmount||0)}</span></div>
           </div>
           <div class="mb-4">
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
@@ -1852,25 +1950,18 @@
               ${statuses.map(s => `<option value="${s}" ${s===po.status?'selected':''}>${s}</option>`).join('')}
             </select>
           </div>
-          <h4 class="font-semibold text-warm-800 mb-2 text-[13px]">발주 품목</h4>
-          <div class="overflow-x-auto mb-4">
-            <table>
-              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th><th>매입가</th><th>소계</th></tr></thead>
-              <tbody>
-                ${(po.items||[]).map(it => `
-                  <tr>
-                    <td>${escapeHtml(it.productName)}</td>
-                    <td>${escapeHtml(it.colorName||'')}</td>
-                    <td>${escapeHtml(it.sizeName||'')}</td>
-                    <td>${it.qty}</td>
-                    <td>${fmt(it.costPrice)}</td>
-                    <td class="font-semibold">${fmt(it.subtotal)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+          <div class="mb-4">
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+            <textarea id="po-detail-memo" class="input-field resize-none" rows="2">${escapeHtml(po.memo||'')}</textarea>
           </div>
-          <button class="btn-primary w-full" onclick="updatePOStatus(${po.id})">저장</button>
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="font-semibold text-warm-800 text-[13px]">발주 품목</h4>
+            <button class="btn-outline btn-sm" id="po-edit-toggle" onclick="togglePOEdit()">수정</button>
+          </div>
+          <div id="po-detail-items-area" class="overflow-x-auto mb-4">
+            ${renderPODetailItemsView(po.items)}
+          </div>
+          <button class="btn-primary w-full" onclick="savePODetail(${po.id})">저장</button>
         </div>
       `;
       modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
@@ -1878,14 +1969,132 @@
     } catch (e) { showToast(e.message || '발주 상세를 불러올 수 없습니다'); }
   }
 
-  async function updatePOStatus(poId) {
+  function renderPODetailItemsView(items) {
+    return `<table>
+      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th><th>매입가</th><th>소계</th></tr></thead>
+      <tbody>
+        ${(items||[]).map(it => `
+          <tr>
+            <td>${escapeHtml(it.productName)}</td>
+            <td>${escapeHtml(it.colorName||'')}</td>
+            <td>${escapeHtml(it.sizeName||'')}</td>
+            <td>${it.qty}</td>
+            <td>${fmt(it.costPrice)}</td>
+            <td class="font-semibold">${fmt(it.subtotal)}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  function togglePOEdit() {
+    poEditMode = !poEditMode;
+    const btn = document.getElementById('po-edit-toggle');
+    if (btn) btn.textContent = poEditMode ? '편집 취소' : '수정';
+    renderPODetailItemsEdit();
+  }
+
+  function onPOEditProductSelect(idx) {
+    const sel = document.getElementById('po-edit-product-sel-' + idx);
+    if (!sel) return;
+    const pid = parseInt(sel.value);
+    const prod = poAllProducts.find(p => p.id === pid);
+    if (prod) {
+      poEditItems[idx].productId = prod.id;
+      poEditItems[idx].productName = prod.name;
+      poEditItems[idx].costPrice = prod.costPrice || 0;
+      renderPODetailItemsEdit();
+      updatePOEditTotal();
+    }
+  }
+
+  function getEditVendorProducts() {
+    const modal = document.getElementById('po-detail-modal');
+    // 발주서의 vendorId에 맞는 상품 필터 (없으면 전체)
+    return poAllProducts;
+  }
+
+  function renderPODetailItemsEdit() {
+    const area = document.getElementById('po-detail-items-area');
+    if (!area) return;
+    if (!poEditMode) {
+      const items = poEditItems.map(i => ({ ...i, subtotal: (i.qty||1) * (i.costPrice||0) }));
+      area.innerHTML = renderPODetailItemsView(items);
+      return;
+    }
+    const products = getEditVendorProducts();
+    area.innerHTML = `
+      <div id="po-edit-items-list">
+        ${poEditItems.map((item,i) => {
+          const selectedProd = poAllProducts.find(p => p.id === item.productId);
+          const colors = selectedProd ? (selectedProd.colors || []) : [];
+          const sizeStr = selectedProd ? (selectedProd.size || '') : '';
+          const sizes = sizeStr ? sizeStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+          return `
+          <div class="border border-warm-200 rounded p-3 mb-2 relative">
+            ${poEditItems.length > 1 ? `<button type="button" onclick="removePOEditItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
+            <div class="grid grid-cols-2 gap-2 mb-2">
+              <select id="po-edit-product-sel-${i}" class="input-field" onchange="onPOEditProductSelect(${i})">
+                <option value="">상품 선택</option>
+                ${products.map(p => `<option value="${p.id}" ${p.id===item.productId?'selected':''}>${escapeHtml(p.name)}${p.costPrice ? ' ('+fmt(p.costPrice)+')' : ''}</option>`).join('')}
+              </select>
+              <div class="grid grid-cols-2 gap-1">
+                ${colors.length > 0 ? `
+                  <select class="input-field" onchange="poEditItems[${i}].colorName=this.value">
+                    <option value="">색상</option>
+                    ${colors.map(c => `<option value="${escapeHtml(c.name)}" ${c.name===item.colorName?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}
+                  </select>
+                ` : `<input class="input-field" placeholder="색상" value="${escapeHtml(item.colorName)}" onchange="poEditItems[${i}].colorName=this.value" />`}
+                ${sizes.length > 0 ? `
+                  <select class="input-field" onchange="poEditItems[${i}].sizeName=this.value">
+                    <option value="">사이즈</option>
+                    ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s===item.sizeName?'selected':''}>${escapeHtml(s)}</option>`).join('')}
+                  </select>
+                ` : `<input class="input-field" placeholder="사이즈" value="${escapeHtml(item.sizeName)}" onchange="poEditItems[${i}].sizeName=this.value" />`}
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <input type="number" class="input-field" placeholder="수량" value="${item.qty}" onchange="poEditItems[${i}].qty=parseInt(this.value)||1;updatePOEditTotal()" />
+              <input type="number" class="input-field" placeholder="매입가" value="${item.costPrice}" onchange="poEditItems[${i}].costPrice=parseInt(this.value)||0;updatePOEditTotal()" />
+            </div>
+          </div>
+        `}).join('')}
+      </div>
+      <button type="button" class="btn-outline btn-sm mt-2" onclick="addPOEditItem()">+ 품목 추가</button>
+    `;
+  }
+
+  function addPOEditItem() { poEditItems.push({ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }); renderPODetailItemsEdit(); }
+  function removePOEditItem(i) { poEditItems.splice(i,1); renderPODetailItemsEdit(); updatePOEditTotal(); }
+  function updatePOEditTotal() {
+    const total = poEditItems.reduce((s,i) => s + (i.qty||1) * (i.costPrice||0), 0);
+    const el = document.getElementById('po-detail-total');
+    if (el) el.textContent = fmt(total);
+  }
+
+  async function savePODetail(poId) {
     const status = document.getElementById('po-detail-status').value;
+    const memo = document.getElementById('po-detail-memo').value.trim();
+    const body = { status, memo };
+    if (poEditMode) {
+      body.items = poEditItems.filter(i => i.productName);
+      if (body.items.length === 0) { showToast('품목을 최소 1개 입력해주세요'); return; }
+    }
     try {
-      await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify({ status }) });
-      showToast('발주 상태가 변경되었습니다');
+      await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify(body) });
+      showToast('발주서가 저장되었습니다');
       document.getElementById('po-detail-modal').remove();
       renderPurchaseOrders(document.getElementById('page-content'));
-    } catch (e) { showToast(e.message || '상태 변경에 실패했습니다'); }
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function deletePO(poId, poNo) {
+    if (!confirm(`발주서 ${poNo}을(를) 삭제하시겠습니까?`)) return;
+    try {
+      await api('/admin/purchase-orders/' + poId, { method: 'DELETE' });
+      showToast('발주서가 삭제되었습니다');
+      renderPurchaseOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
   }
 
   // ============================================================
