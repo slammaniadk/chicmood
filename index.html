@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CHICMOOD - 라이브 쇼핑</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <script>
@@ -768,7 +769,12 @@
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송지 주소 <span class="text-rose-400">*</span></label>
-            <input id="co-address" type="text" class="input-field" placeholder="서울특별시 강남구 테헤란로 123, 8층" required />
+            <div class="flex gap-2 mb-2">
+              <input id="co-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly />
+              <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openPostcode()">주소 검색</button>
+            </div>
+            <input id="co-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly />
+            <input id="co-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" />
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송 요청사항</label>
@@ -788,14 +794,27 @@
     `;
   }
 
+  function openPostcode() {
+    new daum.Postcode({
+      oncomplete: function(data) {
+        document.getElementById('co-zipcode').value = data.zonecode;
+        document.getElementById('co-address').value = data.roadAddress || data.jibunAddress;
+        document.getElementById('co-address-detail').focus();
+      }
+    }).open();
+  }
+
   async function submitCheckout() {
     const name = document.getElementById('co-name').value.trim();
     const phone = document.getElementById('co-phone').value.trim();
-    const address = document.getElementById('co-address').value.trim();
+    const baseAddress = document.getElementById('co-address').value.trim();
+    const detailAddress = document.getElementById('co-address-detail').value.trim();
+    const zipcode = document.getElementById('co-zipcode').value.trim();
+    const address = detailAddress ? `(${zipcode}) ${baseAddress} ${detailAddress}` : baseAddress;
 
     if (!name) { showToast('이름을 입력해주세요'); document.getElementById('co-name').focus(); return; }
     if (!phone) { showToast('전화번호를 입력해주세요'); document.getElementById('co-phone').focus(); return; }
-    if (!address) { showToast('배송지 주소를 입력해주세요'); document.getElementById('co-address').focus(); return; }
+    if (!baseAddress) { showToast('주소 검색을 통해 주소를 입력해주세요'); return; }
 
     const social = document.getElementById('co-social').value.trim();
     const memo = document.getElementById('co-memo').value.trim();
