@@ -726,6 +726,7 @@
   let shippingTo = '';
   let shippingPage = 1;
   let shippingChecked = new Set();
+  let _shippingPageIds = [];
 
   async function renderShipping(el) {
     showSpinner(el);
@@ -736,6 +737,7 @@
       if (shippingTo) params.set('to', shippingTo);
 
       const data = await api('/admin/orders?' + params.toString());
+      _shippingPageIds = data.orders.map(o => String(o.id));
       const statuses = ['all','결제완료','배송중','송장완료'];
       const statusLabels = { all:'전체', 결제완료:'결제완료', 배송중:'배송중', 송장완료:'송장완료' };
       const totalPages = Math.ceil(data.total / data.limit);
@@ -765,7 +767,7 @@
             <table>
               <thead>
                 <tr>
-                  <th><input type="checkbox" onchange="toggleAllShipping(this.checked, ${JSON.stringify(data.orders.map(o=>o.id))})" /></th>
+                  <th><input type="checkbox" onchange="toggleAllShipping(this.checked)" /></th>
                   <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>금액</th><th>상태</th><th>관리</th>
                 </tr>
               </thead>
@@ -812,8 +814,8 @@
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
   }
-  function toggleAllShipping(checked, ids) {
-    ids.forEach(id => { const sid = String(id); if (checked) shippingChecked.add(sid); else shippingChecked.delete(sid); });
+  function toggleAllShipping(checked) {
+    _shippingPageIds.forEach(sid => { if (checked) shippingChecked.add(sid); else shippingChecked.delete(sid); });
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
