@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   title        TEXT NOT NULL,
   date_text    TEXT NOT NULL,           -- '2026.08.12 (화) 20:00'
   scheduled_at TIMESTAMPTZ,
-  status       TEXT NOT NULL DEFAULT 'upcoming'
-                 CHECK (status IN ('live','ended','upcoming')),
+  status       TEXT NOT NULL DEFAULT 'live'
+                 CHECK (status IN ('live','ended')),
   description  TEXT
 );
 

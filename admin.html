@@ -1292,8 +1292,8 @@
               <tbody>
                 ${broadcasts.length === 0 ? '<tr><td colspan="5" class="text-center text-warm-400 py-12">등록된 방송이 없습니다</td></tr>' : ''}
                 ${broadcasts.map(b => {
-                  const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500', upcoming: 'bg-blue-100 text-blue-700' };
-                  const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+                  const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500' };
+                  const statusLabels = { live: 'LIVE', ended: '종료' };
                   return `
                     <tr>
                       <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openBroadcastDetailModal(${b.id})">${escapeHtml(b.title)}</td>
@@ -1322,8 +1322,8 @@
     try {
       const data = await api('/admin/broadcasts/' + bcId);
       const b = data.broadcast;
-      const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500', upcoming: 'bg-blue-100 text-blue-700' };
-      const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+      const statusColors = { live: 'bg-red-100 text-red-700', ended: 'bg-warm-100 text-warm-500' };
+      const statusLabels = { live: 'LIVE', ended: '종료' };
       const modal = document.createElement('div');
       modal.className = 'overlay';
       modal.id = 'bc-detail-modal';
@@ -2871,7 +2871,7 @@
       </tbody></table>`;
     }
     if (type === 'broadcast') {
-      const statusLabels = { live: 'LIVE', ended: '종료', upcoming: '예정' };
+      const statusLabels = { live: 'LIVE', ended: '종료' };
       const totalRev = summary.totalBcRevenue || 1;
       return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
         ${rows.length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
