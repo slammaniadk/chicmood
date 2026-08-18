@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
   const { data: p, error } = await supabase
     .from('products')
     .select(`
-      id, name, price, original_price, discount, description, material,
+      id, name, price, original_price, discount, description, material, size,
       product_images ( image_url, sort_order ),
       product_colors ( name, hex_code, sort_order ),
       broadcast_products ( broadcast_id )
@@ -34,6 +34,7 @@ module.exports = async function handler(req, res) {
     colors: (p.product_colors || [])
       .sort((a, b) => a.sort_order - b.sort_order)
       .map(c => ({ name: c.name, hex: c.hex_code })),
+    size: p.size || '',
     broadcastId: p.broadcast_products?.[0]?.broadcast_id || null,
   };
 
