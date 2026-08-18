@@ -34,6 +34,7 @@ module.exports = async function handler(req, res) {
     case 'settings': return handleSettings(req, res);
     case 'admin-users': return handleAdminUsers(req, res);
     case 'logs':     return handleLogs(req, res);
+    case 'migrate-po': return handleMigratePO(req, res);
     default: return fail(res, 'Not found', 404);
   }
 };
@@ -1527,4 +1528,30 @@ async function handleLogs(req, res) {
     detail: l.detail, createdAt: l.created_at,
   }));
   return ok(res, { logs, total: count || 0, page: pageNum, limit: limitNum });
+}
+
+// ============================================================
+//  MIGRATE PO (기존 결제완료 주문 → 발주서 일괄 생성, 일회성)
+// ============================================================
+async function handleMigratePO(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  // 결제완료 상태인 모든 주문 조회
+  const { data: orders, error } = await supabaseAdmin.from('orders')
+    .select('id').eq('status', '결제완료');
+  if (error) return fail(res, error.message, 500);
+  if (!orders || orders.length === 0) return ok(res, { message: '결제완료 주문이 없습니다', created: 0 });
+
+  let processed = 0;
+  let skipped = 0;
+  for (const order of orders) {
+    try {
+      await createAutoPurchaseOrders(order.id);
+      processed++;
+    } catch (e) {
+      skipped++;
+    }
+  }
+
+  return ok(res, { message: `마이그레이션 완료`, total: orders.length, processed, skipped });
 }
