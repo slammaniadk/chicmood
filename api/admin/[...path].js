@@ -253,7 +253,7 @@ async function deductInventory(orderId, action) {
   } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
 }
 
-// 자동 발주 생성 헬퍼 (결제완료 시 거래처별 발주서 자동 생성/합산)
+// 자동 발주 생성 헬퍼 (결제완료 시 거래처+방송 단위로 발주서 자동 생성/합산)
 async function createAutoPurchaseOrders(orderId) {
   try {
     // 1) 주문 품목 조회
@@ -261,7 +261,15 @@ async function createAutoPurchaseOrders(orderId) {
       .select('product_id, name, color, size, qty').eq('order_id', orderId);
     if (!items || items.length === 0) return;
 
-    // product_id 없는 품목은 발주 대상 아님
+    // product_id 없는 품목은 상품명으로 매칭 시도
+    for (const item of items) {
+      if (!item.product_id && item.name) {
+        const { data: matched } = await supabaseAdmin.from('products')
+          .select('id').ilike('name', `%${item.name}%`).limit(1).single();
+        if (matched) item.product_id = matched.id;
+      }
+    }
+
     const validItems = items.filter(i => i.product_id);
     if (validItems.length === 0) return;
 
@@ -274,14 +282,34 @@ async function createAutoPurchaseOrders(orderId) {
     const productMap = {};
     products.forEach(p => { productMap[p.id] = p; });
 
-    // 3) vendor_id 기준 그룹핑
-    const vendorGroups = {};
+    // 3) 방송 정보 조회 (product_id → broadcast)
+    const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
+      .select('product_id, broadcast_id, broadcasts(id, title)')
+      .in('product_id', productIds)
+      .order('broadcast_id', { ascending: false });
+
+    // product_id → 가장 최근 방송 매핑
+    const productBroadcastMap = {};
+    (bcProducts || []).forEach(bp => {
+      if (!productBroadcastMap[bp.product_id]) {
+        productBroadcastMap[bp.product_id] = {
+          broadcastId: bp.broadcast_id,
+          broadcastTitle: bp.broadcasts ? bp.broadcasts.title : '',
+        };
+      }
+    });
+
+    // 4) (vendor_id, broadcast_id) 기준 그룹핑
+    const groups = {};
     for (const item of validItems) {
       const prod = productMap[item.product_id];
       if (!prod || !prod.vendor_id) continue;
-      const vid = prod.vendor_id;
-      if (!vendorGroups[vid]) vendorGroups[vid] = [];
-      vendorGroups[vid].push({
+      const bc = productBroadcastMap[item.product_id] || { broadcastId: 0, broadcastTitle: '' };
+      const groupKey = `${prod.vendor_id}_${bc.broadcastId}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { vendorId: prod.vendor_id, broadcastId: bc.broadcastId, broadcastTitle: bc.broadcastTitle, items: [] };
+      }
+      groups[groupKey].items.push({
         product_id: item.product_id,
         product_name: item.name || prod.name,
         color_name: item.color || '',
@@ -291,44 +319,43 @@ async function createAutoPurchaseOrders(orderId) {
       });
     }
 
-    // 4) 거래처별 발주서 생성 또는 기존 발주대기 발주서에 합산
-    for (const [vendorId, poItemsList] of Object.entries(vendorGroups)) {
-      // 기존 '발주대기' 발주서 확인
-      const { data: existingPO } = await supabaseAdmin.from('purchase_orders')
-        .select('id').eq('vendor_id', parseInt(vendorId)).eq('status', '발주대기')
-        .order('id', { ascending: false }).limit(1).single();
+    // 5) 거래처+방송별 발주서 생성 또는 기존 발주대기 발주서에 합산
+    for (const group of Object.values(groups)) {
+      const bcTag = group.broadcastId ? `[BC:${group.broadcastId}]` : '[BC:0]';
+      const memoPrefix = group.broadcastTitle ? `${group.broadcastTitle}` : '방송 미지정';
+
+      // 기존 '발주대기' 발주서 확인 (동일 거래처 + 동일 방송)
+      let existingPO = null;
+      const { data: candidatePOs } = await supabaseAdmin.from('purchase_orders')
+        .select('id, memo').eq('vendor_id', group.vendorId).eq('status', '발주대기')
+        .ilike('memo', `${bcTag}%`)
+        .order('id', { ascending: false }).limit(1);
+      if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
 
       let poId;
       if (existingPO) {
         poId = existingPO.id;
-        // 기존 품목 조회하여 동일 품목이면 수량 합산
         const { data: existingItems } = await supabaseAdmin.from('purchase_order_items')
           .select('id, product_id, product_name, color_name, size_name, qty, cost_price')
           .eq('purchase_order_id', poId);
 
-        for (const newItem of poItemsList) {
+        for (const newItem of group.items) {
           const match = (existingItems || []).find(ei =>
             ei.product_id === newItem.product_id &&
             ei.color_name === newItem.color_name &&
             ei.size_name === newItem.size_name
           );
           if (match) {
-            // 수량 합산
             const newQty = match.qty + newItem.qty;
             const newSubtotal = newQty * (match.cost_price || newItem.cost_price);
             await supabaseAdmin.from('purchase_order_items')
               .update({ qty: newQty, subtotal: newSubtotal }).eq('id', match.id);
           } else {
-            // 새 품목 추가
             await supabaseAdmin.from('purchase_order_items').insert({
-              purchase_order_id: poId,
-              product_id: newItem.product_id,
-              product_name: newItem.product_name,
-              color_name: newItem.color_name,
-              size_name: newItem.size_name,
-              qty: newItem.qty,
-              cost_price: newItem.cost_price,
-              subtotal: newItem.qty * newItem.cost_price,
+              purchase_order_id: poId, product_id: newItem.product_id,
+              product_name: newItem.product_name, color_name: newItem.color_name,
+              size_name: newItem.size_name, qty: newItem.qty,
+              cost_price: newItem.cost_price, subtotal: newItem.qty * newItem.cost_price,
             });
           }
         }
@@ -347,24 +374,22 @@ async function createAutoPurchaseOrders(orderId) {
           .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
         const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
 
-        const totalAmount = poItemsList.reduce((s, i) => s + i.qty * i.cost_price, 0);
+        const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
+        const memo = `${bcTag} ${memoPrefix}`;
         const { data: newPO } = await supabaseAdmin.from('purchase_orders')
-          .insert({ po_no: poNo, vendor_id: parseInt(vendorId), status: '발주대기', total_amount: totalAmount, memo: '자동 생성' })
+          .insert({ po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo })
           .select('id').single();
         if (!newPO) continue;
         poId = newPO.id;
 
-        const insertItems = poItemsList.map(i => ({
-          purchase_order_id: poId,
-          product_id: i.product_id,
-          product_name: i.product_name,
-          color_name: i.color_name,
-          size_name: i.size_name,
-          qty: i.qty,
-          cost_price: i.cost_price,
-          subtotal: i.qty * i.cost_price,
-        }));
-        await supabaseAdmin.from('purchase_order_items').insert(insertItems);
+        await supabaseAdmin.from('purchase_order_items').insert(
+          group.items.map(i => ({
+            purchase_order_id: poId, product_id: i.product_id,
+            product_name: i.product_name, color_name: i.color_name,
+            size_name: i.size_name, qty: i.qty, cost_price: i.cost_price,
+            subtotal: i.qty * i.cost_price,
+          }))
+        );
       }
     }
   } catch (e) { /* 자동 발주 생성 실패해도 주문 처리는 유지 */ }
