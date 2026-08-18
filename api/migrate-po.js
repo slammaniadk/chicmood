@@ -7,34 +7,50 @@ module.exports = async function handler(req, res) {
   const { secret } = req.body;
   if (secret !== 'chicmood-migrate-2026') return fail(res, 'Unauthorized', 403);
 
-  // 1) 매입가 0인 상품에 판매가의 45% 수준으로 임시 매입가 설정
-  const { data: zeroCostProducts } = await supabaseAdmin.from('products')
-    .select('id, name, price, cost_price')
-    .or('cost_price.is.null,cost_price.eq.0');
+  // 1) 판매가/매입가 0인 상품 → 주문 데이터에서 판매가 추출 후 매입가 설정
+  const { data: allProducts } = await supabaseAdmin.from('products').select('id, name, price, cost_price');
+  const { data: allOrderItems } = await supabaseAdmin.from('order_items').select('product_id, name, price');
 
-  let costUpdated = 0;
-  for (const p of (zeroCostProducts || [])) {
-    const tempCost = Math.round((p.price || 0) * 0.45 / 1000) * 1000; // 판매가 45%, 1000원 단위 반올림
-    if (tempCost > 0) {
-      await supabaseAdmin.from('products').update({ cost_price: tempCost }).eq('id', p.id);
-      costUpdated++;
+  let priceUpdated = 0;
+  const priceResults = [];
+  for (const p of (allProducts || [])) {
+    const updates = {};
+
+    // 판매가가 0이면 주문 데이터에서 가격 찾기
+    let sellPrice = p.price || 0;
+    if (sellPrice === 0) {
+      // product_id로 매칭
+      let matched = (allOrderItems || []).find(oi => oi.product_id === p.id && oi.price > 0);
+      // 이름으로 매칭
+      if (!matched) {
+        matched = (allOrderItems || []).find(oi => oi.name && (oi.name === p.name || oi.name.includes(p.name) || p.name.includes(oi.name)) && oi.price > 0);
+      }
+      if (matched) {
+        sellPrice = matched.price;
+        updates.price = sellPrice;
+        updates.original_price = sellPrice;
+      }
+    }
+
+    // 매입가가 0이면 판매가의 45%
+    if ((!p.cost_price || p.cost_price === 0) && sellPrice > 0) {
+      updates.cost_price = Math.round(sellPrice * 0.45 / 1000) * 1000;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await supabaseAdmin.from('products').update(updates).eq('id', p.id);
+      priceUpdated++;
+      priceResults.push({ name: p.name, price: updates.price || p.price, costPrice: updates.cost_price || p.cost_price });
     }
   }
 
   // 2) 기존 발주서 전부 삭제
   await supabaseAdmin.from('purchase_orders').delete().neq('id', 0);
 
-  // 3) order_items의 product_id 복구 (null인 것들)
-  const { data: allProducts } = await supabaseAdmin.from('products').select('id, name, cost_price');
-  const { data: nullItems } = await supabaseAdmin.from('order_items').select('id, product_id, name').is('product_id', null);
-  let fixed = 0;
-  for (const item of (nullItems || [])) {
-    const matched = (allProducts || []).find(p => item.name && (p.name === item.name || p.name.includes(item.name) || item.name.includes(p.name)));
-    if (matched) {
-      await supabaseAdmin.from('order_items').update({ product_id: matched.id }).eq('id', item.id);
-      fixed++;
-    }
-  }
+  // 3) 상품 데이터 다시 로드 (업데이트된 매입가 반영)
+  const { data: freshProducts } = await supabaseAdmin.from('products').select('id, name, vendor_id, cost_price');
+  const productMap = {};
+  (freshProducts || []).forEach(p => { productMap[p.id] = p; });
 
   // 4) 방송-상품 매핑
   const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
@@ -47,11 +63,8 @@ module.exports = async function handler(req, res) {
     }
   });
 
-  // 5) 결제완료 주문 발주 생성
+  // 5) 결제완료 주문 → 거래처+방송 단위 그룹핑
   const { data: orders } = await supabaseAdmin.from('orders').select('id').eq('status', '결제완료');
-  const productMap = {};
-  (allProducts || []).forEach(p => { productMap[p.id] = p; });
-
   const allGroups = {};
   let processed = 0;
 
@@ -60,24 +73,22 @@ module.exports = async function handler(req, res) {
       .select('product_id, name, color, size, qty').eq('order_id', order.id);
     if (!items || items.length === 0) continue;
 
+    // product_id 복구
     for (const item of items) {
       if (!item.product_id && item.name) {
-        const matched = (allProducts || []).find(p => p.name === item.name || p.name.includes(item.name) || item.name.includes(p.name));
+        const matched = (freshProducts || []).find(p => p.name === item.name || p.name.includes(item.name) || item.name.includes(p.name));
         if (matched) item.product_id = matched.id;
       }
     }
 
     for (const item of items.filter(i => i.product_id)) {
       const prod = productMap[item.product_id];
-      if (!prod) continue;
-      // vendor_id 조회 (products에서 직접)
-      const { data: fullProd } = await supabaseAdmin.from('products').select('vendor_id').eq('id', item.product_id).single();
-      if (!fullProd || !fullProd.vendor_id) continue;
+      if (!prod || !prod.vendor_id) continue;
 
       const bc = productBroadcastMap[item.product_id] || { broadcastId: 0, broadcastTitle: '' };
-      const groupKey = `${fullProd.vendor_id}_${bc.broadcastId}`;
+      const groupKey = `${prod.vendor_id}_${bc.broadcastId}`;
       if (!allGroups[groupKey]) {
-        allGroups[groupKey] = { vendorId: fullProd.vendor_id, broadcastId: bc.broadcastId, broadcastTitle: bc.broadcastTitle, items: [] };
+        allGroups[groupKey] = { vendorId: prod.vendor_id, broadcastId: bc.broadcastId, broadcastTitle: bc.broadcastTitle, items: [] };
       }
       const existing = allGroups[groupKey].items.find(ei =>
         ei.product_id === item.product_id && ei.color_name === (item.color || '') && ei.size_name === (item.size || '')
@@ -126,9 +137,8 @@ module.exports = async function handler(req, res) {
 
   return ok(res, {
     message: '마이그레이션 완료',
-    costPriceUpdated: costUpdated,
-    updatedProducts: (zeroCostProducts || []).map(p => ({ name: p.name, price: p.price, newCostPrice: Math.round((p.price||0)*0.45/1000)*1000 })),
-    orderItemsFixed: fixed,
+    priceUpdated,
+    priceResults,
     ordersProcessed: processed,
     purchaseOrdersCreated: poCreated,
     groups: Object.values(allGroups).map(g => ({
