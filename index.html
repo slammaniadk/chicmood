@@ -417,8 +417,7 @@
         <section class="pb-16">
           <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-10">방송 목록</p>
           <div class="grid sm:grid-cols-2 gap-6">
-            ${broadcasts.filter(b => b.status === 'live' || b.status === 'upcoming').map(b => {
-              const isLive = b.status === 'live';
+            ${broadcasts.filter(b => b.status === 'live').map(b => {
               const cols = Math.min(b.previewImages.length, 3) || 1;
               return `
                 <a href="#live/${b.id}" class="block bg-white border border-warm-200 rounded-xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1">
@@ -427,9 +426,7 @@
                       ${b.previewImages.slice(0,3).map(img => `<img src="${img}" alt="" class="w-full h-full object-cover" />`).join('')}
                     </div>
                     <div class="absolute top-3 left-3">
-                      ${isLive
-                        ? '<span class="bg-red-500 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full animate-pulse">● LIVE</span>'
-                        : '<span class="bg-blue-500/80 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full">방송 예정</span>'}
+                      <span class="bg-red-500 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full animate-pulse">● LIVE</span>
                     </div>
                   </div>
                   <div class="p-5">
@@ -442,7 +439,7 @@
                 </a>
               `;
             }).join('')}
-            ${broadcasts.filter(b => b.status === 'live' || b.status === 'upcoming').length === 0 ? '<p class="text-center text-warm-400 text-sm py-8 col-span-2">현재 진행 중이거나 예정된 방송이 없습니다</p>' : ''}
+            ${broadcasts.filter(b => b.status === 'live').length === 0 ? '<p class="text-center text-warm-400 text-sm py-8 col-span-2">현재 진행 중인 LIVE 방송이 없습니다</p>' : ''}
           </div>
         </section>
         <section class="pb-8">

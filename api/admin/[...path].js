@@ -577,7 +577,7 @@ async function handleBroadcasts(req, res) {
 
     const { data: broadcast, error } = await supabaseAdmin
       .from('broadcasts')
-      .insert({ title, date_text: date || '', scheduled_at: scheduledAt || null, status: status || 'upcoming', description: description || '' })
+      .insert({ title, date_text: date || '', scheduled_at: scheduledAt || null, status: status || 'live', description: description || '' })
       .select('id')
       .single();
 

@@ -1267,8 +1267,8 @@
       ]);
       allProducts = products;
 
-      const statuses = ['all','live','upcoming','ended'];
-      const statusTabLabels = { all:'전체', live:'LIVE', upcoming:'예정', ended:'종료' };
+      const statuses = ['all','live','ended'];
+      const statusTabLabels = { all:'전체', live:'LIVE', ended:'종료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -1376,7 +1376,7 @@
     try {
       await api('/admin/broadcasts', {
         method: 'POST',
-        body: JSON.stringify({ title: b.title + ' (복사)', date: b.date, status: 'upcoming', description: b.description, productIds: b.productIds })
+        body: JSON.stringify({ title: b.title + ' (복사)', date: b.date, status: 'live', description: b.description, productIds: b.productIds })
       });
       showToast('방송이 복사되었습니다');
       renderBroadcasts(document.getElementById('page-content'));
@@ -1385,7 +1385,7 @@
 
   async function openBroadcastModal(broadcast) {
     const isEdit = !!broadcast;
-    const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'upcoming', description: '', productIds: [] };
+    const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'live', description: '', productIds: [] };
     // 항상 최신 상품 목록 로드
     try { allProducts = await api('/admin/products'); } catch(e) { /* keep cached */ }
     const products = allProducts || [];
@@ -1412,7 +1412,6 @@
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태</label>
               <select id="bm-status" class="input-field">
-                <option value="upcoming" ${b.status==='upcoming'?'selected':''}>예정</option>
                 <option value="live" ${b.status==='live'?'selected':''}>LIVE</option>
                 <option value="ended" ${b.status==='ended'?'selected':''}>종료</option>
               </select>
