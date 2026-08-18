@@ -775,7 +775,7 @@
                   const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
                   return `
                     <tr>
-                      <td><input type="checkbox" class="ship-chk" value="${o.id}" ${shippingChecked.has(o.id)?'checked':''} onchange="toggleShippingCheck('${o.id}',this.checked)" /></td>
+                      <td><input type="checkbox" class="ship-chk" value="${o.id}" ${shippingChecked.has(String(o.id))?'checked':''} onchange="toggleShippingCheck('${o.id}',this.checked)" /></td>
                       <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
                       <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
                       <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
@@ -813,7 +813,7 @@
     if (cnt) cnt.textContent = shippingChecked.size;
   }
   function toggleAllShipping(checked, ids) {
-    ids.forEach(id => { if (checked) shippingChecked.add(id); else shippingChecked.delete(id); });
+    ids.forEach(id => { const sid = String(id); if (checked) shippingChecked.add(sid); else shippingChecked.delete(sid); });
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
