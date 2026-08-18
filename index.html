@@ -559,11 +559,7 @@
                   <div class="flex items-center justify-between mb-3">
                     <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">사이즈</span>
                   </div>
-                  <div class="flex flex-wrap gap-2" id="pd-sizes">
-                    ${(p.size || 'FREE').split(/[,\/\s]+/).filter(s => s.trim()).map((s, i) => `
-                      <button class="chip ${i===0?'active':''}" onclick="pdSelectSize(${i},this)">${s.trim()}</button>
-                    `).join('')}
-                  </div>
+                  <p class="text-sm font-semibold text-warm-700">${p.size || 'FREE'}</p>
                 </div>
                 <div>
                   <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 block mb-3">수량</span>
@@ -577,16 +573,6 @@
               <div class="mt-8 space-y-3">
                 <button class="btn-primary w-full" onclick="pdAddToCart(${p.id})">장바구니 담기</button>
                 <button class="btn-outline w-full" onclick="pdBuyNow(${p.id})">바로 구매하기</button>
-              </div>
-              <div class="mt-6 grid grid-cols-3 gap-4 text-center">
-                <div><svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><p class="text-[10px] text-warm-400">무료배송 (10만↑)</p></div>
-                <div><svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p class="text-[10px] text-warm-400">정품보장</p></div>
-                <div><svg class="w-5 h-5 mx-auto text-warm-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><p class="text-[10px] text-warm-400">7일 교환/반품</p></div>
-              </div>
-              <div class="mt-8 pt-6 border-t border-warm-200">
-                <p class="text-[12px] text-warm-500 leading-[1.9] font-light">
-                  <span class="text-warm-400">· 소재: ${p.material || '상세 참고'}<br />· 제조국: 대한민국</span>
-                </p>
               </div>
             </div>
           </div>
@@ -631,9 +617,8 @@
   function pdAddToCart(productId) {
     const p = cachedProductDetail[productId];
     if (!p) return;
-    const sizeList = (p.size || 'FREE').split(/[,\/\s]+/).filter(s => s.trim());
     const color = p.colors[pdState.selectedColor].name;
-    const size = sizeList[pdState.selectedSize] || sizeList[0];
+    const size = p.size || 'FREE';
 
     const existing = cart.find(item => item.productId === productId && item.color === color && item.size === size);
     if (existing) { existing.qty += pdState.qty; }
