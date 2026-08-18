@@ -614,11 +614,11 @@
             <table>
               <thead>
                 <tr>
-                  <th>주문번호</th><th>주문자</th><th>상품</th><th>거래처</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
+                  <th>주문번호</th><th>주문자</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -632,6 +632,7 @@
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
                       <td class="text-[12px] text-warm-500 max-w-[200px]">${escapeHtml(itemsSummary)}</td>
+                      <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.broadcastName || '-')}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(vendorNames || '-')}</td>
                       <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
                       <td><span class="status-badge status-${o.status}">${o.status}</span></td>

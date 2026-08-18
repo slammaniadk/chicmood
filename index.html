@@ -115,7 +115,7 @@
 
   <!-- 상단 안내 배너 -->
   <div class="bg-warm-800 text-warm-100 text-center py-2 text-[11px] tracking-wider font-light">
-    <a href="https://youtube.com/@chicmood" target="_blank" rel="noopener" class="hover:text-white transition-colors">▶ 유튜브 LIVE</a> &middot; <a href="https://www.tiktok.com/@chicmood_1" target="_blank" rel="noopener" class="hover:text-white transition-colors">♪ 틱톡 LIVE</a> &middot; <span class="font-semibold">10만원 이상 무료배송</span> &middot; 카카오채널 문의 가능
+    <a href="https://youtube.com/@chicmood" target="_blank" rel="noopener" class="hover:text-white transition-colors">▶ 유튜브 LIVE</a> &middot; <a href="https://www.tiktok.com/@chicmood_01" target="_blank" rel="noopener" class="hover:text-white transition-colors">♪ 틱톡 LIVE</a> &middot; <span class="font-semibold">10만원 이상 무료배송</span> &middot; 카카오채널 문의 가능
   </div>
 
   <!-- 헤더 -->
@@ -157,7 +157,7 @@
       <a href="https://youtube.com/@chicmood" target="_blank" rel="noopener" class="text-warm-400 hover:text-warm-700 transition-colors" title="유튜브 채널">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 00.5 6.2 31.9 31.9 0 000 12a31.9 31.9 0 00.5 5.8 3 3 0 002.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 002.1-2.1A31.9 31.9 0 0024 12a31.9 31.9 0 00-.5-5.8zM9.6 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
       </a>
-      <a href="https://www.tiktok.com/@chicmood_1" target="_blank" rel="noopener" class="text-warm-400 hover:text-warm-700 transition-colors" title="틱톡">
+      <a href="https://www.tiktok.com/@chicmood_01" target="_blank" rel="noopener" class="text-warm-400 hover:text-warm-700 transition-colors" title="틱톡">
         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.87a8.16 8.16 0 004.76 1.52V6.94a4.84 4.84 0 01-1-.25z"/></svg>
       </a>
       <a href="https://pf.kakao.com/_xkIxcxj" target="_blank" rel="noopener" class="text-warm-400 hover:text-warm-700 transition-colors" title="카카오 채널">
@@ -382,7 +382,7 @@
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 00.5 6.2 31.9 31.9 0 000 12a31.9 31.9 0 00.5 5.8 3 3 0 002.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 002.1-2.1A31.9 31.9 0 0024 12a31.9 31.9 0 00-.5-5.8zM9.6 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
                   유튜브 LIVE
                 </a>
-                <a href="https://www.tiktok.com/@chicmood_1" target="_blank" rel="noopener" class="btn-outline inline-flex items-center gap-2" style="border-color:#fff;color:#fff;">
+                <a href="https://www.tiktok.com/@chicmood_01" target="_blank" rel="noopener" class="btn-outline inline-flex items-center gap-2" style="border-color:#fff;color:#fff;">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.87a8.16 8.16 0 004.76 1.52V6.94a4.84 4.84 0 01-1-.25z"/></svg>
                   틱톡 LIVE
                 </a>
@@ -517,7 +517,7 @@
   async function renderProduct(el, id) {
     showPageSpinner(el);
     try {
-      if (!cachedProductDetail[id]) cachedProductDetail[id] = await api('/products/' + id);
+      cachedProductDetail[id] = await api('/products/' + id);
       const p = cachedProductDetail[id];
 
       pdState = { selectedColor: 0, selectedSize: 0, qty: 1, imageIndex: 0 };
@@ -544,7 +544,7 @@
               <p class="text-[11px] text-warm-400 tracking-[0.2em] uppercase mb-2 font-light">CHICMOOD LIVE</p>
               <h1 class="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-warm-900 italic mb-1">${p.name}</h1>
               <div class="flex items-baseline gap-3 mt-4 mb-6">
-                <span class="font-serif text-3xl font-bold text-warm-800">${fmt(p.price)}</span>
+                <span class="text-3xl font-bold text-warm-800">${fmt(p.price)}</span>
               </div>
               <div class="border-t border-warm-200 pt-6 space-y-6 flex-1">
                 <div>
@@ -553,7 +553,7 @@
                   </div>
                   <div class="flex flex-wrap gap-2" id="pd-colors">
                     ${p.colors.map((c, i) => `
-                      <button class="chip ${i===0?'active':''}" onclick="pdSelectColor(${id},${i})" data-idx="${i}">${c.name}</button>
+                      <button class="chip ${i===0?'active':''}" onclick="pdSelectColor(${id},${i})" data-idx="${i}"><span class="w-3.5 h-3.5 rounded-full border border-warm-300 inline-block align-middle" style="background:${c.hex}"></span> ${c.name}</button>
                     `).join('')}
                   </div>
                 </div>
@@ -561,7 +561,11 @@
                   <div class="flex items-center justify-between mb-3">
                     <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">사이즈</span>
                   </div>
-                  <p class="text-sm font-semibold text-warm-700">${p.size || 'FREE'}</p>
+                  <div class="flex flex-wrap gap-2" id="pd-sizes">
+                    ${(p.size || 'FREE').split(',').map((s,i) => s.trim()).filter(Boolean).map((s,i) => `
+                      <button class="chip ${i===0?'active':''}" onclick="pdSelectSize(${i},this)" data-idx="${i}">${s}</button>
+                    `).join('')}
+                  </div>
                 </div>
                 <div>
                   <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 block mb-3">수량</span>
@@ -620,12 +624,13 @@
     const p = cachedProductDetail[productId];
     if (!p) return;
     const color = p.colors[pdState.selectedColor].name;
-    const size = p.size || 'FREE';
+    const sizes = (p.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean);
+    const size = sizes[pdState.selectedSize] || sizes[0] || 'FREE';
 
     const existing = cart.find(item => item.productId === productId && item.color === color && item.size === size);
     if (existing) { existing.qty += pdState.qty; }
     else {
-      cart.push({ productId, name: p.name, price: p.price, color, size, qty: pdState.qty, image: p.images[0] });
+      cart.push({ productId, name: p.name, price: p.price, color, size, qty: pdState.qty, image: p.images[0], broadcastId: p.broadcastId || null });
     }
     saveCart(); updateCartBadge();
     showToast('장바구니에 담았습니다');
@@ -694,7 +699,7 @@
           ${shippingFee > 0 ? `<p class="text-[11px] text-warm-400 font-light">${fmt(100000 - subtotal)} 더 담으면 무료배송!</p>` : ''}
           <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
             <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
-            <span class="font-serif text-2xl font-bold text-warm-800">${fmt(total)}</span>
+            <span class="text-2xl font-bold text-warm-800">${fmt(total)}</span>
           </div>
         </div>
 
@@ -750,7 +755,7 @@
           </div>
           <div class="border-t border-warm-200 mt-3 pt-3 flex justify-between items-center">
             <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
-            <span class="font-serif text-xl font-bold text-warm-800">${fmt(total)}</span>
+            <span class="text-xl font-bold text-warm-800">${fmt(total)}</span>
           </div>
         </div>
 
@@ -823,10 +828,11 @@
     document.getElementById('overlay-loading').classList.remove('hidden');
 
     try {
+      const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
       const order = await api('/orders', {
         method: 'POST',
         body: JSON.stringify({
-          name, phone, social, address, memo,
+          name, phone, social, address, memo, broadcastId,
           items: cart.map(i => ({ productId: i.productId, name: i.name, color: i.color, size: i.size, qty: i.qty }))
         })
       });

@@ -6,7 +6,7 @@ module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
 
-  const { name, phone, social, address, memo, items } = req.body;
+  const { name, phone, social, address, memo, items, broadcastId } = req.body;
 
   // 필수 필드 검증
   if (!name || !phone || !address) {
@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
   }
 
   const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0);
-  const shippingFee = subtotal >= 100000 ? 0 : 3000;
+  const shippingFee = subtotal >= 100000 ? 0 : 4000;
   const total = subtotal + shippingFee;
 
   // 주문번호 생성 (DB 시퀀스 기반)
@@ -81,23 +81,37 @@ module.exports = async function handler(req, res) {
   }
 
   // 주문 생성
-  const { data: order, error: oErr } = await supabaseAdmin
+  const orderData = {
+    order_no: orderNo,
+    user_id: userId,
+    name,
+    phone,
+    social: social || null,
+    address,
+    memo: memo || null,
+    subtotal,
+    shipping_fee: shippingFee,
+    total,
+    status: '입금대기',
+  };
+  if (broadcastId) orderData.broadcast_id = parseInt(broadcastId);
+
+  let order, oErr;
+  ({ data: order, error: oErr } = await supabaseAdmin
     .from('orders')
-    .insert({
-      order_no: orderNo,
-      user_id: userId,
-      name,
-      phone,
-      social: social || null,
-      address,
-      memo: memo || null,
-      subtotal,
-      shipping_fee: shippingFee,
-      total,
-      status: '입금대기',
-    })
+    .insert(orderData)
     .select('id, order_no, subtotal, shipping_fee, total, status, created_at')
-    .single();
+    .single());
+
+  // broadcast_id 컬럼이 아직 없으면 컬럼 제외 후 재시도
+  if (oErr && oErr.message && oErr.message.includes('broadcast_id')) {
+    delete orderData.broadcast_id;
+    ({ data: order, error: oErr } = await supabaseAdmin
+      .from('orders')
+      .insert(orderData)
+      .select('id, order_no, subtotal, shipping_fee, total, status, created_at')
+      .single());
+  }
 
   if (oErr) return fail(res, oErr.message, 500);
 

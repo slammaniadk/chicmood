@@ -126,14 +126,27 @@ async function handleOrders(req, res) {
 
   let query = supabaseAdmin
     .from('orders')
-    .select('*', { count: 'exact' })
+    .select('*, broadcasts:broadcast_id(id, title)', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limitNum - 1);
 
   if (status && status !== 'all') query = query.eq('status', status);
   if (search) query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%`);
 
-  const { data: orders, error, count } = await query;
+  let { data: orders, error, count } = await query;
+
+  // broadcast_id 컬럼이 없으면 join 없이 재시도
+  if (error && error.message && error.message.includes('broadcast_id')) {
+    query = supabaseAdmin
+      .from('orders')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+    if (status && status !== 'all') query = query.eq('status', status);
+    if (search) query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%`);
+    ({ data: orders, error, count } = await query);
+  }
+
   if (error) return fail(res, error.message, 500);
 
   const orderIds = orders.map(o => o.id);
@@ -166,6 +179,8 @@ async function handleOrders(req, res) {
     status: o.status,
     trackingNo: o.tracking_no,
     trackingCarrier: o.tracking_carrier,
+    broadcastId: o.broadcast_id || null,
+    broadcastName: o.broadcasts ? o.broadcasts.title : '',
     createdAt: o.created_at,
     items: items.filter(i => i.order_id === o.id).map(i => ({
       name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price, subtotal: i.subtotal,
@@ -256,6 +271,18 @@ async function deductInventory(orderId, action) {
 // 자동 발주 생성 헬퍼 (결제완료 시 거래처+방송 단위로 발주서 자동 생성/합산)
 async function createAutoPurchaseOrders(orderId) {
   try {
+    // 0) 주문의 broadcast_id 직접 조회
+    let orderBroadcastId = null;
+    let orderBroadcastTitle = '';
+    try {
+      const { data: orderData } = await supabaseAdmin.from('orders')
+        .select('broadcast_id, broadcasts:broadcast_id(id, title)').eq('id', orderId).single();
+      if (orderData && orderData.broadcast_id) {
+        orderBroadcastId = orderData.broadcast_id;
+        orderBroadcastTitle = orderData.broadcasts ? orderData.broadcasts.title : '';
+      }
+    } catch (e) { /* broadcast_id 컬럼 없으면 무시 */ }
+
     // 1) 주문 품목 조회
     const { data: items } = await supabaseAdmin.from('order_items')
       .select('product_id, name, color, size, qty').eq('order_id', orderId);
@@ -282,22 +309,28 @@ async function createAutoPurchaseOrders(orderId) {
     const productMap = {};
     products.forEach(p => { productMap[p.id] = p; });
 
-    // 3) 방송 정보 조회 (product_id → broadcast)
-    const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
-      .select('product_id, broadcast_id, broadcasts(id, title)')
-      .in('product_id', productIds)
-      .order('broadcast_id', { ascending: false });
-
-    // product_id → 가장 최근 방송 매핑
-    const productBroadcastMap = {};
-    (bcProducts || []).forEach(bp => {
-      if (!productBroadcastMap[bp.product_id]) {
-        productBroadcastMap[bp.product_id] = {
-          broadcastId: bp.broadcast_id,
-          broadcastTitle: bp.broadcasts ? bp.broadcasts.title : '',
-        };
-      }
-    });
+    // 3) 방송 정보: 주문에 broadcast_id가 있으면 그걸 사용, 없으면 product→broadcast 간접 매핑
+    let productBroadcastMap = {};
+    if (orderBroadcastId) {
+      // 주문에 직접 연결된 방송 사용
+      productIds.forEach(pid => {
+        productBroadcastMap[pid] = { broadcastId: orderBroadcastId, broadcastTitle: orderBroadcastTitle };
+      });
+    } else {
+      // fallback: product_id → broadcast_products → broadcast (간접 매핑)
+      const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
+        .select('product_id, broadcast_id, broadcasts(id, title)')
+        .in('product_id', productIds)
+        .order('broadcast_id', { ascending: false });
+      (bcProducts || []).forEach(bp => {
+        if (!productBroadcastMap[bp.product_id]) {
+          productBroadcastMap[bp.product_id] = {
+            broadcastId: bp.broadcast_id,
+            broadcastTitle: bp.broadcasts ? bp.broadcasts.title : '',
+          };
+        }
+      });
+    }
 
     // 4) (vendor_id, broadcast_id) 기준 그룹핑
     const groups = {};
