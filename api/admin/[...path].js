@@ -143,6 +143,16 @@ async function handleOrders(req, res) {
     items = itemsData || [];
   }
 
+  // 거래처명 조회를 위해 product_id → vendor 매핑
+  const productIds = [...new Set(items.filter(i => i.product_id).map(i => i.product_id))];
+  let vendorMap = {};
+  if (productIds.length > 0) {
+    const { data: prods } = await supabaseAdmin.from('products').select('id, vendor_id, vendors(name)').in('id', productIds);
+    (prods || []).forEach(p => {
+      if (p.vendors) vendorMap[p.id] = p.vendors.name;
+    });
+  }
+
   const result = orders.map(o => ({
     id: o.id,
     orderNo: o.order_no,
@@ -159,6 +169,7 @@ async function handleOrders(req, res) {
     createdAt: o.created_at,
     items: items.filter(i => i.order_id === o.id).map(i => ({
       name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price, subtotal: i.subtotal,
+      vendorName: vendorMap[i.product_id] || '',
     })),
   }));
 
@@ -264,6 +275,7 @@ async function handleProducts(req, res) {
       vendorId: p.vendor_id,
       vendorName: p.vendors ? p.vendors.name : '',
       costPrice: p.cost_price || 0,
+      size: p.size || '',
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
     }));
@@ -272,10 +284,11 @@ async function handleProducts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice } = req.body;
-    if (!name || !price) return fail(res, '상품명과 가격은 필수입니다');
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size } = req.body;
+    if (!name) return fail(res, '상품명은 필수입니다');
 
-    const insertData = { name, price, original_price: originalPrice || price, discount: discount || 0, description: description || '', material: material || '' };
+    const finalPrice = price || costPrice || 0;
+    const insertData = { name, price: finalPrice, original_price: originalPrice || finalPrice, discount: discount || 0, description: description || '', material: material || '', size: size || '' };
     if (vendorId) insertData.vendor_id = vendorId;
     if (costPrice) insertData.cost_price = costPrice;
 
@@ -305,7 +318,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -316,6 +329,7 @@ async function handleProductDetail(req, res, id) {
     if (material !== undefined) update.material = material;
     if (vendorId !== undefined) update.vendor_id = vendorId;
     if (costPrice !== undefined) update.cost_price = costPrice;
+    if (size !== undefined) update.size = size;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('products').update(update).eq('id', id);

@@ -611,15 +611,16 @@
             <table>
               <thead>
                 <tr>
-                  <th>주문번호</th><th>주문자</th><th>상품</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
+                  <th>주문번호</th><th>주문자</th><th>상품</th><th>거래처</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                   const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
+                  const vendorNames = [...new Set(o.items.map(i => i.vendorName).filter(Boolean))].join(', ');
                   return `
                     <tr>
                       <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
@@ -628,6 +629,7 @@
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
                       <td class="text-[12px] text-warm-500 max-w-[200px]">${escapeHtml(itemsSummary)}</td>
+                      <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(vendorNames || '-')}</td>
                       <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
                       <td><span class="status-badge status-${o.status}">${o.status}</span></td>
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
@@ -827,9 +829,8 @@
       const rows = data.rows || [];
       if (rows.length === 0) { showToast('내보낼 데이터가 없습니다'); return; }
 
-      // 로젠택배 엑셀 형식
-      const header = ['수취인명','','주소','전화번호1','전화번호2','수량','배송비','코드','상품상세','','배송메모'];
-      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      // 로젠택배 엑셀 형식 (헤더 없이 데이터만 – 로젠 업로드 양식)
+      const ws = XLSX.utils.aoa_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '로젠택배');
 
@@ -1025,7 +1026,7 @@
   let vendorListCache = null;
   async function openProductModal(product) {
     const isEdit = !!product;
-    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0 };
+    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0, size: '' };
     pmImageUrls = [...p.images];
 
     // 거래처 목록 로드
@@ -1048,7 +1049,7 @@
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품명 *</label>
             <input id="pm-name" class="input-field" value="${escapeHtml(p.name)}" placeholder="상품명" />
           </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-3">
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처</label>
               <select id="pm-vendor" class="input-field">
@@ -1060,24 +1061,10 @@
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">매입가</label>
               <input id="pm-cost" type="number" class="input-field" value="${p.costPrice||''}" placeholder="매입가" />
             </div>
-          </div>
-          <div class="grid grid-cols-3 gap-3">
             <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">판매가 *</label>
-              <input id="pm-price" type="number" class="input-field" value="${p.price}" placeholder="89000" />
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
+              <input id="pm-size" class="input-field" value="${escapeHtml(p.size||'')}" placeholder="FREE, S/M/L 등" />
             </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">원가</label>
-              <input id="pm-original" type="number" class="input-field" value="${p.originalPrice}" placeholder="128000" />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">할인(%)</label>
-              <input id="pm-discount" type="number" class="input-field" value="${p.discount}" placeholder="30" />
-            </div>
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">설명</label>
-            <textarea id="pm-desc" class="input-field resize-none" rows="2">${escapeHtml(p.description)}</textarea>
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">소재</label>
@@ -1100,8 +1087,8 @@
             <div id="pm-upload-status" class="text-[11px] text-warm-400 mt-1 hidden"></div>
           </div>
           <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상 (이름:헥스코드, 줄바꿈 구분)</label>
-            <textarea id="pm-colors" class="input-field resize-none" rows="3" placeholder="베이지:#d4a574\n네이비:#2c3e6b">${p.colors.map(c => c.name + ':' + c.hex).join('\n')}</textarea>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상 (줄바꿈 구분)</label>
+            <textarea id="pm-colors" class="input-field resize-none" rows="3" placeholder="베이지\n네이비\n블랙">${p.colors.map(c => c.name).join('\n')}</textarea>
           </div>
           <button class="btn-primary w-full" onclick="saveProduct(${isEdit ? p.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
         </form>
@@ -1178,34 +1165,32 @@
 
   async function saveProduct(id) {
     const name = document.getElementById('pm-name').value.trim();
-    const price = parseInt(document.getElementById('pm-price').value);
-    const originalPrice = parseInt(document.getElementById('pm-original').value) || price;
-    const discount = parseInt(document.getElementById('pm-discount').value) || 0;
-    const description = document.getElementById('pm-desc').value.trim();
     const material = document.getElementById('pm-material').value.trim();
     const vendorId = document.getElementById('pm-vendor').value ? parseInt(document.getElementById('pm-vendor').value) : null;
     const costPrice = parseInt(document.getElementById('pm-cost').value) || 0;
+    const size = document.getElementById('pm-size').value.trim();
+    const price = costPrice; // 매입가를 판매가로 사용
+    const originalPrice = costPrice;
+    const discount = 0;
+    const description = '';
 
     const images = pmImageUrls.filter(Boolean);
     const colorLines = document.getElementById('pm-colors').value.split('\n').map(s => s.trim()).filter(Boolean);
-    const colors = colorLines.map(line => {
-      const [n, h] = line.split(':');
-      return { name: n.trim(), hex: (h || '').trim() };
-    }).filter(c => c.name && c.hex);
+    const colors = colorLines.map(c => ({ name: c, hex: '#000000' }));
 
-    if (!name || !price) { showToast('상품명과 가격은 필수입니다'); return; }
+    if (!name) { showToast('상품명은 필수입니다'); return; }
 
     try {
       if (id) {
         await api('/admin/products/' + id, {
           method: 'PATCH',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size })
         });
         showToast('상품이 수정되었습니다');
       } else {
         await api('/admin/products', {
           method: 'POST',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, size })
         });
         showToast('상품이 등록되었습니다');
       }
@@ -1362,9 +1347,11 @@
     } catch (e) { showToast(e.message || '복사에 실패했습니다'); }
   }
 
-  function openBroadcastModal(broadcast) {
+  async function openBroadcastModal(broadcast) {
     const isEdit = !!broadcast;
     const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'upcoming', description: '', productIds: [] };
+    // 항상 최신 상품 목록 로드
+    try { allProducts = await api('/admin/products'); } catch(e) { /* keep cached */ }
     const products = allProducts || [];
 
     const modal = document.createElement('div');
@@ -1396,10 +1383,6 @@
             </div>
           </div>
           <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">설명</label>
-            <textarea id="bm-desc" class="input-field resize-none" rows="2">${escapeHtml(b.description)}</textarea>
-          </div>
-          <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품 선택</label>
             <div class="border border-warm-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
               ${products.map(p => `
@@ -1424,7 +1407,7 @@
     const title = document.getElementById('bm-title').value.trim();
     const date = document.getElementById('bm-date').value.trim();
     const status = document.getElementById('bm-status').value;
-    const description = document.getElementById('bm-desc').value.trim();
+    const description = '';
     const productIds = Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value));
 
     if (!title) { showToast('방송 제목은 필수입니다'); return; }
@@ -1489,20 +1472,19 @@
             <div class="flex gap-2">
               ${filters.map(f => `<button class="filter-tab ${vendorFilter===f?'active':''}" onclick="vendorFilter='${f}';renderVendors(document.getElementById('page-content'))">${filterLabels[f]}</button>`).join('')}
             </div>
-            <input type="text" class="input-field" style="max-width:300px;" placeholder="거래처명, 담당자, 연락처 검색..." value="${escapeHtml(vendorSearch)}" onkeydown="if(event.key==='Enter'){vendorSearch=this.value;renderVendors(document.getElementById('page-content'))}" />
+            <input type="text" class="input-field" style="max-width:300px;" placeholder="거래처명, 연락처 검색..." value="${escapeHtml(vendorSearch)}" onkeydown="if(event.key==='Enter'){vendorSearch=this.value;renderVendors(document.getElementById('page-content'))}" />
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>ID</th><th>거래처명</th><th>담당자</th><th>연락처</th><th>이메일</th><th>상품수</th><th>상태</th><th>관리</th></tr></thead>
+              <thead><tr><th>ID</th><th>거래처명</th><th>연락처</th><th>거래처주소</th><th>상품수</th><th>상태</th><th>관리</th></tr></thead>
               <tbody>
-                ${vendors.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">등록된 거래처가 없습니다</td></tr>' : ''}
+                ${vendors.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">등록된 거래처가 없습니다</td></tr>' : ''}
                 ${vendors.map(v => `
                   <tr>
                     <td class="text-warm-400">${v.id}</td>
                     <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openVendorDetail(${v.id})">${escapeHtml(v.name)}</td>
-                    <td>${escapeHtml(v.contact||'')}</td>
                     <td class="text-[12px]">${escapeHtml(v.phone||'')}</td>
-                    <td class="text-[12px]">${escapeHtml(v.email||'')}</td>
+                    <td class="text-[12px]">${escapeHtml(v.address||'')}</td>
                     <td>${v.productCount || 0}개</td>
                     <td>
                       <span class="status-badge ${v.isActive ? 'status-결제완료' : 'status-취소'} cursor-pointer" onclick="toggleVendorActive(${v.id}, ${!v.isActive})">${v.isActive ? '활성' : '비활성'}</span>
@@ -1631,23 +1613,13 @@
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처명 *</label>
             <input id="vm-name" class="input-field" value="${escapeHtml(v.name)}" placeholder="거래처명" />
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">담당자</label>
-              <input id="vm-contact" class="input-field" value="${escapeHtml(v.contact||'')}" placeholder="담당자명" />
-            </div>
-            <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">연락처</label>
-              <input id="vm-phone" class="input-field" value="${escapeHtml(v.phone||'')}" placeholder="010-0000-0000" />
-            </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">연락처</label>
+            <input id="vm-phone" class="input-field" value="${escapeHtml(v.phone||'')}" placeholder="010-0000-0000" />
           </div>
           <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">이메일</label>
-            <input id="vm-email" type="email" class="input-field" value="${escapeHtml(v.email||'')}" placeholder="vendor@email.com" />
-          </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">주소</label>
-            <input id="vm-address" class="input-field" value="${escapeHtml(v.address||'')}" placeholder="주소" />
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처주소</label>
+            <input id="vm-address" class="input-field" value="${escapeHtml(v.address||'')}" placeholder="거래처 주소" />
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">입금계좌</label>
@@ -1665,14 +1637,17 @@
     document.body.appendChild(modal);
   }
 
+  let _savingVendor = false;
   async function saveVendor(id) {
+    if (_savingVendor) return;
+    _savingVendor = true;
     const name = document.getElementById('vm-name').value.trim();
-    if (!name) { showToast('거래처명은 필수입니다'); return; }
+    if (!name) { _savingVendor = false; showToast('거래처명은 필수입니다'); return; }
     const body = {
       name,
-      contact: document.getElementById('vm-contact').value.trim(),
+      contact: '',
       phone: document.getElementById('vm-phone').value.trim(),
-      email: document.getElementById('vm-email').value.trim(),
+      email: '',
       address: document.getElementById('vm-address').value.trim(),
       bankInfo: document.getElementById('vm-bank').value.trim(),
       memo: document.getElementById('vm-memo').value.trim(),
@@ -1685,15 +1660,17 @@
         await api('/admin/vendors', { method: 'POST', body: JSON.stringify(body) });
         showToast('거래처가 등록되었습니다');
       }
+      vendorListCache = null; // 거래처 목록 캐시 초기화
       document.getElementById('vendor-modal').remove();
       renderVendors(document.getElementById('page-content'));
-    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); } finally { _savingVendor = false; }
   }
 
   async function deleteVendor(id) {
     if (!confirm('이 거래처를 삭제하시겠습니까?')) return;
     try {
       await api('/admin/vendors/' + id, { method: 'DELETE' });
+      vendorListCache = null; // 거래처 목록 캐시 초기화
       showToast('거래처가 삭제되었습니다');
       renderVendors(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
