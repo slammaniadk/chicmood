@@ -245,8 +245,8 @@ async function handleOrderDetail(req, res, id) {
     await deductInventory(id, 'sale');
     await createAutoPurchaseOrders(id);
   }
-  // 취소 시 결제완료였던 주문이면 재고 복원 + 발주 수량 차감
-  if (status === '취소' && prevStatus === '결제완료') {
+  // 결제완료에서 다른 상태로 변경 시 재고 복원 + 발주 수량 차감
+  if (prevStatus === '결제완료' && status !== '결제완료') {
     await deductInventory(id, 'cancel');
     await deductPurchaseOrderQty(id);
   }
