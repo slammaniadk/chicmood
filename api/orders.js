@@ -16,17 +16,22 @@ module.exports = async function handler(req, res) {
     return fail(res, '주문 상품이 없습니다');
   }
 
-  // 서버에서 가격 계산 (클라이언트 가격 무시)
+  // 방송 없이 주문 차단
+  if (!broadcastId) {
+    return fail(res, '방송을 통해서만 주문이 가능합니다');
+  }
+
+  // 서버에서 가격 계산 (클라이언트 가격 무시) - 판매가(wholesale_price) 우선 사용
   const productIds = items.map(i => i.productId);
   const { data: products, error: pErr } = await supabaseAdmin
     .from('products')
-    .select('id, price')
+    .select('id, price, wholesale_price')
     .in('id', productIds);
 
   if (pErr) return fail(res, pErr.message, 500);
 
   const priceMap = {};
-  products.forEach(p => { priceMap[p.id] = p.price; });
+  products.forEach(p => { priceMap[p.id] = p.wholesale_price || p.price; });
 
   // 주문 항목 가격 계산
   const orderItems = items.map(item => {

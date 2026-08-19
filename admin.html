@@ -990,7 +990,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>매입가</th><th>도매가</th><th>색상</th><th>관리</th>
+                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>매입가</th><th>판매가</th><th>색상</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -1068,8 +1068,8 @@
               <input id="pm-cost" type="number" class="input-field" value="${p.costPrice||''}" placeholder="매입가" />
             </div>
             <div>
-              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">도매가</label>
-              <input id="pm-wholesale" type="number" class="input-field" value="${p.wholesalePrice||''}" placeholder="도매가" />
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">판매가</label>
+              <input id="pm-wholesale" type="number" class="input-field" value="${p.wholesalePrice||''}" placeholder="판매가" />
             </div>
           </div>
           <div>
@@ -1205,8 +1205,8 @@
     const wholesalePrice = parseInt(document.getElementById('pm-wholesale').value) || 0;
     const sizeChecked = [...document.querySelectorAll('.pm-size-cb:checked')].map(cb => cb.value);
     const size = sizeChecked.join(',');
-    const price = costPrice;
-    const originalPrice = costPrice;
+    const price = wholesalePrice || costPrice;
+    const originalPrice = wholesalePrice || costPrice;
     const discount = 0;
     const description = '';
 
@@ -2058,11 +2058,11 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[10px] text-warm-400 block mb-1">수량</label>
-                <input type="number" class="input-field" placeholder="수량" value="${item.qty}" min="1" onblur="poEditItems[${i}].qty=parseInt(this.value)||1;updatePOEditTotal()" />
+                <input type="number" class="input-field" placeholder="수량" value="${item.qty}" min="1" onblur="poEditItems[${i}].qty=parseInt(this.value)||1;updatePOEditTotal();validatePOEditCostPrice(${i})" />
               </div>
               <div>
                 <label class="text-[10px] text-warm-400 block mb-1">매입가</label>
-                <input type="number" class="input-field" placeholder="매입가" value="${item.costPrice}" min="0" onblur="poEditItems[${i}].costPrice=parseInt(this.value)||0;updatePOEditTotal()" />
+                <input type="number" id="po-edit-cost-${i}" class="input-field" placeholder="매입가" value="${item.costPrice}" min="0" style="${(!item.costPrice || item.costPrice <= 0) && item.productId ? 'border:1.5px solid #e53e3e;background:#fff5f5' : ''}" onblur="poEditItems[${i}].costPrice=parseInt(this.value)||0;updatePOEditTotal();validatePOEditCostPrice(${i})" />
               </div>
             </div>
           </div>
@@ -2079,6 +2079,18 @@
     const el = document.getElementById('po-detail-total');
     if (el) el.textContent = fmt(total);
   }
+  function validatePOEditCostPrice(idx) {
+    const el = document.getElementById('po-edit-cost-' + idx);
+    if (!el) return;
+    if (!poEditItems[idx].costPrice || poEditItems[idx].costPrice <= 0) {
+      el.style.border = '1.5px solid #e53e3e';
+      el.style.background = '#fff5f5';
+      el.focus();
+    } else {
+      el.style.border = '';
+      el.style.background = '';
+    }
+  }
 
   async function savePODetail(poId) {
     const status = document.getElementById('po-detail-status').value;
@@ -2087,6 +2099,12 @@
     if (poEditMode) {
       body.items = poEditItems.filter(i => i.productName);
       if (body.items.length === 0) { showToast('품목을 최소 1개 입력해주세요'); return; }
+      const invalidIdx = body.items.findIndex(i => !i.costPrice || i.costPrice <= 0);
+      if (invalidIdx >= 0) {
+        showToast('매입가를 입력해주세요');
+        validatePOEditCostPrice(invalidIdx);
+        return;
+      }
     }
     try {
       await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify(body) });

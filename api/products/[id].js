@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
   const { data: p, error } = await supabase
     .from('products')
     .select(`
-      id, name, price, original_price, discount, description, material, size,
+      id, name, price, wholesale_price, original_price, discount, description, material, size,
       product_images ( image_url, sort_order ),
       product_colors ( name, hex_code, sort_order ),
       broadcast_products ( broadcast_id )
@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
   const result = {
     id: p.id,
     name: p.name,
-    price: p.price,
+    price: p.wholesale_price || p.price,
     originalPrice: p.original_price,
     discount: p.discount,
     description: p.description,

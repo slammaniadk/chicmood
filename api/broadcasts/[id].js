@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
       broadcast_products (
         sort_order,
         products:product_id (
-          id, name, price, original_price, discount,
+          id, name, price, wholesale_price, original_price, discount,
           product_images ( image_url, sort_order ),
           product_colors ( name, hex_code, sort_order )
         )
@@ -33,7 +33,7 @@ module.exports = async function handler(req, res) {
       return {
         id: p.id,
         name: p.name,
-        price: p.price,
+        price: p.wholesale_price || p.price,
         originalPrice: p.original_price,
         discount: p.discount,
         images: (p.product_images || [])

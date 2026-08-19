@@ -822,10 +822,15 @@
     const social = document.getElementById('co-social').value.trim();
     const memo = document.getElementById('co-memo').value.trim();
 
+    const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
+    if (!broadcastId) {
+      showToast('방송을 통해서만 주문이 가능합니다');
+      return;
+    }
+
     document.getElementById('overlay-loading').classList.remove('hidden');
 
     try {
-      const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
       const order = await api('/orders', {
         method: 'POST',
         body: JSON.stringify({
