@@ -685,12 +685,11 @@
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">택배사</label>
             <select id="modal-carrier" class="input-field">
-              <option value="">선택</option>
+              <option value="로젠택배" ${trackingCarrier === '로젠택배' || !trackingCarrier ? 'selected' : ''}>로젠택배</option>
               <option value="CJ대한통운" ${trackingCarrier === 'CJ대한통운' ? 'selected' : ''}>CJ대한통운</option>
               <option value="한진택배" ${trackingCarrier === '한진택배' ? 'selected' : ''}>한진택배</option>
               <option value="롯데택배" ${trackingCarrier === '롯데택배' ? 'selected' : ''}>롯데택배</option>
               <option value="우체국택배" ${trackingCarrier === '우체국택배' ? 'selected' : ''}>우체국택배</option>
-              <option value="로젠택배" ${trackingCarrier === '로젠택배' ? 'selected' : ''}>로젠택배</option>
             </select>
           </div>
           <div>

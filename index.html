@@ -950,7 +950,7 @@
             </div>
             <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
               <span class="text-[11px] text-warm-400">총 결제금액 (배송비 ${order.shippingFee === 0 ? '무료' : fmt(order.shippingFee)} 포함)</span>
-              <span class="font-serif text-base font-bold text-warm-800">${fmt(order.total)}</span>
+              <span class="text-base font-bold text-warm-800">${fmt(order.total)}</span>
             </div>
             <div class="border-t border-warm-100 pt-3 mt-3 space-y-1">
               <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${escapeHtml(order.address)}</p>
@@ -1157,7 +1157,7 @@
                   </div>
                   <div class="border-t border-warm-100 mt-3 pt-3 flex justify-between items-center">
                     <span class="text-[11px] text-warm-400">총 결제금액</span>
-                    <span class="font-serif text-base font-bold text-warm-800">${fmt(order.total)}</span>
+                    <span class="text-base font-bold text-warm-800">${fmt(order.total)}</span>
                   </div>
                 </div>
               `;

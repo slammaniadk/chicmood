@@ -199,11 +199,11 @@ async function handleOrderDetail(req, res, id) {
   if (req.method === 'DELETE') {
     const { data: order } = await supabaseAdmin.from('orders').select('id, status, broadcast_id').eq('id', id).single();
     if (!order) return fail(res, '주문을 찾을 수 없습니다', 404);
-    // 결제완료 상태였으면 재고 복원 + 발주 차감
+    // 재고 복원 (결제완료 상태였을 때만) + 발주 차감 (항상 시도)
     if (order.status === '결제완료') {
       await deductInventory(id, 'cancel');
-      await deductPurchaseOrderQty(id);
     }
+    await deductPurchaseOrderQty(id);
     await supabaseAdmin.from('order_items').delete().eq('order_id', id);
     const { error } = await supabaseAdmin.from('orders').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
