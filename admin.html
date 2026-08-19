@@ -639,6 +639,7 @@
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
                       <td class="whitespace-nowrap">
                         <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}')">변경</button>
+                        <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
                       </td>
                     </tr>
                   `;
@@ -720,6 +721,15 @@
     } catch (e) {
       showToast(e.message || '상태 변경에 실패했습니다');
     }
+  }
+
+  async function deleteOrder(id, orderNo) {
+    if (!confirm(`주문 ${orderNo}을(를) 삭제하시겠습니까?\n연관된 발주 수량도 함께 차감됩니다.`)) return;
+    try {
+      await api('/admin/orders/' + id, { method: 'DELETE' });
+      showToast('주문이 삭제되었습니다');
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
   }
 
   // ============================================================

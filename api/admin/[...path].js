@@ -195,6 +195,21 @@ async function handleOrders(req, res) {
 //  ORDER DETAIL (PATCH)
 // ============================================================
 async function handleOrderDetail(req, res, id) {
+  // 주문 삭제
+  if (req.method === 'DELETE') {
+    const { data: order } = await supabaseAdmin.from('orders').select('id, status, broadcast_id').eq('id', id).single();
+    if (!order) return fail(res, '주문을 찾을 수 없습니다', 404);
+    // 결제완료 상태였으면 재고 복원 + 발주 차감
+    if (order.status === '결제완료') {
+      await deductInventory(id, 'cancel');
+      await deductPurchaseOrderQty(id);
+    }
+    await supabaseAdmin.from('order_items').delete().eq('order_id', id);
+    const { error } = await supabaseAdmin.from('orders').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { deleted: true });
+  }
+
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
@@ -230,9 +245,10 @@ async function handleOrderDetail(req, res, id) {
     await deductInventory(id, 'sale');
     await createAutoPurchaseOrders(id);
   }
-  // 취소 시 결제완료였던 주문이면 재고 복원
+  // 취소 시 결제완료였던 주문이면 재고 복원 + 발주 수량 차감
   if (status === '취소' && prevStatus === '결제완료') {
     await deductInventory(id, 'cancel');
+    await deductPurchaseOrderQty(id);
   }
 
   return ok(res, { id: data.id, orderNo: data.order_no, status: data.status, trackingNo: data.tracking_no, trackingCarrier: data.tracking_carrier });
@@ -266,6 +282,79 @@ async function deductInventory(orderId, action) {
       }
     }
   } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
+}
+
+// 주문 취소/삭제 시 발주 수량 차감 헬퍼
+async function deductPurchaseOrderQty(orderId) {
+  try {
+    // 주문의 방송 정보 조회
+    const { data: order } = await supabaseAdmin.from('orders')
+      .select('broadcast_id').eq('id', orderId).single();
+
+    // 주문 품목 조회
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size, qty').eq('order_id', orderId);
+    if (!items || items.length === 0) return;
+
+    // 상품의 vendor_id 조회
+    const productIds = [...new Set(items.map(i => i.product_id).filter(Boolean))];
+    if (productIds.length === 0) return;
+    const { data: products } = await supabaseAdmin.from('products')
+      .select('id, vendor_id').in('id', productIds);
+    const vendorMap = {};
+    (products || []).forEach(p => { vendorMap[p.id] = p.vendor_id; });
+
+    // 발주대기 상태의 발주서에서 해당 품목 수량 차감
+    for (const item of items) {
+      if (!item.product_id) continue;
+      const vendorId = vendorMap[item.product_id];
+      if (!vendorId) continue;
+
+      // 해당 거래처의 발주대기 발주서 찾기
+      let query = supabaseAdmin.from('purchase_orders')
+        .select('id').eq('vendor_id', vendorId).eq('status', '발주대기');
+      if (order && order.broadcast_id) {
+        query = query.eq('broadcast_id', order.broadcast_id);
+      }
+      const { data: pos } = await query;
+      if (!pos || pos.length === 0) continue;
+
+      for (const po of pos) {
+        const { data: poItem } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, qty, cost_price')
+          .eq('purchase_order_id', po.id)
+          .eq('product_id', item.product_id)
+          .eq('color_name', item.color || '')
+          .eq('size_name', item.size || '')
+          .single();
+
+        if (poItem) {
+          const newQty = poItem.qty - item.qty;
+          if (newQty <= 0) {
+            // 수량이 0 이하면 품목 삭제
+            await supabaseAdmin.from('purchase_order_items').delete().eq('id', poItem.id);
+          } else {
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, subtotal: newQty * poItem.cost_price }).eq('id', poItem.id);
+          }
+
+          // 남은 품목 확인 후 발주서 total 재계산 또는 삭제
+          const { data: remaining } = await supabaseAdmin.from('purchase_order_items')
+            .select('subtotal').eq('purchase_order_id', po.id);
+          if (!remaining || remaining.length === 0) {
+            // 품목이 모두 없어지면 발주서 삭제
+            await supabaseAdmin.from('purchase_orders').delete().eq('id', po.id);
+          } else {
+            const newTotal = remaining.reduce((s, i) => s + (i.subtotal || 0), 0);
+            await supabaseAdmin.from('purchase_orders').update({
+              total_amount: newTotal, updated_at: new Date().toISOString()
+            }).eq('id', po.id);
+          }
+          break; // 해당 품목은 처리 완료
+        }
+      }
+    }
+  } catch (e) { /* 발주 차감 실패해도 주문 처리는 유지 */ }
 }
 
 // 자동 발주 생성 헬퍼 (결제완료 시 거래처+방송 단위로 발주서 자동 생성/합산)
