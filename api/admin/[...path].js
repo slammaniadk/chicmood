@@ -300,10 +300,10 @@ async function createAutoPurchaseOrders(orderId) {
     const validItems = items.filter(i => i.product_id);
     if (validItems.length === 0) return;
 
-    // 2) 상품 정보 조회 (vendor_id, cost_price, name)
+    // 2) 상품 정보 조회 (vendor_id, cost_price, wholesale_price, name)
     const productIds = [...new Set(validItems.map(i => i.product_id))];
     const { data: products } = await supabaseAdmin.from('products')
-      .select('id, name, vendor_id, cost_price').in('id', productIds);
+      .select('id, name, vendor_id, cost_price, wholesale_price').in('id', productIds);
     if (!products || products.length === 0) return;
 
     const productMap = {};
@@ -348,21 +348,22 @@ async function createAutoPurchaseOrders(orderId) {
         color_name: item.color || '',
         size_name: item.size || '',
         qty: item.qty,
-        cost_price: prod.cost_price || 0,
+        cost_price: prod.wholesale_price || prod.cost_price || 0,
       });
     }
 
     // 5) 거래처+방송별 발주서 생성 또는 기존 발주대기 발주서에 합산
     for (const group of Object.values(groups)) {
-      const bcTag = group.broadcastId ? `[BC:${group.broadcastId}]` : '[BC:0]';
-      const memoPrefix = group.broadcastTitle ? `${group.broadcastTitle}` : '방송 미지정';
+      const memoText = group.broadcastTitle || '';
 
       // 기존 '발주대기' 발주서 확인 (동일 거래처 + 동일 방송)
       let existingPO = null;
-      const { data: candidatePOs } = await supabaseAdmin.from('purchase_orders')
-        .select('id, memo').eq('vendor_id', group.vendorId).eq('status', '발주대기')
-        .ilike('memo', `${bcTag}%`)
-        .order('id', { ascending: false }).limit(1);
+      let query = supabaseAdmin.from('purchase_orders')
+        .select('id, memo').eq('vendor_id', group.vendorId).eq('status', '발주대기');
+      if (group.broadcastId) {
+        query = query.eq('broadcast_id', group.broadcastId);
+      }
+      const { data: candidatePOs } = await query.order('id', { ascending: false }).limit(1);
       if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
 
       let poId;
@@ -408,10 +409,17 @@ async function createAutoPurchaseOrders(orderId) {
         const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
 
         const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
-        const memo = `${bcTag} ${memoPrefix}`;
-        const { data: newPO } = await supabaseAdmin.from('purchase_orders')
-          .insert({ po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo })
-          .select('id').single();
+        const insertData = { po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo: memoText };
+        if (group.broadcastId) insertData.broadcast_id = group.broadcastId;
+        let newPO;
+        ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+          .insert(insertData).select('id').single());
+        // broadcast_id 컬럼 미존재 시 fallback
+        if (!newPO && group.broadcastId) {
+          delete insertData.broadcast_id;
+          ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+            .insert(insertData).select('id').single());
+        }
         if (!newPO) continue;
         poId = newPO.id;
 
