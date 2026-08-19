@@ -199,6 +199,9 @@ async function handleOrderDetail(req, res, id) {
   if (req.method === 'DELETE') {
     const { data: order } = await supabaseAdmin.from('orders').select('id, status, broadcast_id').eq('id', id).single();
     if (!order) return fail(res, '주문을 찾을 수 없습니다', 404);
+    // 발주가 진행된 상태면 삭제 차단
+    const poBlock = await checkAdvancedPurchaseOrders(id);
+    if (poBlock) return fail(res, poBlock);
     // 재고 복원 (결제완료 상태였을 때만) + 발주 차감 (항상 시도)
     if (order.status === '결제완료') {
       await deductInventory(id, 'cancel');
@@ -216,11 +219,15 @@ async function handleOrderDetail(req, res, id) {
   const validStatuses = ['입금대기', '확인요청', '결제완료', '배송중', '송장완료', '취소'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 상태입니다: ${status}`);
 
-  // 결제완료 전환 시 기존 상태 확인 (중복 차감 방지)
+  // 기존 상태 확인 (중복 차감 방지 + 발주 진행 체크)
   let prevStatus = null;
-  if (status === '결제완료' || status === '취소') {
-    const { data: prev } = await supabaseAdmin.from('orders').select('status').eq('id', id).single();
-    if (prev) prevStatus = prev.status;
+  const { data: prev } = await supabaseAdmin.from('orders').select('status').eq('id', id).single();
+  if (prev) prevStatus = prev.status;
+
+  // 결제완료에서 되돌리거나 취소할 때 발주 진행 상태 체크
+  if (prevStatus === '결제완료' && status !== '결제완료') {
+    const poBlock = await checkAdvancedPurchaseOrders(id);
+    if (poBlock) return fail(res, poBlock);
   }
 
   const update = {};
@@ -282,6 +289,34 @@ async function deductInventory(orderId, action) {
       }
     }
   } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
+}
+
+// 발주가 발주대기 이후 단계로 진행되었는지 확인 (주문 삭제/취소 차단용)
+async function checkAdvancedPurchaseOrders(orderId) {
+  try {
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size').eq('order_id', orderId);
+    if (!items || items.length === 0) return null;
+
+    const productIds = [...new Set(items.map(i => i.product_id).filter(Boolean))];
+    if (productIds.length === 0) return null;
+    const { data: products } = await supabaseAdmin.from('products')
+      .select('id, vendor_id').in('id', productIds);
+    const vendorIds = [...new Set((products || []).map(p => p.vendor_id).filter(Boolean))];
+    if (vendorIds.length === 0) return null;
+
+    // 해당 거래처의 발주대기가 아닌 발주서 확인
+    const { data: advancedPOs } = await supabaseAdmin.from('purchase_orders')
+      .select('po_no, status')
+      .in('vendor_id', vendorIds)
+      .in('status', ['발주완료', '입고중', '입고완료'])
+      .limit(1);
+
+    if (advancedPOs && advancedPOs.length > 0) {
+      return `발주가 진행 중입니다 (${advancedPOs[0].po_no}: ${advancedPOs[0].status}). 발주를 먼저 처리해주세요.`;
+    }
+    return null;
+  } catch (e) { return null; }
 }
 
 // 주문 취소/삭제 시 발주 수량 차감 헬퍼
