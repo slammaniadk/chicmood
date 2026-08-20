@@ -3749,7 +3749,7 @@
 
     let content = '';
     if (m.imageUrl) {
-      content += `<img src="${escapeHtml(m.imageUrl)}" class="max-w-[200px] max-h-[200px] rounded-lg cursor-pointer object-cover" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')" />`;
+      content += `<img src="${escapeHtml(m.imageUrl)}" class="max-w-[200px] max-h-[200px] rounded-lg cursor-pointer object-cover" onclick="openChatImageViewer('${escapeHtml(m.imageUrl)}')" />`;
     }
     if (m.message) {
       content += `<p class="text-[13px] leading-relaxed whitespace-pre-wrap">${escapeHtml(m.message)}</p>`;
@@ -3835,6 +3835,19 @@
         return;
       }
     }
+  }
+
+  function openChatImageViewer(url) {
+    const viewer = document.createElement('div');
+    viewer.id = 'chat-img-viewer';
+    viewer.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:100;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+    viewer.innerHTML = `
+      <button onclick="document.getElementById('chat-img-viewer').remove()" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer;z-index:101;">&times;</button>
+      <img src="${url}" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;" onclick="event.stopPropagation()" />
+    `;
+    viewer.addEventListener('click', e => { if (e.target === viewer) viewer.remove(); });
+    document.addEventListener('keydown', function _esc(e) { if (e.key === 'Escape') { const v = document.getElementById('chat-img-viewer'); if (v) v.remove(); document.removeEventListener('keydown', _esc); } });
+    document.body.appendChild(viewer);
   }
 
   </script>
