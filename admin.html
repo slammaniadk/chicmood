@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.6</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.7</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3947,9 +3947,8 @@
     if (checked.length === 0) { showToast('삭제할 메시지를 선택해주세요'); return; }
     if (!confirm(checked.length + '개 메시지를 삭제하시겠습니까?')) return;
     try {
-      for (const chk of checked) {
-        await deleteChatMessage(chk.dataset.id);
-      }
+      const ids = Array.from(checked).map(c => c.dataset.id).join(',');
+      await api('/admin/chat/' + ids, { method: 'DELETE' });
       showToast(checked.length + '개 메시지 삭제 완료');
       window._chatSelectMode = false;
       const bar = document.getElementById('chat-select-bar');
@@ -3963,12 +3962,7 @@
   async function deleteAllChat() {
     if (!confirm('모든 대화를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
     try {
-      const data = await api('/admin/chat?page=1&limit=200');
-      const msgs = data.messages || [];
-      if (msgs.length === 0) { showToast('삭제할 메시지가 없습니다'); return; }
-      for (const m of msgs) {
-        await deleteChatMessage(m.id);
-      }
+      await api('/admin/chat/all', { method: 'DELETE' });
       showToast('전체 대화가 삭제되었습니다');
       refreshChat();
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
