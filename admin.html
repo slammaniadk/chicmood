@@ -68,7 +68,7 @@
     .status-취소 { background: #fee2e2; color: #991b1b; }
     .status-배정완료 { background: #c6f6d5; color: #276749; }
 
-    .tab { padding: 10px 16px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; white-space: nowrap; }
+    .tab { padding: 10px 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; white-space: nowrap; }
     .tab:hover { color: #6b4220; }
     .tab.active { color: #6b4220; border-bottom-color: #6b4220; font-weight: 700; }
 
@@ -146,7 +146,7 @@
 
   <!-- 탭 네비게이션 (데스크톱) -->
   <nav id="main-nav" class="bg-white border-b border-warm-200 hidden">
-    <div class="mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto desktop-tabs" style="max-width:1600px;">
+    <div class="mx-auto px-4 sm:px-6 flex gap-0 desktop-tabs" style="max-width:1600px;overflow:hidden;">
       <button class="tab" data-tab="dashboard" onclick="navigate('dashboard')">📊 대시보드</button>
       <button class="tab" data-tab="vendors" onclick="navigate('vendors')">🏢 거래처관리</button>
       <button class="tab" data-tab="products" onclick="navigate('products')">👗 상품관리</button>
