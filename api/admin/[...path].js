@@ -2170,6 +2170,14 @@ async function handleChat(req, res) {
     return ok(res, { success: true });
   }
 
+  if (req.method === 'DELETE') {
+    const msgId = req.query.path ? (Array.isArray(req.query.path) ? req.query.path[1] : req.query.path.split('/')[1]) : null;
+    if (!msgId) return fail(res, '메시지 ID가 필요합니다');
+    const { error } = await supabaseAdmin.from('chat_messages').delete().eq('id', msgId);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { deleted: true });
+  }
+
   return fail(res, 'Method not allowed', 405);
 }
 

@@ -3686,6 +3686,12 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
               <input type="file" accept="image/*" class="hidden" onchange="sendChatImage(this.files)" />
             </label>
+            <div class="relative flex-shrink-0">
+              <button class="btn-outline btn-sm" onclick="toggleEmojiPicker()" style="padding:8px 12px;font-size:18px;">😊</button>
+              <div id="emoji-picker" class="hidden" style="position:absolute;bottom:45px;left:0;background:#fff;border:1px solid #e4c5a5;border-radius:10px;padding:8px;width:280px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:60;max-height:200px;overflow-y:auto;">
+                <div style="display:flex;flex-wrap:wrap;gap:4px;" id="emoji-list"></div>
+              </div>
+            </div>
             <textarea id="chat-input" class="input-field flex-1 resize-none" rows="1" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" onpaste="handleChatPaste(event)" style="min-height:40px;max-height:100px;"></textarea>
             <button class="btn-primary flex-shrink-0" onclick="sendChatMessage()" style="padding:8px 16px;">전송</button>
           </div>
@@ -3693,13 +3699,24 @@
       `;
 
       renderChatMessages(data.messages || []);
+      setTimeout(() => { const c = document.getElementById('chat-messages'); if (c) c.scrollTop = c.scrollHeight; }, 100);
 
       // 읽음 처리
       api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
 
       // 폴링 시작
+      let chatPollCount = 0;
       chatPollingTimer = setInterval(async () => {
         try {
+          chatPollCount++;
+          // 매 3번째 폴링 시 전체 새로고침 (읽음 상태 반영)
+          if (chatPollCount % 3 === 0) {
+            const fullData = await api('/admin/chat?page=1&limit=50');
+            chatSentIds.clear();
+            renderChatMessages(fullData.messages || []);
+            api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
+            return;
+          }
           const url = chatLastTimestamp ? '/admin/chat?after=' + encodeURIComponent(chatLastTimestamp) : '/admin/chat?page=1&limit=50';
           const pollData = await api(url);
           if (pollData.messages && pollData.messages.length > 0) {
@@ -3755,11 +3772,17 @@
       content += `<p class="text-[13px] leading-relaxed whitespace-pre-wrap">${escapeHtml(m.message)}</p>`;
     }
 
+    const readLabel = isMine ? (m.isRead ? '<span class="text-[9px] text-warm-400">읽음</span>' : '<span class="text-[9px] text-yellow-600 font-semibold">1</span>') : '';
+
     if (isMine) {
       return `
-        <div class="flex justify-end mb-3">
+        <div class="flex justify-end mb-3 group">
           <div class="flex items-end gap-1.5 max-w-[70%]">
-            <span class="text-[10px] text-warm-400 flex-shrink-0">${dateStr} ${timeStr}</span>
+            <button onclick="deleteChatMessage(${m.id})" class="text-[10px] text-warm-300 hover:text-red-500 bg-transparent border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="삭제">삭제</button>
+            <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
+              ${readLabel}
+              <span class="text-[10px] text-warm-400">${dateStr} ${timeStr}</span>
+            </div>
             <div class="rounded-2xl rounded-tr-sm px-4 py-2.5" style="background:#6b4220;color:#fff;">
               ${content}
             </div>
@@ -3835,6 +3858,43 @@
         return;
       }
     }
+  }
+
+  async function deleteChatMessage(msgId) {
+    if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+    try {
+      await api('/admin/chat/' + msgId, { method: 'DELETE' });
+      const el = document.getElementById('chat-messages');
+      if (el) {
+        const data = await api('/admin/chat?page=1&limit=50');
+        chatSentIds.clear();
+        renderChatMessages(data.messages || []);
+      }
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  const CHAT_EMOJIS = ['😊','😂','🤣','❤️','👍','👏','🙏','😍','🥰','😘','😭','😢','🤔','👀','🔥','✨','💯','🎉','😎','🥺','😅','🙄','😤','💪','✅','❌','⭐','💕','🫶','😮','👌','🤝','💡','📌','🚀','🎁','☕','🍽️','👗','💰'];
+
+  function toggleEmojiPicker() {
+    const picker = document.getElementById('emoji-picker');
+    if (!picker) return;
+    const list = document.getElementById('emoji-list');
+    if (picker.classList.contains('hidden')) {
+      list.innerHTML = CHAT_EMOJIS.map(e => `<button onclick="insertEmoji('${e}')" style="font-size:22px;padding:4px 6px;background:none;border:none;cursor:pointer;border-radius:6px;transition:background 0.15s;" onmouseover="this.style.background='#f0dcc8'" onmouseout="this.style.background='none'">${e}</button>`).join('');
+      picker.classList.remove('hidden');
+    } else {
+      picker.classList.add('hidden');
+    }
+  }
+
+  function insertEmoji(emoji) {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    const start = input.selectionStart;
+    input.value = input.value.slice(0, start) + emoji + input.value.slice(input.selectionEnd);
+    input.selectionStart = input.selectionEnd = start + emoji.length;
+    input.focus();
+    document.getElementById('emoji-picker').classList.add('hidden');
   }
 
   function openChatImageViewer(url) {
