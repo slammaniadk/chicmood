@@ -161,7 +161,7 @@
       <button class="tab" data-tab="reports" onclick="navigate('reports')">📈 통계</button>
       <button class="tab" data-tab="system" onclick="navigate('system')">⚙️ 시스템</button>
       <button class="tab" data-tab="after-service" onclick="navigate('after-service')">🔧 A/S관리</button>
-      <button class="tab" data-tab="chat" onclick="navigate('chat')">💬 내부채팅</button>
+      <button class="tab" data-tab="chat" onclick="navigate('chat')">💬 Chatting</button>
     </div>
   </nav>
 
@@ -231,7 +231,7 @@
     { key: 'reports', label: '통계', icon: '📈' },
     { key: 'system', label: '시스템', icon: '⚙️' },
     { key: 'after-service', label: 'A/S관리', icon: '🔧' },
-    { key: 'chat', label: '내부채팅', icon: '💬' },
+    { key: 'chat', label: 'Chatting', icon: '💬' },
   ];
 
   function navigate(page) {
@@ -3677,7 +3677,7 @@
       el.innerHTML = `
         <div class="fade-in" style="display:flex;flex-direction:column;height:calc(100vh - 160px);max-width:700px;margin:0 auto;">
           <div class="flex justify-between items-center mb-3">
-            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">내부 채팅</h2>
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">Chatting</h2>
           </div>
           <div id="chat-messages" class="flex-1 overflow-y-auto bg-white border border-warm-200 rounded-xl p-4" style="min-height:0;">
           </div>
