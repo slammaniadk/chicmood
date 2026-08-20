@@ -62,9 +62,11 @@
     .status-입금대기 { background: #fef1d1; color: #a86e35; }
     .status-확인요청 { background: #c9daf8; color: #2b5797; }
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
+    .status-배송준비 { background: #dbeafe; color: #1e40af; }
     .status-배송중 { background: #e4d7f5; color: #5b3a8e; }
     .status-송장완료 { background: #d1fae5; color: #065f46; }
     .status-취소 { background: #fee2e2; color: #991b1b; }
+    .status-배정완료 { background: #c6f6d5; color: #276749; }
 
     .tab { padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
     .tab:hover { color: #6b4220; }
@@ -589,8 +591,8 @@
       if (orderSearch) params.set('search', orderSearch);
 
       const data = await api('/admin/orders?' + params.toString());
-      const statuses = ['all','입금대기','확인요청','결제완료','배송중','송장완료','취소'];
-      const statusLabels = { all: '전체', 입금대기:'입금대기', 확인요청:'확인요청', 결제완료:'결제완료', 배송중:'배송중', 송장완료:'송장완료', 취소:'취소' };
+      const statuses = ['all','입금대기','확인요청','결제완료','배송준비','배송중','송장완료','취소'];
+      const statusLabels = { all: '전체', 입금대기:'입금대기', 확인요청:'확인요청', 결제완료:'결제완료', 배송준비:'배송준비', 배송중:'배송중', 송장완료:'송장완료', 취소:'취소' };
       const totalPages = Math.ceil(data.total / data.limit);
 
       el.innerHTML = `
@@ -614,16 +616,26 @@
             <table>
               <thead>
                 <tr>
-                  <th>주문번호</th><th>주문자</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>일시</th><th>관리</th>
+                  <th>주문번호</th><th>주문자</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="10" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                  const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
+                  const itemsSummary = o.items.map(i => {
+                    let label = `${i.name}(${i.color}/${i.size})x${i.qty}`;
+                    if (i.status && i.status !== o.status) label += `<span class="status-badge status-${i.status}" style="font-size:9px;padding:1px 6px;margin-left:3px;">${i.status}</span>`;
+                    return label;
+                  }).join(', ');
                   const vendorNames = [...new Set(o.items.map(i => i.vendorName).filter(Boolean))].join(', ');
+                  const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
+                  const totalAlloc = o.items.reduce((s,i) => s + (i.allocatedQty || 0), 0);
+                  const allocLabel = totalQty === 0 ? '-' : totalAlloc >= totalQty ? '배정완료' : totalAlloc > 0 ? '부분배정(' + totalAlloc + '/' + totalQty + ')' : '미배정';
+                  const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#a0aec0';
+                  // Encode items data for modal
+                  const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
                   return `
                     <tr>
                       <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
@@ -631,14 +643,15 @@
                         <p class="font-semibold">${escapeHtml(o.name)}</p>
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
-                      <td class="text-[12px] text-warm-500 max-w-[200px]">${escapeHtml(itemsSummary)}</td>
+                      <td class="text-[12px] text-warm-500 max-w-[200px]">${itemsSummary}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.broadcastName || '-')}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(vendorNames || '-')}</td>
                       <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
                       <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                      <td class="text-[12px] font-semibold whitespace-nowrap" style="${allocColor}">${allocLabel}</td>
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
                       <td class="whitespace-nowrap">
-                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}')">변경</button>
+                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}','${itemsJson}')">변경</button>
                         <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
                       </td>
                     </tr>
@@ -663,48 +676,182 @@
     }
   }
 
-  function openOrderModal(id, orderNo, currentStatus, trackingNo, trackingCarrier) {
-    const statuses = ['입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+  let _orderModalItems = [];
+
+  function openOrderModal(id, orderNo, currentStatus, trackingNo, trackingCarrier, itemsB64) {
+    let items = [];
+    try { items = JSON.parse(decodeURIComponent(escape(atob(itemsB64 || '')))); } catch(e) {}
+    _orderModalItems = items;
+
+    const orderStatuses = ['입금대기','확인요청','결제완료','배송준비','배송중','송장완료','취소'];
+    const itemStatuses = ['결제완료','배정완료','배송준비','배송중','송장완료','취소'];
+    const carriers = ['로젠택배','CJ대한통운','한진택배','롯데택배','우체국택배'];
+    const hasItemStatus = items.some(i => i.status);
+
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'order-modal';
     modal.innerHTML = `
-      <div class="overlay-content p-6">
-        <div class="flex justify-between items-center mb-6">
+      <div class="overlay-content p-6" style="max-width:760px;">
+        <div class="flex justify-between items-center mb-4">
           <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문 상태 변경</h3>
           <button onclick="document.getElementById('order-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
         </div>
         <p class="text-[12px] text-warm-500 mb-4">주문번호: <span class="font-semibold text-warm-800">${orderNo}</span></p>
-        <div class="space-y-4">
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">주문 상태</label>
+
+        <!-- 주문 전체 상태 -->
+        <div class="card mb-4 p-4" style="background:#fdf8f4;">
+          <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">주문 전체 상태 (일괄 변경)</label>
+          <div class="grid grid-cols-2 gap-3">
             <select id="modal-status" class="input-field">
-              ${statuses.map(s => `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s}</option>`).join('')}
+              ${orderStatuses.map(s => `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s}</option>`).join('')}
             </select>
+            <button class="btn-primary btn-sm" onclick="updateOrderBulk('${id}')">전체 일괄 변경</button>
           </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">택배사</label>
-            <select id="modal-carrier" class="input-field">
-              <option value="로젠택배" ${trackingCarrier === '로젠택배' || !trackingCarrier ? 'selected' : ''}>로젠택배</option>
-              <option value="CJ대한통운" ${trackingCarrier === 'CJ대한통운' ? 'selected' : ''}>CJ대한통운</option>
-              <option value="한진택배" ${trackingCarrier === '한진택배' ? 'selected' : ''}>한진택배</option>
-              <option value="롯데택배" ${trackingCarrier === '롯데택배' ? 'selected' : ''}>롯데택배</option>
-              <option value="우체국택배" ${trackingCarrier === '우체국택배' ? 'selected' : ''}>우체국택배</option>
-            </select>
+          <div class="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <label class="text-[11px] text-warm-500 block mb-1">전체 택배사</label>
+              <select id="modal-carrier" class="input-field">
+                ${carriers.map(c => `<option value="${c}" ${trackingCarrier === c || (!trackingCarrier && c === '로젠택배') ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] text-warm-500 block mb-1">전체 송장번호</label>
+              <input id="modal-tracking" type="text" class="input-field" placeholder="송장번호 입력" value="${trackingNo}" />
+            </div>
           </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">송장번호</label>
-            <input id="modal-tracking" type="text" class="input-field" placeholder="송장번호 입력" value="${trackingNo}" />
-          </div>
-          <button class="btn-primary w-full" onclick="updateOrder('${id}')">저장</button>
         </div>
+
+        ${hasItemStatus ? `
+        <!-- 품목별 상태 -->
+        <div class="mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500">품목별 상태 관리</label>
+            <div class="flex gap-2">
+              <label class="text-[11px] text-warm-500 flex items-center gap-1"><input type="checkbox" id="modal-check-all" onchange="toggleModalCheckAll(this.checked)" /> 전체선택</label>
+              <select id="modal-bulk-status" class="input-field" style="width:auto;padding:4px 8px;font-size:11px;">
+                ${itemStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+              </select>
+              <button class="btn-outline btn-sm" style="padding:4px 10px;font-size:11px;" onclick="applyBulkItemStatus('${id}')">선택 일괄적용</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto border border-warm-200 rounded-lg">
+            <table style="font-size:12px;">
+              <thead>
+                <tr>
+                  <th style="padding:6px 8px;"><input type="checkbox" id="modal-check-all2" onchange="toggleModalCheckAll(this.checked)" /></th>
+                  <th style="padding:6px 8px;">상품</th>
+                  <th style="padding:6px 8px;">수량</th>
+                  <th style="padding:6px 8px;">현재상태</th>
+                  <th style="padding:6px 8px;">변경</th>
+                  <th style="padding:6px 8px;">택배사</th>
+                  <th style="padding:6px 8px;">송장번호</th>
+                  <th style="padding:6px 8px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((item, idx) => `
+                  <tr>
+                    <td style="padding:6px 8px;"><input type="checkbox" class="modal-item-chk" data-idx="${idx}" /></td>
+                    <td style="padding:6px 8px;" class="whitespace-nowrap">${escapeHtml(item.name)} <span class="text-warm-400">${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')}</span></td>
+                    <td style="padding:6px 8px;">${item.qty}</td>
+                    <td style="padding:6px 8px;"><span class="status-badge status-${item.status||currentStatus}" style="font-size:10px;padding:2px 8px;">${item.status||currentStatus}</span></td>
+                    <td style="padding:6px 8px;">
+                      <select class="input-field item-status-sel" data-idx="${idx}" style="padding:4px 6px;font-size:11px;width:auto;">
+                        <option value="">변경안함</option>
+                        ${itemStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+                      </select>
+                    </td>
+                    <td style="padding:6px 8px;">
+                      <select class="input-field item-carrier-sel" data-idx="${idx}" style="padding:4px 6px;font-size:11px;width:auto;">
+                        ${carriers.map(c => `<option value="${c}" ${(item.trackingCarrier||'로젠택배') === c ? 'selected' : ''}>${c}</option>`).join('')}
+                      </select>
+                    </td>
+                    <td style="padding:6px 8px;">
+                      <input type="text" class="input-field item-tracking-inp" data-idx="${idx}" style="padding:4px 6px;font-size:11px;width:120px;" placeholder="송장번호" value="${escapeHtml(item.trackingNo||'')}" />
+                    </td>
+                    <td style="padding:6px 8px;">
+                      <button class="btn-primary btn-sm" style="padding:3px 8px;font-size:10px;" onclick="updateSingleItem('${id}',${idx})">저장</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        ` : `
+        <p class="text-[12px] text-warm-400 mb-4">결제완료 이후 품목별 상태 관리가 활성화됩니다.</p>
+        `}
       </div>
     `;
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
-  async function updateOrder(id) {
+  function toggleModalCheckAll(checked) {
+    document.querySelectorAll('.modal-item-chk').forEach(cb => cb.checked = checked);
+    const all1 = document.getElementById('modal-check-all');
+    const all2 = document.getElementById('modal-check-all2');
+    if (all1) all1.checked = checked;
+    if (all2) all2.checked = checked;
+  }
+
+  async function applyBulkItemStatus(orderId) {
+    const checkedIdxs = [...document.querySelectorAll('.modal-item-chk:checked')].map(cb => parseInt(cb.dataset.idx));
+    if (checkedIdxs.length === 0) { showToast('품목을 선택해주세요'); return; }
+    const bulkStatus = document.getElementById('modal-bulk-status').value;
+    if (!bulkStatus) { showToast('상태를 선택해주세요'); return; }
+
+    let success = 0, failed = 0;
+    for (const idx of checkedIdxs) {
+      const item = _orderModalItems[idx];
+      if (!item || !item.id) continue;
+      try {
+        const body = { status: bulkStatus };
+        // 택배사/송장번호도 함께 전송
+        const carrierSel = document.querySelector(`.item-carrier-sel[data-idx="${idx}"]`);
+        const trackingInp = document.querySelector(`.item-tracking-inp[data-idx="${idx}"]`);
+        if (carrierSel) body.trackingCarrier = carrierSel.value;
+        if (trackingInp && trackingInp.value.trim()) body.trackingNo = trackingInp.value.trim();
+        await api(`/admin/orders/${orderId}/items/${item.id}`, {
+          method: 'PATCH', body: JSON.stringify(body)
+        });
+        success++;
+      } catch (e) { failed++; }
+    }
+    showToast(`${success}건 변경 완료${failed > 0 ? `, ${failed}건 실패` : ''}`);
+    document.getElementById('order-modal').remove();
+    renderOrders(document.getElementById('page-content'));
+  }
+
+  async function updateSingleItem(orderId, idx) {
+    const item = _orderModalItems[idx];
+    if (!item || !item.id) { showToast('품목 정보가 없습니다'); return; }
+
+    const statusSel = document.querySelector(`.item-status-sel[data-idx="${idx}"]`);
+    const carrierSel = document.querySelector(`.item-carrier-sel[data-idx="${idx}"]`);
+    const trackingInp = document.querySelector(`.item-tracking-inp[data-idx="${idx}"]`);
+
+    const body = {};
+    if (statusSel && statusSel.value) body.status = statusSel.value;
+    if (carrierSel) body.trackingCarrier = carrierSel.value;
+    if (trackingInp) body.trackingNo = trackingInp.value.trim();
+
+    if (!body.status && !body.trackingNo) { showToast('변경할 내용이 없습니다'); return; }
+
+    try {
+      await api(`/admin/orders/${orderId}/items/${item.id}`, {
+        method: 'PATCH', body: JSON.stringify(body)
+      });
+      showToast('품목 상태가 변경되었습니다');
+      document.getElementById('order-modal').remove();
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '변경에 실패했습니다');
+    }
+  }
+
+  async function updateOrderBulk(id) {
     const status = document.getElementById('modal-status').value;
     const trackingNo = document.getElementById('modal-tracking').value.trim();
     const trackingCarrier = document.getElementById('modal-carrier').value;
@@ -738,8 +885,9 @@
   let shippingFrom = '';
   let shippingTo = '';
   let shippingPage = 1;
-  let shippingChecked = new Set();
-  let _shippingPageIds = [];
+  let shippingChecked = new Set(); // 'orderId:itemId' format for item-level
+  let _shippingItemKeys = [];
+  let _shippingOrders = [];
 
   async function renderShipping(el) {
     showSpinner(el);
@@ -750,19 +898,53 @@
       if (shippingTo) params.set('to', shippingTo);
 
       const data = await api('/admin/orders?' + params.toString());
-      _shippingPageIds = data.orders.map(o => String(o.id));
-      const statuses = ['all','결제완료','배송중','송장완료'];
-      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송중:'배송중', 송장완료:'송장완료' };
+      _shippingOrders = data.orders;
+      _shippingItemKeys = [];
+      const statuses = ['all','결제완료','배송준비','배송중','송장완료'];
+      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송준비:'배송준비', 배송중:'배송중', 송장완료:'송장완료' };
       const totalPages = Math.ceil(data.total / data.limit);
+
+      // Build item-level rows
+      let itemRows = '';
+      let emptyCount = 0;
+      data.orders.forEach(o => {
+        const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
+        o.items.forEach((item, iIdx) => {
+          const key = `${o.id}:${item.id}`;
+          _shippingItemKeys.push(key);
+          const itemStatus = item.status || o.status;
+          itemRows += `
+            <tr>
+              <td><input type="checkbox" class="ship-chk" value="${key}" ${shippingChecked.has(key)?'checked':''} onchange="toggleShippingCheck('${key}',this.checked)" /></td>
+              <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
+              <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
+              <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
+              <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
+              <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(item.name)} <span class="text-warm-400">${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')}</span></td>
+              <td class="text-[12px]">${item.qty}</td>
+              <td><span class="status-badge status-${itemStatus}" style="font-size:10px;padding:2px 8px;">${itemStatus}</span></td>
+              <td class="whitespace-nowrap">
+                <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}','${itemsJson}')">변경</button>
+              </td>
+            </tr>`;
+        });
+        if (o.items.length === 0) emptyCount++;
+      });
 
       el.innerHTML = `
         <div class="fade-in">
           <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
-            <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              로젠택배 엑셀 다운로드
-            </button>
+            <div class="flex gap-2">
+              <button class="btn-outline flex items-center gap-2" onclick="bulkShipItems()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                선택 품목 배송처리
+              </button>
+              <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                로젠택배 엑셀 다운로드
+              </button>
+            </div>
           </div>
 
           <div class="flex flex-wrap items-center gap-3 mb-4">
@@ -781,33 +963,16 @@
               <thead>
                 <tr>
                   <th><input type="checkbox" onchange="toggleAllShipping(this.checked)" /></th>
-                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>금액</th><th>상태</th><th>관리</th>
+                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>수량</th><th>품목상태</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
-                ${data.orders.map(o => {
-                  const itemsSummary = o.items.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`).join(', ');
-                  return `
-                    <tr>
-                      <td><input type="checkbox" class="ship-chk" value="${o.id}" ${shippingChecked.has(String(o.id))?'checked':''} onchange="toggleShippingCheck('${o.id}',this.checked)" /></td>
-                      <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
-                      <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
-                      <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
-                      <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
-                      <td class="text-[12px] text-warm-500 max-w-[180px]">${escapeHtml(itemsSummary)}</td>
-                      <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
-                      <td><span class="status-badge status-${o.status}">${o.status}</span></td>
-                      <td class="whitespace-nowrap">
-                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}')">변경</button>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
+                ${_shippingItemKeys.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${itemRows}
               </tbody>
             </table>
           </div>
-          <p class="text-[12px] text-warm-400 mt-2">선택된 주문: <span id="ship-count">${shippingChecked.size}</span>건</p>
+          <p class="text-[12px] text-warm-400 mt-2">선택된 품목: <span id="ship-count">${shippingChecked.size}</span>건</p>
           ${totalPages > 1 ? `
             <div class="flex justify-center gap-2 mt-4">
               ${shippingPage > 1 ? `<button class="btn-outline btn-sm" onclick="shippingPage--;renderShipping(document.getElementById('page-content'))">← 이전</button>` : ''}
@@ -822,24 +987,46 @@
     }
   }
 
-  function toggleShippingCheck(id, checked) {
-    if (checked) shippingChecked.add(id); else shippingChecked.delete(id);
+  function toggleShippingCheck(key, checked) {
+    if (checked) shippingChecked.add(key); else shippingChecked.delete(key);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
   }
   function toggleAllShipping(checked) {
-    _shippingPageIds.forEach(sid => { if (checked) shippingChecked.add(sid); else shippingChecked.delete(sid); });
+    _shippingItemKeys.forEach(key => { if (checked) shippingChecked.add(key); else shippingChecked.delete(key); });
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
   }
 
+  async function bulkShipItems() {
+    if (shippingChecked.size === 0) { showToast('배송처리할 품목을 선택해주세요'); return; }
+    if (!confirm(`선택한 ${shippingChecked.size}건의 품목을 배송중으로 변경하시겠습니까?`)) return;
+
+    let success = 0, failed = 0;
+    for (const key of shippingChecked) {
+      const [orderId, itemId] = key.split(':');
+      if (!orderId || !itemId) continue;
+      try {
+        await api(`/admin/orders/${orderId}/items/${itemId}`, {
+          method: 'PATCH', body: JSON.stringify({ status: '배송중' })
+        });
+        success++;
+      } catch (e) { failed++; }
+    }
+    shippingChecked.clear();
+    showToast(`${success}건 배송처리 완료${failed > 0 ? `, ${failed}건 실패` : ''}`);
+    renderShipping(document.getElementById('page-content'));
+  }
+
   async function downloadLozenExcel() {
-    if (shippingChecked.size === 0) { showToast('엑셀로 내보낼 주문을 선택해주세요'); return; }
+    if (shippingChecked.size === 0) { showToast('엑셀로 내보낼 품목을 선택해주세요'); return; }
     try {
+      // Extract unique order IDs from 'orderId:itemId' keys
+      const orderIds = [...new Set(Array.from(shippingChecked).map(k => k.split(':')[0]))];
       const data = await api('/admin/shipping-excel', {
         method: 'POST',
-        body: JSON.stringify({ orderIds: Array.from(shippingChecked) })
+        body: JSON.stringify({ orderIds })
       });
       const rows = data.rows || [];
       if (rows.length === 0) { showToast('내보낼 데이터가 없습니다'); return; }
@@ -1932,12 +2119,14 @@
       const po = data.purchaseOrder;
       poEditMode = false;
       poEditItems = (po.items || []).map(it => ({
+        id: it.id || null,
         productId: it.productId || null,
         productName: it.productName || '',
         colorName: it.colorName || '',
         sizeName: it.sizeName || '',
         qty: it.qty || 1,
         costPrice: it.costPrice || 0,
+        receivedQty: it.receivedQty || 0,
       }));
       // 편집용 상품 목록 로드
       try { poAllProducts = await api('/admin/products'); } catch(e) { poAllProducts = []; }
@@ -1961,7 +2150,7 @@
           </div>
           <div class="mb-4">
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
-            <select id="po-detail-status" class="input-field">
+            <select id="po-detail-status" class="input-field" onchange="onPOStatusChange(this.value)">
               ${statuses.map(s => `<option value="${s}" ${s===po.status?'selected':''}>${s}</option>`).join('')}
             </select>
           </div>
@@ -1985,21 +2174,37 @@
   }
 
   function renderPODetailItemsView(items) {
+    const poStatus = document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
+    const showReceived = ['발주완료','입고중','입고완료'].includes(poStatus);
     return `<table>
-      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th><th>매입가</th><th>소계</th></tr></thead>
+      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
       <tbody>
-        ${(items||[]).map(it => `
+        ${(items||[]).map((it, idx) => `
           <tr>
             <td>${escapeHtml(it.productName)}</td>
             <td>${escapeHtml(it.colorName||'')}</td>
             <td>${escapeHtml(it.sizeName||'')}</td>
             <td>${it.qty}</td>
+            ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0" /></td>` : ''}
             <td>${fmt(it.costPrice)}</td>
             <td class="font-semibold">${fmt(it.subtotal)}</td>
           </tr>
         `).join('')}
       </tbody>
     </table>`;
+  }
+
+  function onPOStatusChange(newStatus) {
+    const modal = document.getElementById('po-detail-modal');
+    if (modal) modal.setAttribute('data-po-status', newStatus);
+    const area = document.getElementById('po-detail-items-area');
+    if (area) {
+      if (poEditMode) {
+        renderPODetailItemsEdit();
+      } else {
+        area.innerHTML = renderPODetailItemsView(poEditItems);
+      }
+    }
   }
 
   function togglePOEdit() {
@@ -2115,9 +2320,21 @@
         return;
       }
     }
+    // 입고 수량 전달 (입고중/입고완료 상태일 때)
+    if (['발주완료','입고중','입고완료'].includes(status)) {
+      const receivedItems = poEditItems.filter(i => i.id).map(i => ({
+        id: i.id,
+        receivedQty: i.receivedQty || 0,
+      }));
+      if (receivedItems.length > 0) body.receivedItems = receivedItems;
+    }
     try {
-      await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify(body) });
-      showToast('발주서가 저장되었습니다');
+      const result = await api('/admin/purchase-orders/' + poId, { method: 'PATCH', body: JSON.stringify(body) });
+      if (result.allocation && result.allocation.allocated > 0) {
+        showToast(`저장 완료 - ${result.allocation.orders}건 주문에 ${result.allocation.allocated}개 배정됨`);
+      } else {
+        showToast('발주서가 저장되었습니다');
+      }
       document.getElementById('po-detail-modal').remove();
       renderPurchaseOrders(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
@@ -2291,21 +2508,30 @@
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>현재고</th><th>관리</th></tr></thead>
+              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>현재고</th><th>배정</th><th>미배정</th><th>배정 고객</th><th>관리</th></tr></thead>
               <tbody>
-                ${(data.inventory||[]).length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-12">재고 데이터가 없습니다</td></tr>':''}
-                ${(data.inventory||[]).map(inv => `
+                ${(data.inventory||[]).length===0?'<tr><td colspan="8" class="text-center text-warm-400 py-12">재고 데이터가 없습니다</td></tr>':''}
+                ${(data.inventory||[]).map(inv => {
+                  const allocList = (inv.allocations||[]).map(a =>
+                    '<span style="display:inline-block;background:#f9efe6;border:1px solid #e4c5a5;border-radius:4px;padding:1px 6px;margin:1px 2px;font-size:11px;white-space:nowrap">' +
+                    escapeHtml(a.customerName) + ' ' + a.allocatedQty + '개' +
+                    '<span style="color:#a0aec0;margin-left:3px">(' + a.orderStatus + ')</span></span>'
+                  ).join('');
+                  return `
                   <tr>
                     <td class="font-semibold">${escapeHtml(inv.productName)}</td>
                     <td>${escapeHtml(inv.colorName||'-')}</td>
                     <td>${escapeHtml(inv.sizeName||'-')}</td>
                     <td class="font-semibold">${inv.stockQty}</td>
+                    <td class="font-semibold" style="color:#38a169">${inv.allocatedQty||0}</td>
+                    <td class="font-semibold" style="color:${inv.freeQty>0?'#d69e2e':'#a0aec0'}">${inv.freeQty||0}</td>
+                    <td class="text-[12px]">${allocList || '<span style="color:#a0aec0">-</span>'}</td>
                     <td class="whitespace-nowrap">
                       <button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button>
                       <button class="btn-outline btn-sm" onclick="openInventoryHistory(${inv.id},'${escapeHtml(inv.productName)}')">이력</button>
                     </td>
-                  </tr>
-                `).join('')}
+                  </tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>
