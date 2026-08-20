@@ -3443,7 +3443,7 @@
     modal.className = 'overlay';
     modal.id = 'as-modal';
     modal.innerHTML = `
-      <div class="overlay-content p-6">
+      <div class="overlay-content p-6" style="max-width:650px;">
         <div class="flex justify-between items-center mb-6">
           <h3 class="font-serif text-lg font-semibold text-warm-800 italic">A/S 요청 등록</h3>
           <button onclick="document.getElementById('as-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
@@ -3451,7 +3451,7 @@
         <form onsubmit="return false;" class="space-y-4">
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">요청사항 *</label>
-            <textarea id="as-description" class="input-field" rows="10" placeholder="요청사항을 입력해주세요" style="min-height:200px;"></textarea>
+            <textarea id="as-description" class="input-field" rows="15" placeholder="요청사항을 입력해주세요" style="min-height:350px;font-size:14px;line-height:1.7;"></textarea>
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사진 첨부</label>
@@ -3670,7 +3670,7 @@
   async function renderChat(el) {
     stopChatPolling();
     // 비밀번호 확인
-    if (!sessionStorage.getItem('chatAuth')) {
+    if (!window._chatAuth) {
       el.innerHTML = `
         <div class="fade-in" style="display:flex;align-items:center;justify-content:center;height:calc(100vh - 160px);">
           <div style="text-align:center;max-width:320px;width:100%;">
@@ -3830,7 +3830,7 @@
     if (!pw) { input.focus(); return; }
     try {
       await api('/admin/chat', { method: 'POST', body: JSON.stringify({ action: 'verify-password', password: pw }) });
-      sessionStorage.setItem('chatAuth', '1');
+      window._chatAuth = true;
       const content = document.getElementById('page-content');
       if (content) renderChat(content);
     } catch (e) {
