@@ -3831,7 +3831,7 @@
     try {
       await api('/admin/chat', { method: 'POST', body: JSON.stringify({ action: 'verify-password', password: pw }) });
       sessionStorage.setItem('chatAuth', '1');
-      const content = document.getElementById('main-content');
+      const content = document.getElementById('page-content');
       if (content) renderChat(content);
     } catch (e) {
       if (errEl) { errEl.textContent = '비밀번호가 일치하지 않습니다'; errEl.classList.remove('hidden'); }
