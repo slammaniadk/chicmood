@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.5</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.6</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3696,6 +3696,17 @@
         <div class="fade-in" style="display:flex;flex-direction:column;height:calc(100vh - 160px);max-width:700px;margin:0 auto;">
           <div class="flex justify-between items-center mb-3">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">Chatting</h2>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="toggleChatSelectMode()" id="chat-select-btn" style="font-size:12px;">선택삭제</button>
+              <button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllChat()" style="font-size:12px;">전체삭제</button>
+            </div>
+          </div>
+          <div id="chat-select-bar" class="hidden flex justify-between items-center mb-2 px-2 py-1.5 bg-warm-100 rounded-lg">
+            <span class="text-[12px] text-warm-600"><span id="chat-sel-count">0</span>개 선택됨</span>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="toggleChatSelectMode()" style="font-size:11px;">취소</button>
+              <button class="btn-primary btn-sm" onclick="deleteSelectedChat()" style="font-size:11px;background:#e53e3e;">삭제</button>
+            </div>
           </div>
           <div id="chat-messages" class="flex-1 overflow-y-auto bg-white border border-warm-200 rounded-xl p-4" style="min-height:0;">
           </div>
@@ -3792,13 +3803,12 @@
 
     const readLabel = isMine ? (m.isRead ? '<span class="text-[9px] text-warm-400">읽음</span>' : '<span class="text-[9px] text-yellow-600 font-semibold">1</span>') : '';
 
-    const delBtn = `<button onclick="deleteChatMessage(${m.id})" class="text-[11px] text-warm-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0" title="삭제" style="padding:2px 6px;">🗑</button>`;
+    const checkbox = window._chatSelectMode ? `<input type="checkbox" class="chat-sel-chk" data-id="${m.id}" onchange="updateChatSelCount()" style="width:18px;height:18px;accent-color:#6b4220;cursor:pointer;flex-shrink:0;" />` : '';
 
     if (isMine) {
       return `
-        <div class="flex justify-end mb-3 group">
+        <div class="flex justify-end mb-3 items-center gap-2">
           <div class="flex items-end gap-1.5 max-w-[70%]">
-            ${delBtn}
             <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
               ${readLabel}
               <span class="text-[10px] text-warm-400">${dateStr} ${timeStr}</span>
@@ -3807,10 +3817,12 @@
               ${content}
             </div>
           </div>
+          ${checkbox}
         </div>`;
     } else {
       return `
-        <div class="flex justify-start mb-3 group">
+        <div class="flex justify-start mb-3 items-center gap-2">
+          ${checkbox}
           <div class="max-w-[70%]">
             <span class="text-[11px] font-semibold text-warm-600 block mb-1">${escapeHtml(m.senderName)}</span>
             <div class="flex items-end gap-1.5">
@@ -3818,7 +3830,6 @@
                 ${content}
               </div>
               <span class="text-[10px] text-warm-400 flex-shrink-0">${dateStr} ${timeStr}</span>
-              ${delBtn}
             </div>
           </div>
         </div>`;
@@ -3900,15 +3911,66 @@
   }
 
   async function deleteChatMessage(msgId) {
-    if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
     try {
       await api('/admin/chat/' + msgId, { method: 'DELETE' });
-      const el = document.getElementById('chat-messages');
-      if (el) {
-        const data = await api('/admin/chat?page=1&limit=50');
-        chatSentIds.clear();
-        renderChatMessages(data.messages || []);
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function refreshChat() {
+    const data = await api('/admin/chat?page=1&limit=50');
+    chatSentIds.clear();
+    renderChatMessages(data.messages || []);
+  }
+
+  function toggleChatSelectMode() {
+    window._chatSelectMode = !window._chatSelectMode;
+    const bar = document.getElementById('chat-select-bar');
+    const btn = document.getElementById('chat-select-btn');
+    if (window._chatSelectMode) {
+      if (bar) bar.classList.remove('hidden');
+      if (btn) btn.textContent = '취소';
+    } else {
+      if (bar) bar.classList.add('hidden');
+      if (btn) btn.textContent = '선택삭제';
+    }
+    refreshChat();
+  }
+
+  function updateChatSelCount() {
+    const checked = document.querySelectorAll('.chat-sel-chk:checked').length;
+    const el = document.getElementById('chat-sel-count');
+    if (el) el.textContent = checked;
+  }
+
+  async function deleteSelectedChat() {
+    const checked = document.querySelectorAll('.chat-sel-chk:checked');
+    if (checked.length === 0) { showToast('삭제할 메시지를 선택해주세요'); return; }
+    if (!confirm(checked.length + '개 메시지를 삭제하시겠습니까?')) return;
+    try {
+      for (const chk of checked) {
+        await deleteChatMessage(chk.dataset.id);
       }
+      showToast(checked.length + '개 메시지 삭제 완료');
+      window._chatSelectMode = false;
+      const bar = document.getElementById('chat-select-bar');
+      const btn = document.getElementById('chat-select-btn');
+      if (bar) bar.classList.add('hidden');
+      if (btn) btn.textContent = '선택삭제';
+      refreshChat();
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function deleteAllChat() {
+    if (!confirm('모든 대화를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+    try {
+      const data = await api('/admin/chat?page=1&limit=200');
+      const msgs = data.messages || [];
+      if (msgs.length === 0) { showToast('삭제할 메시지가 없습니다'); return; }
+      for (const m of msgs) {
+        await deleteChatMessage(m.id);
+      }
+      showToast('전체 대화가 삭제되었습니다');
+      refreshChat();
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
   }
 
