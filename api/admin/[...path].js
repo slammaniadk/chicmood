@@ -290,8 +290,16 @@ async function handleOrderDetail(req, res, id) {
       .eq('order_id', id)
       .not('status', 'in', '("송장완료","취소")');
   }
-  // 취소 시 전 품목 취소 + 배정 수량 초기화
+  // 배송중/송장완료에서 이전 상태로 되돌릴 때 재고 복원
+  if ((prevStatus === '배송중' || prevStatus === '송장완료') && status !== '배송중' && status !== '송장완료' && status !== '취소') {
+    await deductInventory(id, 'restore');
+  }
+  // 취소 시 전 품목 취소 + 배정 수량 초기화 + 재고 복원
   if (status === '취소') {
+    // 배송중/송장완료였던 품목이 있으면 재고 복원
+    if (prevStatus === '배송중' || prevStatus === '송장완료') {
+      await deductInventory(id, 'restore');
+    }
     await supabaseAdmin.from('order_items')
       .update({ status: '취소', allocated_qty: 0 })
       .eq('order_id', id);
@@ -336,7 +344,7 @@ async function deductInventory(orderId, action) {
           inventory_id: inv.id, product_id: item.product_id,
           type: action === 'sale' ? 'sale' : 'in',
           qty: diff,
-          reason: action === 'sale' ? '주문 결제완료 자동 차감' : '주문 취소 재고 복원',
+          reason: action === 'sale' ? '주문 결제완료 자동 차감' : '주문 상태변경 재고 복원',
         });
       }
     }
