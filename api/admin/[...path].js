@@ -2108,9 +2108,19 @@ async function handleLogs(req, res) {
 // ============================================================
 //  CHAT (내부 채팅)
 // ============================================================
+const CHAT_PASSWORD = '0486dk';
+
 async function handleChat(req, res) {
   const user = getUserFromRequest(req);
   if (!user) return fail(res, '인증 필요', 401);
+
+  // 채팅 비밀번호 확인
+  if (req.method === 'POST' && req.body && req.body.action === 'verify-password') {
+    if (req.body.password === CHAT_PASSWORD) {
+      return ok(res, { verified: true });
+    }
+    return fail(res, '비밀번호가 일치하지 않습니다', 401);
+  }
 
   if (req.method === 'GET') {
     const { after, page = '1', limit = '50' } = req.query || {};
