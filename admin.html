@@ -3665,6 +3665,7 @@
       clearInterval(chatPollingTimer);
       chatPollingTimer = null;
     }
+    window._chatAuth = false;
   }
 
   async function renderChat(el) {
