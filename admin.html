@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.3</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.4</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2508,12 +2508,16 @@
       }
       const totalPages = Math.ceil(data.total / data.limit) || 1;
       const lowStockCount = (data.inventory||[]).filter(i => i.stockQty <= 5).length;
+      const zeroCount = (data.inventory||[]).filter(i => i.stockQty === 0).length;
 
       el.innerHTML = `
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
-            <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+            <div class="flex gap-2">
+              ${zeroCount > 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllZeroInventory()" style="font-size:12px;">재고0 전체삭제 (${zeroCount}건)</button>` : ''}
+              <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-2">
@@ -2738,6 +2742,24 @@
     try {
       await api('/admin/inventory/' + invId, { method: 'DELETE' });
       showToast('삭제되었습니다');
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function deleteAllZeroInventory() {
+    if (!confirm('재고 0인 항목을 모두 삭제하시겠습니까?\n관련 입출고 이력도 함께 삭제됩니다.')) return;
+    try {
+      const data = await api('/admin/inventory?page=1&limit=500');
+      const zeros = (data.inventory||[]).filter(i => i.stockQty === 0);
+      if (zeros.length === 0) { showToast('삭제할 항목이 없습니다'); return; }
+      let count = 0;
+      for (const inv of zeros) {
+        try {
+          await api('/admin/inventory/' + inv.id, { method: 'DELETE' });
+          count++;
+        } catch (e) { /* skip */ }
+      }
+      showToast(count + '건 삭제 완료');
       renderInventory(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
   }
