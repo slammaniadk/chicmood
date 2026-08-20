@@ -2108,7 +2108,7 @@ async function handleLogs(req, res) {
 // ============================================================
 //  CHAT (내부 채팅)
 // ============================================================
-const CHAT_PASSWORD = '0486dk';
+const CHAT_PASSWORD = '0486';
 
 async function handleChat(req, res) {
   const user = getUserFromRequest(req);
