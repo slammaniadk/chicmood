@@ -3776,9 +3776,9 @@
 
     if (isMine) {
       return `
-        <div class="flex justify-end mb-3 group">
+        <div class="flex justify-end mb-3">
           <div class="flex items-end gap-1.5 max-w-[70%]">
-            <button onclick="deleteChatMessage(${m.id})" class="text-[10px] text-warm-300 hover:text-red-500 bg-transparent border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="삭제">삭제</button>
+            <button onclick="deleteChatMessage(${m.id})" class="text-[10px] text-warm-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0" title="삭제" style="padding:2px 4px;">x</button>
             <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
               ${readLabel}
               <span class="text-[10px] text-warm-400">${dateStr} ${timeStr}</span>
