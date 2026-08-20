@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.1</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.2</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2492,6 +2492,7 @@
   let invPage = 1;
   let invSearch = '';
   let invTab = 'stock'; // stock or log
+  let invHideZero = false;
 
   async function renderInventory(el) {
     showSpinner(el);
@@ -2501,7 +2502,11 @@
       const params = new URLSearchParams({ page: invPage, limit: 30 });
       if (invSearch) params.set('search', invSearch);
       const data = await api('/admin/inventory?' + params.toString());
-      const totalPages = Math.ceil(data.total / data.limit);
+      if (invHideZero) {
+        data.inventory = (data.inventory||[]).filter(i => i.stockQty > 0);
+        data.total = data.inventory.length;
+      }
+      const totalPages = Math.ceil(data.total / data.limit) || 1;
       const lowStockCount = (data.inventory||[]).filter(i => i.stockQty <= 5).length;
 
       el.innerHTML = `
@@ -2516,6 +2521,7 @@
               <button class="filter-tab ${invTab==='log'?'active':''}" onclick="invTab='log';renderInventory(document.getElementById('page-content'))">입출고 이력</button>
             </div>
             <input type="text" class="input-field" style="max-width:260px;" placeholder="상품명 검색..." value="${escapeHtml(invSearch)}" onkeydown="if(event.key==='Enter'){invSearch=this.value;invPage=1;renderInventory(document.getElementById('page-content'))}" />
+            <button class="filter-tab ${invHideZero?'active':''}" onclick="invHideZero=!invHideZero;invPage=1;renderInventory(document.getElementById('page-content'))">재고있음만</button>
           </div>
           <div class="card overflow-x-auto">
             <table>

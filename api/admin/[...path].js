@@ -897,7 +897,7 @@ async function createAutoPurchaseOrders(orderId) {
         );
       }
     }
-  } catch (e) { /* 자동 발주 생성 실패해도 주문 처리는 유지 */ }
+  } catch (e) { console.error('자동 발주 생성 오류:', e.message || e); }
 }
 
 // ============================================================
