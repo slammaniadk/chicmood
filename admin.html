@@ -3686,7 +3686,7 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
               <input type="file" accept="image/*" class="hidden" onchange="sendChatImage(this.files)" />
             </label>
-            <textarea id="chat-input" class="input-field flex-1 resize-none" rows="1" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" style="min-height:40px;max-height:100px;"></textarea>
+            <textarea id="chat-input" class="input-field flex-1 resize-none" rows="1" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" onpaste="handleChatPaste(event)" style="min-height:40px;max-height:100px;"></textarea>
             <button class="btn-primary flex-shrink-0" onclick="sendChatMessage()" style="padding:8px 16px;">전송</button>
           </div>
         </div>
@@ -3703,8 +3703,11 @@
           const url = chatLastTimestamp ? '/admin/chat?after=' + encodeURIComponent(chatLastTimestamp) : '/admin/chat?page=1&limit=50';
           const pollData = await api(url);
           if (pollData.messages && pollData.messages.length > 0) {
-            appendChatMessages(pollData.messages);
-            api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
+            const newMsgs = pollData.messages.filter(m => !chatSentIds.has(m.id));
+            if (newMsgs.length > 0) {
+              appendChatMessages(newMsgs);
+              api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
+            }
           }
         } catch (e) { /* ignore polling errors */ }
       }, 5000);
@@ -3778,6 +3781,8 @@
     }
   }
 
+  let chatSentIds = new Set();
+
   async function sendChatMessage() {
     const input = document.getElementById('chat-input');
     if (!input) return;
@@ -3785,15 +3790,14 @@
     if (!message) return;
     input.value = '';
     try {
-      await api('/admin/chat', {
+      const res = await api('/admin/chat', {
         method: 'POST',
         body: JSON.stringify({ message })
       });
-      // 즉시 반영
+      chatSentIds.add(res.id);
       const userId = adminUser ? adminUser.id : null;
-      const now = new Date().toISOString();
-      appendChatMessages([{ id: Date.now(), senderId: userId, senderName: adminUser.name, message, imageUrl: null, isRead: false, createdAt: now }]);
-      chatLastTimestamp = now;
+      appendChatMessages([{ id: res.id, senderId: userId, senderName: adminUser.name, message, imageUrl: null, isRead: false, createdAt: res.createdAt }]);
+      chatLastTimestamp = res.createdAt;
     } catch (e) { showToast(e.message || '전송에 실패했습니다'); }
   }
 
@@ -3809,15 +3813,28 @@
       const uploadRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
       if (!uploadRes.ok) throw new Error('업로드 실패');
 
-      await api('/admin/chat', {
+      const res = await api('/admin/chat', {
         method: 'POST',
         body: JSON.stringify({ imageUrl: publicUrl })
       });
+      chatSentIds.add(res.id);
       const userId = adminUser ? adminUser.id : null;
-      const now = new Date().toISOString();
-      appendChatMessages([{ id: Date.now(), senderId: userId, senderName: adminUser.name, message: '', imageUrl: publicUrl, isRead: false, createdAt: now }]);
-      chatLastTimestamp = now;
+      appendChatMessages([{ id: res.id, senderId: userId, senderName: adminUser.name, message: '', imageUrl: publicUrl, isRead: false, createdAt: res.createdAt }]);
+      chatLastTimestamp = res.createdAt;
     } catch (e) { showToast(e.message || '이미지 전송에 실패했습니다'); }
+  }
+
+  function handleChatPaste(e) {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const file = items[i].getAsFile();
+        if (file) sendChatImage([file]);
+        return;
+      }
+    }
   }
 
   </script>
