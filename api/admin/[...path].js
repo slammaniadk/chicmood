@@ -1475,7 +1475,8 @@ async function handlePurchaseOrderDetail(req, res, id) {
         orderedAt: po.ordered_at, createdAt: po.created_at,
         items: (po.purchase_order_items || []).map(i => ({
           id: i.id, productId: i.product_id, productName: i.product_name, colorName: i.color_name,
-          sizeName: i.size_name, qty: i.qty, costPrice: i.cost_price, subtotal: i.subtotal,
+          sizeName: i.size_name, qty: i.qty, costPrice: i.cost_price,
+          subtotal: i.subtotal || (i.qty || 0) * (i.cost_price || 0),
           receivedQty: i.received_qty || 0,
         })),
       }

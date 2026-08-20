@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.0</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.1</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2198,7 +2198,7 @@
             <td>${it.qty}</td>
             ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0" /></td>` : ''}
             <td>${fmt(it.costPrice)}</td>
-            <td class="font-semibold">${fmt(it.subtotal)}</td>
+            <td class="font-semibold">${fmt(it.subtotal || (it.qty||0) * (it.costPrice||0))}</td>
           </tr>
         `).join('')}
       </tbody>
