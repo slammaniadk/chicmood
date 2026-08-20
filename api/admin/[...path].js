@@ -1784,6 +1784,18 @@ async function handleInventoryDetail(req, res, id) {
 
     return ok(res, { id: parseInt(id) });
   }
+
+  if (req.method === 'DELETE') {
+    const { data: inv } = await supabaseAdmin.from('inventory').select('stock_qty').eq('id', id).single();
+    if (!inv) return fail(res, '재고를 찾을 수 없습니다', 404);
+    if (inv.stock_qty > 0) return fail(res, '재고가 0인 항목만 삭제할 수 있습니다');
+    // 관련 이력 삭제 후 재고 삭제
+    await supabaseAdmin.from('inventory_log').delete().eq('inventory_id', id);
+    const { error } = await supabaseAdmin.from('inventory').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { deleted: true });
+  }
+
   return fail(res, 'Method not allowed', 405);
 }
 

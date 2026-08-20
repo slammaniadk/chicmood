@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.2</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.3</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2546,6 +2546,7 @@
                     <td class="whitespace-nowrap">
                       <button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button>
                       <button class="btn-outline btn-sm" onclick="openInventoryHistory(${inv.id},'${escapeHtml(inv.productName)}')">이력</button>
+                      ${inv.stockQty === 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteInventory(${inv.id},'${escapeHtml(inv.productName)}')">삭제</button>` : ''}
                     </td>
                   </tr>`;
                 }).join('')}
@@ -2730,6 +2731,15 @@
       document.getElementById('inv-modal').remove();
       renderInventory(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function deleteInventory(invId, productName) {
+    if (!confirm(`"${productName}" 재고 항목을 삭제하시겠습니까?\n관련 입출고 이력도 함께 삭제됩니다.`)) return;
+    try {
+      await api('/admin/inventory/' + invId, { method: 'DELETE' });
+      showToast('삭제되었습니다');
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
   }
 
   async function openInventoryAdjustModal(invId, currentQty, productName) {
