@@ -130,7 +130,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.0</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.1.1</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3831,6 +3831,7 @@
     if (!input) return;
     const pw = input.value.trim();
     if (!pw) { input.focus(); return; }
+    alert('입력: [' + pw + '] / 정답: [' + _CP + ']');
     if (pw === _CP) {
       window._chatAuth = true;
       const content = document.getElementById('page-content');
