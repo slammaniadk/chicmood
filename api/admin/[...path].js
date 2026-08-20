@@ -1,5 +1,5 @@
 const { supabaseAdmin } = require('../_lib/supabase');
-const { requireAdmin } = require('../_lib/auth');
+const { requireAdmin, getUserFromRequest } = require('../_lib/auth');
 const { ok, fail, handleCors } = require('../_lib/response');
 
 module.exports = async function handler(req, res) {
@@ -34,6 +34,8 @@ module.exports = async function handler(req, res) {
     case 'inventory': return resourceId ? handleInventoryDetail(req, res, resourceId) : handleInventory(req, res);
     case 'inventory-log': return handleInventoryLog(req, res);
     case 'returns':  return resourceId ? handleReturnDetail(req, res, resourceId) : handleReturns(req, res);
+    case 'chat':     return handleChat(req, res);
+    case 'after-services': return resourceId ? handleAfterServiceDetail(req, res, resourceId) : handleAfterServices(req, res);
     case 'reports':  return handleReports(req, res);
     case 'settings': return handleSettings(req, res);
     case 'admin-users': return handleAdminUsers(req, res);
@@ -174,6 +176,7 @@ async function handleOrders(req, res) {
     id: o.id,
     orderNo: o.order_no,
     name: o.name,
+    nickname: o.social || '',
     phone: o.phone,
     address: o.address,
     memo: o.memo,
@@ -2102,4 +2105,229 @@ async function handleLogs(req, res) {
   return ok(res, { logs, total: count || 0, page: pageNum, limit: limitNum });
 }
 
+// ============================================================
+//  CHAT (내부 채팅)
+// ============================================================
+async function handleChat(req, res) {
+  const user = getUserFromRequest(req);
+  if (!user) return fail(res, '인증 필요', 401);
 
+  if (req.method === 'GET') {
+    const { after, page = '1', limit = '50' } = req.query || {};
+
+    // 폴링: 특정 시점 이후 신규 메시지만
+    if (after) {
+      const { data, error } = await supabaseAdmin
+        .from('chat_messages')
+        .select('*')
+        .gt('created_at', after)
+        .order('created_at', { ascending: true });
+      if (error) return fail(res, error.message, 500);
+      const messages = (data || []).map(m => ({
+        id: m.id, senderId: m.sender_id, senderName: m.sender_name,
+        message: m.message, imageUrl: m.image_url, isRead: m.is_read, createdAt: m.created_at,
+      }));
+      return ok(res, { messages });
+    }
+
+    // 페이지네이션 조회
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+
+    const { data, error, count } = await supabaseAdmin
+      .from('chat_messages')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+    if (error) return fail(res, error.message, 500);
+
+    const messages = (data || []).reverse().map(m => ({
+      id: m.id, senderId: m.sender_id, senderName: m.sender_name,
+      message: m.message, imageUrl: m.image_url, isRead: m.is_read, createdAt: m.created_at,
+    }));
+    return ok(res, { messages, total: count || 0, page: pageNum, limit: limitNum });
+  }
+
+  if (req.method === 'POST') {
+    const { message, imageUrl } = req.body;
+    if (!message && !imageUrl) return fail(res, '메시지 또는 이미지를 입력해주세요');
+
+    const { data, error } = await supabaseAdmin.from('chat_messages')
+      .insert({ sender_id: user.id, sender_name: user.name, message: message || '', image_url: imageUrl || null })
+      .select('id, created_at').single();
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { id: data.id, createdAt: data.created_at }, 201);
+  }
+
+  if (req.method === 'PATCH') {
+    // 상대 메시지 읽음 처리
+    const { error } = await supabaseAdmin.from('chat_messages')
+      .update({ is_read: true })
+      .neq('sender_id', user.id)
+      .eq('is_read', false);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { success: true });
+  }
+
+  return fail(res, 'Method not allowed', 405);
+}
+
+// ============================================================
+//  AFTER SERVICE (A/S 관리)
+// ============================================================
+async function handleAfterServices(req, res) {
+  if (req.method === 'GET') {
+    const { status, search, lookupOrder, page = '1', limit = '20' } = req.query || {};
+
+    // 주문번호로 주문+상품 조회 (접수 시 사용)
+    if (lookupOrder) {
+      const { data: order } = await supabaseAdmin.from('orders').select('id, order_no, name, total, status').eq('order_no', lookupOrder).single();
+      if (!order) return fail(res, '해당 주문번호를 찾을 수 없습니다', 404);
+      const { data: items } = await supabaseAdmin.from('order_items').select('id, name, color, size, qty, price, subtotal').eq('order_id', order.id);
+      return ok(res, { order: { id: order.id, orderNo: order.order_no, name: order.name, total: order.total, status: order.status, items: items || [] } });
+    }
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+
+    let query = supabaseAdmin
+      .from('after_services')
+      .select('*, orders(order_no)', { count: 'exact' })
+      .order('id', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+
+    if (status && status !== 'all') query = query.eq('status', status);
+    if (search) {
+      query = query.or(`as_no.ilike.%${search}%,customer_name.ilike.%${search}%,product_name.ilike.%${search}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) return fail(res, error.message, 500);
+
+    let result = (data || []).map(r => ({
+      id: r.id, asNo: r.as_no, orderId: r.order_id,
+      orderNo: r.orders ? r.orders.order_no : '',
+      customerName: r.customer_name, customerPhone: r.customer_phone,
+      productName: r.product_name, color: r.color, size: r.size,
+      type: r.type, status: r.status, description: r.description, memo: r.memo,
+      createdAt: r.created_at,
+    }));
+
+    // 주문번호 검색 (결과 없을 때)
+    if (search && result.length === 0) {
+      let q2 = supabaseAdmin.from('after_services')
+        .select('*, orders!inner(order_no)', { count: 'exact' })
+        .ilike('orders.order_no', `%${search}%`)
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+      if (status && status !== 'all') q2 = q2.eq('status', status);
+      const { data: d2, count: c2 } = await q2;
+      result = (d2 || []).map(r => ({
+        id: r.id, asNo: r.as_no, orderId: r.order_id,
+        orderNo: r.orders ? r.orders.order_no : '',
+        customerName: r.customer_name, customerPhone: r.customer_phone,
+        productName: r.product_name, color: r.color, size: r.size,
+        type: r.type, status: r.status, description: r.description, memo: r.memo,
+        createdAt: r.created_at,
+      }));
+      return ok(res, { afterServices: result, total: c2 || 0, page: pageNum, limit: limitNum });
+    }
+
+    return ok(res, { afterServices: result, total: count, page: pageNum, limit: limitNum });
+  }
+
+  if (req.method === 'POST') {
+    const { orderId, customerName, customerPhone, productName, color, size, type, description, memo, images } = req.body;
+    if (!customerName) return fail(res, '고객명을 입력해주세요');
+    if (!productName) return fail(res, '상품명을 입력해주세요');
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const { count } = await supabaseAdmin.from('after_services').select('id', { count: 'exact', head: true }).ilike('as_no', `AS-${dateStr}%`);
+    const asNo = `AS-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
+
+    const { data, error } = await supabaseAdmin.from('after_services')
+      .insert({
+        as_no: asNo, order_id: orderId || null,
+        customer_name: customerName, customer_phone: customerPhone || '',
+        product_name: productName, color: color || '', size: size || '',
+        type: type || '수선', status: '접수',
+        description: description || '', memo: memo || '',
+      })
+      .select('id').single();
+    if (error) return fail(res, error.message, 500);
+
+    // 이미지 저장
+    if (images && images.length > 0) {
+      await supabaseAdmin.from('after_service_images').insert(
+        images.map((url, i) => ({ after_service_id: data.id, image_url: url, sort_order: i }))
+      );
+    }
+
+    return ok(res, { id: data.id, asNo }, 201);
+  }
+
+  return fail(res, 'Method not allowed', 405);
+}
+
+async function handleAfterServiceDetail(req, res, id) {
+  if (req.method === 'GET') {
+    const { data, error } = await supabaseAdmin
+      .from('after_services')
+      .select('*, orders(order_no, name, total, status)')
+      .eq('id', id).single();
+    if (error || !data) return fail(res, 'A/S 접수를 찾을 수 없습니다', 404);
+
+    const { data: images } = await supabaseAdmin.from('after_service_images')
+      .select('*').eq('after_service_id', id).order('sort_order', { ascending: true });
+
+    return ok(res, {
+      asData: {
+        id: data.id, asNo: data.as_no, orderId: data.order_id,
+        orderNo: data.orders ? data.orders.order_no : '',
+        orderName: data.orders ? data.orders.name : '',
+        orderTotal: data.orders ? data.orders.total : 0,
+        orderStatus: data.orders ? data.orders.status : '',
+        customerName: data.customer_name, customerPhone: data.customer_phone,
+        productName: data.product_name, color: data.color, size: data.size,
+        type: data.type, status: data.status,
+        description: data.description, memo: data.memo,
+        createdAt: data.created_at,
+        images: (images || []).map(img => ({ id: img.id, imageUrl: img.image_url, sortOrder: img.sort_order })),
+      }
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    const { status, memo, description, images } = req.body;
+    const update = { updated_at: new Date().toISOString() };
+    if (status) update.status = status;
+    if (memo !== undefined) update.memo = memo;
+    if (description !== undefined) update.description = description;
+
+    const { error } = await supabaseAdmin.from('after_services').update(update).eq('id', id);
+    if (error) return fail(res, error.message, 500);
+
+    // 이미지 업데이트 (전체 교체)
+    if (images !== undefined) {
+      await supabaseAdmin.from('after_service_images').delete().eq('after_service_id', id);
+      if (images.length > 0) {
+        await supabaseAdmin.from('after_service_images').insert(
+          images.map((url, i) => ({ after_service_id: parseInt(id), image_url: url, sort_order: i }))
+        );
+      }
+    }
+
+    return ok(res, { id: parseInt(id) });
+  }
+
+  if (req.method === 'DELETE') {
+    const { error } = await supabaseAdmin.from('after_services').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { deleted: true });
+  }
+
+  return fail(res, 'Method not allowed', 405);
+}

@@ -26,6 +26,6 @@ module.exports = async function handler(req, res) {
 
   return ok(res, {
     token,
-    user: { name: user.name, phone: user.phone, role: user.role || 'user' },
+    user: { id: user.id, name: user.name, phone: user.phone, role: user.role || 'user' },
   });
 };

@@ -156,9 +156,11 @@
       <button class="tab" data-tab="inventory" onclick="navigate('inventory')">재고관리</button>
       <button class="tab" data-tab="shipping" onclick="navigate('shipping')">배송관리</button>
       <button class="tab" data-tab="returns" onclick="navigate('returns')">반품관리</button>
+      <button class="tab" data-tab="after-service" onclick="navigate('after-service')">A/S관리</button>
       <button class="tab" data-tab="sales" onclick="navigate('sales')">매출관리</button>
       <button class="tab" data-tab="members" onclick="navigate('members')">회원관리</button>
       <button class="tab" data-tab="reports" onclick="navigate('reports')">통계</button>
+      <button class="tab" data-tab="chat" onclick="navigate('chat')">내부채팅</button>
       <button class="tab" data-tab="system" onclick="navigate('system')">시스템</button>
     </div>
   </nav>
@@ -224,9 +226,11 @@
     { key: 'inventory', label: '재고관리', icon: '📁' },
     { key: 'shipping', label: '배송관리', icon: '🚚' },
     { key: 'returns', label: '반품관리', icon: '🔄' },
+    { key: 'after-service', label: 'A/S관리', icon: '🔧' },
     { key: 'sales', label: '매출관리', icon: '💰' },
     { key: 'members', label: '회원관리', icon: '👥' },
     { key: 'reports', label: '통계', icon: '📈' },
+    { key: 'chat', label: '내부채팅', icon: '💬' },
     { key: 'system', label: '시스템', icon: '⚙️' },
   ];
 
@@ -253,6 +257,7 @@
   }
 
   function router() {
+    stopChatPolling();
     const hash = location.hash.slice(1) || '';
     const content = document.getElementById('page-content');
 
@@ -286,6 +291,8 @@
       case 'members': renderMembers(content); break;
       case 'sales': renderSales(content); break;
       case 'returns': renderReturns(content); break;
+      case 'after-service': renderAfterService(content); break;
+      case 'chat': renderChat(content); break;
       case 'broadcasts': renderBroadcasts(content); break;
       case 'reports': renderReports(content); break;
       case 'system': renderSystem(content); break;
@@ -616,19 +623,20 @@
             <table>
               <thead>
                 <tr>
-                  <th>주문번호</th><th>주문자</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
+                  <th>주문번호</th><th>주문자</th><th>닉네임</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="10" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="11" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                   const itemsSummary = o.items.map(i => {
                     let label = `${i.name}(${i.color}/${i.size})x${i.qty}`;
-                    if (i.status && i.status !== o.status) label += `<span class="status-badge status-${i.status}" style="font-size:9px;padding:1px 6px;margin-left:3px;">${i.status}</span>`;
+                    if (i.allocatedQty >= i.qty && i.qty > 0) label += `<span style="display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600;background:#d1fae5;color:#065f46;">완료</span>`;
+                    else if (i.status && i.status !== o.status) label += `<span class="status-badge status-${i.status}" style="font-size:9px;padding:1px 6px;margin-left:3px;">${i.status}</span>`;
                     return label;
-                  }).join(', ');
+                  }).join('<br>');
                   const vendorNames = [...new Set(o.items.map(i => i.vendorName).filter(Boolean))].join(', ');
                   const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
                   const totalAlloc = o.items.reduce((s,i) => s + (i.allocatedQty || 0), 0);
@@ -643,7 +651,8 @@
                         <p class="font-semibold">${escapeHtml(o.name)}</p>
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
-                      <td class="text-[12px] text-warm-500 max-w-[200px]">${itemsSummary}</td>
+                      <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.nickname || '-')}</td>
+                      <td class="text-[12px] text-warm-500">${itemsSummary}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.broadcastName || '-')}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(vendorNames || '-')}</td>
                       <td class="font-semibold whitespace-nowrap">${fmt(o.total)}</td>
@@ -3362,6 +3371,529 @@
       document.getElementById('change-pw-modal').remove();
     } catch (e) { showToast(e.message || '변경에 실패했습니다'); }
   }
+  // ============================================================
+  //  A/S 관리
+  // ============================================================
+  let asFilter = 'all';
+  let asPage = 1;
+  let asSearch = '';
+  let asImageUrls = [];
+
+  async function renderAfterService(el) {
+    showSpinner(el);
+    try {
+      const params = new URLSearchParams({ page: asPage, limit: 20 });
+      if (asFilter !== 'all') params.set('status', asFilter);
+      if (asSearch) params.set('search', asSearch);
+      const data = await api('/admin/after-services?' + params.toString());
+      const totalPages = Math.ceil(data.total / data.limit);
+      const statuses = ['all','접수','처리중','완료'];
+      const statusLabels = { all:'전체', 접수:'접수', 처리중:'처리중', 완료:'완료' };
+
+      el.innerHTML = `
+        <div class="fade-in">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">A/S 관리</h2>
+            <button class="btn-primary" onclick="openAsModal()">+ A/S 접수</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div class="flex gap-1">
+              ${statuses.map(s => `<button class="filter-tab ${asFilter===s?'active':''}" onclick="asFilter='${s}';asPage=1;renderAfterService(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
+            </div>
+            <input type="text" class="input-field" style="width:200px;" placeholder="A/S번호/고객명/상품명 검색" value="${escapeHtml(asSearch)}" onkeydown="if(event.key==='Enter'){asSearch=this.value;asPage=1;renderAfterService(document.getElementById('page-content'))}" />
+          </div>
+          <div class="card overflow-x-auto">
+            <table>
+              <thead><tr><th>A/S번호</th><th>주문번호</th><th>고객명</th><th>상품명</th><th>유형</th><th>상태</th><th>접수일</th></tr></thead>
+              <tbody>
+                ${(data.afterServices||[]).length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-12">A/S 내역이 없습니다</td></tr>':''}
+                ${(data.afterServices||[]).map(r => {
+                  const d = new Date(r.createdAt);
+                  const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+                  return `
+                  <tr>
+                    <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openAsDetailModal(${r.id})">${escapeHtml(r.asNo)}</td>
+                    <td class="text-[12px]">${escapeHtml(r.orderNo||'-')}</td>
+                    <td class="text-[13px]">${escapeHtml(r.customerName)}</td>
+                    <td class="text-[13px]">${escapeHtml(r.productName)} <span class="text-warm-400 text-[11px]">${r.color?r.color:''}${r.size?'/'+r.size:''}</span></td>
+                    <td><span class="status-badge ${r.type==='수선'?'status-확인요청':r.type==='교체'?'status-배송중':'status-취소'}">${r.type}</span></td>
+                    <td><span class="status-badge ${r.status==='완료'?'status-송장완료':r.status==='처리중'?'status-결제완료':'status-입금대기'}">${r.status}</span></td>
+                    <td class="text-warm-400 text-[12px]">${dateStr}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${totalPages > 1 ? `
+            <div class="flex justify-center gap-2 mt-6">
+              ${asPage>1?`<button class="btn-outline btn-sm" onclick="asPage--;renderAfterService(document.getElementById('page-content'))">← 이전</button>`:''}
+              <span class="text-[13px] text-warm-500 flex items-center px-4">${asPage} / ${totalPages}</span>
+              ${asPage<totalPages?`<button class="btn-outline btn-sm" onclick="asPage++;renderAfterService(document.getElementById('page-content'))">다음 →</button>`:''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">A/S 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function openAsModal() {
+    asImageUrls = [];
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'as-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">A/S 접수</h3>
+          <button onclick="document.getElementById('as-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">주문번호 (선택)</label>
+            <div class="flex gap-2">
+              <input id="as-order-no" class="input-field flex-1" placeholder="주문번호 입력" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupAsOrder()}" />
+              <button type="button" class="btn-outline btn-sm" onclick="lookupAsOrder()">조회</button>
+            </div>
+          </div>
+          <div id="as-order-info" class="border border-warm-200 rounded-lg p-3">
+            <p class="text-warm-400 text-[12px]">주문번호를 입력하면 고객 정보를 자동으로 가져옵니다</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">고객명 *</label>
+              <input id="as-customer-name" class="input-field" placeholder="고객명" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">연락처</label>
+              <input id="as-customer-phone" class="input-field" placeholder="010-0000-0000" />
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품명 *</label>
+            <input id="as-product-name" class="input-field" placeholder="상품명" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">색상</label>
+              <input id="as-color" class="input-field" placeholder="색상" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
+              <input id="as-size" class="input-field" placeholder="사이즈" />
+            </div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">유형 *</label>
+            <select id="as-type" class="input-field">
+              <option value="수선">수선</option>
+              <option value="교체">교체</option>
+              <option value="기타">기타</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">설명</label>
+            <textarea id="as-description" class="input-field resize-none" rows="2" placeholder="불량/파손 상세 내용"></textarea>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사진 첨부</label>
+            <div class="flex gap-2 items-center mb-2">
+              <label class="btn-outline btn-sm cursor-pointer">
+                파일 선택
+                <input type="file" accept="image/*" multiple class="hidden" onchange="handleAsImageUpload(this.files)" />
+              </label>
+              <span id="as-img-count" class="text-[12px] text-warm-400">0장</span>
+              <span id="as-upload-status" class="text-[12px] text-warm-500 hidden"></span>
+            </div>
+            <div id="as-img-preview" class="flex flex-wrap gap-2"></div>
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+            <textarea id="as-memo" class="input-field resize-none" rows="2"></textarea>
+          </div>
+          <input type="hidden" id="as-order-id" value="" />
+          <button class="btn-primary w-full" onclick="saveAs()">접수</button>
+        </form>
+      </div>
+    `;
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+  }
+
+  async function lookupAsOrder() {
+    const orderNo = document.getElementById('as-order-no').value.trim();
+    if (!orderNo) { showToast('주문번호를 입력해주세요'); return; }
+    try {
+      const data = await api('/admin/after-services?lookupOrder=' + encodeURIComponent(orderNo));
+      const order = data.order;
+      document.getElementById('as-order-id').value = order.id;
+      document.getElementById('as-customer-name').value = order.name || '';
+      document.getElementById('as-order-info').innerHTML = `
+        <p class="text-[12px] text-warm-600">주문자: <strong>${escapeHtml(order.name)}</strong> / ${fmt(order.total)} / ${order.status}</p>
+        ${(order.items||[]).map(i => `<p class="text-[11px] text-warm-400 mt-1">${escapeHtml(i.name)} ${i.color||''}/${i.size||''} x${i.qty}</p>`).join('')}
+      `;
+    } catch (e) {
+      document.getElementById('as-order-info').innerHTML = `<p class="text-red-500 text-[12px]">${e.message || '주문을 찾을 수 없습니다'}</p>`;
+    }
+  }
+
+  async function handleAsImageUpload(files) {
+    if (!files || files.length === 0) return;
+    const statusEl = document.getElementById('as-upload-status');
+    statusEl.classList.remove('hidden');
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      statusEl.textContent = `업로드 중... (${i+1}/${files.length})`;
+      try {
+        const { signedUrl, publicUrl } = await api('/images/upload-url', {
+          method: 'POST',
+          body: JSON.stringify({ filename: file.name, contentType: file.type })
+        });
+        const uploadRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+        if (!uploadRes.ok) throw new Error('업로드 실패');
+        asImageUrls.push(publicUrl);
+        renderAsImagePreviews();
+      } catch (e) {
+        showToast(`${file.name} 업로드 실패: ${e.message}`);
+      }
+    }
+    statusEl.textContent = `${files.length}장 업로드 완료`;
+    setTimeout(() => statusEl.classList.add('hidden'), 2000);
+  }
+
+  function renderAsImagePreviews() {
+    const container = document.getElementById('as-img-preview');
+    const counter = document.getElementById('as-img-count');
+    if (!container) return;
+    counter.textContent = asImageUrls.length + '장';
+    container.innerHTML = asImageUrls.map((url, i) => `
+      <div class="relative group">
+        <img src="${url}" class="w-16 h-20 object-cover rounded border border-warm-200 cursor-pointer" onclick="window.open('${url}','_blank')" />
+        <button type="button" onclick="asImageUrls.splice(${i},1);renderAsImagePreviews()"
+          class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center cursor-pointer border-none opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+      </div>
+    `).join('');
+  }
+
+  async function saveAs() {
+    const customerName = document.getElementById('as-customer-name').value.trim();
+    if (!customerName) { showToast('고객명을 입력해주세요'); return; }
+    const productName = document.getElementById('as-product-name').value.trim();
+    if (!productName) { showToast('상품명을 입력해주세요'); return; }
+
+    try {
+      await api('/admin/after-services', {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId: document.getElementById('as-order-id').value || null,
+          customerName,
+          customerPhone: document.getElementById('as-customer-phone').value.trim(),
+          productName,
+          color: document.getElementById('as-color').value.trim(),
+          size: document.getElementById('as-size').value.trim(),
+          type: document.getElementById('as-type').value,
+          description: document.getElementById('as-description').value.trim(),
+          memo: document.getElementById('as-memo').value.trim(),
+          images: asImageUrls,
+        })
+      });
+      showToast('A/S 접수가 완료되었습니다');
+      document.getElementById('as-modal').remove();
+      renderAfterService(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || 'A/S 접수에 실패했습니다'); }
+  }
+
+  async function openAsDetailModal(asId) {
+    try {
+      const data = await api('/admin/after-services/' + asId);
+      const r = data.asData;
+      let detailImages = r.images.map(img => img.imageUrl);
+      const statuses = ['접수','처리중','완료'];
+      const d = new Date(r.createdAt);
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'as-detail-modal';
+
+      function renderDetailContent() {
+        return `
+          <div class="overlay-content p-6" style="max-width:560px;">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(r.asNo)}</h3>
+              <button onclick="document.getElementById('as-detail-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div><span class="text-[11px] text-warm-400 block">고객명</span><span class="font-semibold text-[13px]">${escapeHtml(r.customerName)}</span></div>
+              <div><span class="text-[11px] text-warm-400 block">연락처</span><span class="text-[13px]">${escapeHtml(r.customerPhone||'-')}</span></div>
+              <div><span class="text-[11px] text-warm-400 block">주문번호</span><span class="text-[13px]">${escapeHtml(r.orderNo||'-')}</span></div>
+              <div><span class="text-[11px] text-warm-400 block">접수일</span><span class="text-[13px]">${dateStr}</span></div>
+              <div><span class="text-[11px] text-warm-400 block">상품</span><span class="font-semibold text-[13px]">${escapeHtml(r.productName)} ${r.color?r.color:''}${r.size?'/'+r.size:''}</span></div>
+              <div><span class="text-[11px] text-warm-400 block">유형</span><span class="font-semibold">${r.type}</span></div>
+            </div>
+            ${r.description ? `<div class="mb-4"><span class="text-[11px] text-warm-400 block mb-1">설명</span><p class="text-[13px] bg-warm-50 rounded-lg p-3">${escapeHtml(r.description)}</p></div>` : ''}
+            ${detailImages.length > 0 ? `
+            <div class="mb-4">
+              <span class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">첨부 사진 (${detailImages.length}장)</span>
+              <div class="flex flex-wrap gap-2">
+                ${detailImages.map((url, i) => `
+                  <div class="relative group">
+                    <img src="${url}" class="w-20 h-24 object-cover rounded border border-warm-200 cursor-pointer" onclick="window.open('${url}','_blank')" />
+                    <button type="button" onclick="removeAsDetailImage(${i})"
+                      class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center cursor-pointer border-none opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>` : ''}
+            <div class="mb-4">
+              <label class="btn-outline btn-sm cursor-pointer">
+                사진 추가
+                <input type="file" accept="image/*" multiple class="hidden" onchange="handleAsDetailImageUpload(this.files)" />
+              </label>
+              <span id="as-detail-upload-status" class="text-[12px] text-warm-500 ml-2 hidden"></span>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상태 변경</label>
+                <select id="as-detail-status" class="input-field">
+                  ${statuses.map(s => `<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">메모</label>
+                <textarea id="as-detail-memo" class="input-field resize-none" rows="2">${escapeHtml(r.memo||'')}</textarea>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-primary flex-1" onclick="updateAsDetail(${r.id})">저장</button>
+              <button class="btn-danger" onclick="if(confirm('삭제하시겠습니까?'))deleteAs(${r.id})">삭제</button>
+            </div>
+          </div>
+        `;
+      }
+
+      modal.innerHTML = renderDetailContent();
+
+      // 이미지 추가/삭제를 위한 글로벌 함수 등록
+      window._asDetailImages = detailImages;
+      window.removeAsDetailImage = function(idx) {
+        detailImages.splice(idx, 1);
+        window._asDetailImages = detailImages;
+        modal.innerHTML = renderDetailContent();
+      };
+      window.handleAsDetailImageUpload = async function(files) {
+        if (!files || files.length === 0) return;
+        const statusEl = document.getElementById('as-detail-upload-status');
+        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.textContent = '업로드 중...'; }
+        for (let i = 0; i < files.length; i++) {
+          try {
+            const { signedUrl, publicUrl } = await api('/images/upload-url', {
+              method: 'POST',
+              body: JSON.stringify({ filename: files[i].name, contentType: files[i].type })
+            });
+            const uploadRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': files[i].type }, body: files[i] });
+            if (!uploadRes.ok) throw new Error('업로드 실패');
+            detailImages.push(publicUrl);
+          } catch (e) { showToast(`업로드 실패: ${e.message}`); }
+        }
+        window._asDetailImages = detailImages;
+        modal.innerHTML = renderDetailContent();
+      };
+
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
+  }
+
+  async function updateAsDetail(asId) {
+    const status = document.getElementById('as-detail-status').value;
+    const memo = document.getElementById('as-detail-memo').value.trim();
+    try {
+      await api('/admin/after-services/' + asId, {
+        method: 'PATCH',
+        body: JSON.stringify({ status, memo, images: window._asDetailImages || [] })
+      });
+      showToast('저장되었습니다');
+      document.getElementById('as-detail-modal').remove();
+      renderAfterService(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function deleteAs(asId) {
+    try {
+      await api('/admin/after-services/' + asId, { method: 'DELETE' });
+      showToast('삭제되었습니다');
+      document.getElementById('as-detail-modal').remove();
+      renderAfterService(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  내부 채팅
+  // ============================================================
+  let chatPollingTimer = null;
+  let chatLastTimestamp = null;
+
+  function stopChatPolling() {
+    if (chatPollingTimer) {
+      clearInterval(chatPollingTimer);
+      chatPollingTimer = null;
+    }
+  }
+
+  async function renderChat(el) {
+    stopChatPolling();
+    showSpinner(el);
+    try {
+      const data = await api('/admin/chat?page=1&limit=50');
+      chatLastTimestamp = null;
+
+      el.innerHTML = `
+        <div class="fade-in" style="display:flex;flex-direction:column;height:calc(100vh - 120px);">
+          <div class="flex justify-between items-center mb-3">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">내부 채팅</h2>
+          </div>
+          <div id="chat-messages" class="flex-1 overflow-y-auto bg-white border border-warm-200 rounded-xl p-4" style="min-height:0;">
+          </div>
+          <div class="flex gap-2 mt-3 items-end">
+            <label class="btn-outline btn-sm cursor-pointer flex-shrink-0" style="padding:8px 12px;">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              <input type="file" accept="image/*" class="hidden" onchange="sendChatImage(this.files)" />
+            </label>
+            <textarea id="chat-input" class="input-field flex-1 resize-none" rows="1" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" style="min-height:40px;max-height:100px;"></textarea>
+            <button class="btn-primary flex-shrink-0" onclick="sendChatMessage()" style="padding:8px 16px;">전송</button>
+          </div>
+        </div>
+      `;
+
+      renderChatMessages(data.messages || []);
+
+      // 읽음 처리
+      api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
+
+      // 폴링 시작
+      chatPollingTimer = setInterval(async () => {
+        try {
+          const url = chatLastTimestamp ? '/admin/chat?after=' + encodeURIComponent(chatLastTimestamp) : '/admin/chat?page=1&limit=50';
+          const pollData = await api(url);
+          if (pollData.messages && pollData.messages.length > 0) {
+            appendChatMessages(pollData.messages);
+            api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
+          }
+        } catch (e) { /* ignore polling errors */ }
+      }, 5000);
+    } catch (e) {
+      el.innerHTML = '<p class="py-20 text-center text-warm-400">채팅을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function renderChatMessages(messages) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const userId = adminUser ? adminUser.id : null;
+    container.innerHTML = messages.map(m => chatBubble(m, userId)).join('');
+    if (messages.length > 0) {
+      chatLastTimestamp = messages[messages.length - 1].createdAt;
+    }
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function appendChatMessages(messages) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const userId = adminUser ? adminUser.id : null;
+    messages.forEach(m => {
+      container.insertAdjacentHTML('beforeend', chatBubble(m, userId));
+    });
+    if (messages.length > 0) {
+      chatLastTimestamp = messages[messages.length - 1].createdAt;
+    }
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function chatBubble(m, userId) {
+    const isMine = m.senderId === userId;
+    const d = new Date(m.createdAt);
+    const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+
+    let content = '';
+    if (m.imageUrl) {
+      content += `<img src="${escapeHtml(m.imageUrl)}" class="max-w-[200px] max-h-[200px] rounded-lg cursor-pointer object-cover" onclick="window.open('${escapeHtml(m.imageUrl)}','_blank')" />`;
+    }
+    if (m.message) {
+      content += `<p class="text-[13px] leading-relaxed whitespace-pre-wrap">${escapeHtml(m.message)}</p>`;
+    }
+
+    if (isMine) {
+      return `
+        <div class="flex justify-end mb-3">
+          <div class="flex items-end gap-1.5 max-w-[70%]">
+            <span class="text-[10px] text-warm-400 flex-shrink-0">${dateStr} ${timeStr}</span>
+            <div class="rounded-2xl rounded-tr-sm px-4 py-2.5" style="background:#6b4220;color:#fff;">
+              ${content}
+            </div>
+          </div>
+        </div>`;
+    } else {
+      return `
+        <div class="flex justify-start mb-3">
+          <div class="max-w-[70%]">
+            <span class="text-[11px] font-semibold text-warm-600 block mb-1">${escapeHtml(m.senderName)}</span>
+            <div class="flex items-end gap-1.5">
+              <div class="rounded-2xl rounded-tl-sm px-4 py-2.5" style="background:#f9efe6;color:#3d2e22;">
+                ${content}
+              </div>
+              <span class="text-[10px] text-warm-400 flex-shrink-0">${dateStr} ${timeStr}</span>
+            </div>
+          </div>
+        </div>`;
+    }
+  }
+
+  async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    const message = input.value.trim();
+    if (!message) return;
+    input.value = '';
+    try {
+      await api('/admin/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message })
+      });
+      // 즉시 반영
+      const userId = adminUser ? adminUser.id : null;
+      const now = new Date().toISOString();
+      appendChatMessages([{ id: Date.now(), senderId: userId, senderName: adminUser.name, message, imageUrl: null, isRead: false, createdAt: now }]);
+      chatLastTimestamp = now;
+    } catch (e) { showToast(e.message || '전송에 실패했습니다'); }
+  }
+
+  async function sendChatImage(files) {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      showToast('이미지 업로드 중...');
+      const { signedUrl, publicUrl } = await api('/images/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({ filename: file.name, contentType: file.type })
+      });
+      const uploadRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      if (!uploadRes.ok) throw new Error('업로드 실패');
+
+      await api('/admin/chat', {
+        method: 'POST',
+        body: JSON.stringify({ imageUrl: publicUrl })
+      });
+      const userId = adminUser ? adminUser.id : null;
+      const now = new Date().toISOString();
+      appendChatMessages([{ id: Date.now(), senderId: userId, senderName: adminUser.name, message: '', imageUrl: publicUrl, isRead: false, createdAt: now }]);
+      chatLastTimestamp = now;
+    } catch (e) { showToast(e.message || '이미지 전송에 실패했습니다'); }
+  }
+
   </script>
 </body>
 </html>
