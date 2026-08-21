@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <script>
@@ -81,6 +82,17 @@
     .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #6b4220; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+    /* 신규 주문 알림 팝업 */
+    .order-noti-container { position: fixed; top: 70px; right: 16px; z-index: 90; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .order-noti { pointer-events: auto; background: #fff; border: 2px solid #e53e3e; border-radius: 12px; padding: 14px 16px; width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); cursor: pointer; transform: translateX(120%); transition: transform 0.35s cubic-bezier(.4,0,.2,1), opacity 0.35s ease; opacity: 0; }
+    .order-noti.show { transform: translateX(0); opacity: 1; }
+    .order-noti.hide { transform: translateX(120%); opacity: 0; }
+    .order-noti-title { font-size: 13px; font-weight: 700; color: #e53e3e; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .order-noti-body { font-size: 12px; color: #3d2e22; line-height: 1.5; }
+    .order-noti-close { position: absolute; top: 8px; right: 10px; background: none; border: none; font-size: 16px; color: #a0a0a0; cursor: pointer; line-height: 1; }
+    .order-noti-close:hover { color: #333; }
+    @media (max-width: 480px) { .order-noti { width: calc(100vw - 32px); } }
+
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; font-size: 11px; font-weight: 600; color: #a86e35; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; border-bottom: 2px solid #f0dcc8; }
     td { padding: 12px; border-bottom: 1px solid #f9efe6; font-size: 13px; color: #3d2e22; vertical-align: top; }
@@ -120,6 +132,7 @@
 <body>
 
   <div id="toast" class="toast"></div>
+  <div id="order-noti-container" class="order-noti-container"></div>
 
   <!-- 헤더 -->
   <header class="bg-warm-800 text-white">
@@ -130,7 +143,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.4</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.2.7</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -267,6 +280,7 @@
       document.getElementById('main-nav').classList.add('hidden');
       document.getElementById('logout-btn').classList.add('hidden');
       document.getElementById('hamburger-btn').style.display = 'none';
+      stopOrderPolling();
       renderLogin(content);
       return;
     }
@@ -274,6 +288,9 @@
     document.getElementById('main-nav').classList.remove('hidden');
     document.getElementById('logout-btn').classList.remove('hidden');
     document.getElementById('hamburger-btn').style.display = '';
+
+    // 주문 알림 폴링 시작 (로그인 상태일 때만)
+    startOrderPolling();
 
     // 탭 활성화
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -364,8 +381,102 @@
     adminUser = null;
     localStorage.removeItem('chicmood_admin_token');
     localStorage.removeItem('chicmood_admin_user');
+    stopOrderPolling();
     showToast('로그아웃 되었습니다');
     navigate('login');
+  }
+
+  // ============================================================
+  //  신규 주문 알림 폴링
+  // ============================================================
+  let orderPollingTimer = null;
+  let orderLastTimestamp = new Date().toISOString();
+  const notifiedOrderIds = new Set();
+
+  function startOrderPolling() {
+    if (orderPollingTimer) return; // 이미 실행 중
+    orderLastTimestamp = new Date().toISOString();
+    orderPollingTimer = setInterval(pollNewOrders, 10000);
+  }
+
+  function stopOrderPolling() {
+    if (orderPollingTimer) {
+      clearInterval(orderPollingTimer);
+      orderPollingTimer = null;
+    }
+  }
+
+  async function pollNewOrders() {
+    if (!adminToken) return;
+    try {
+      const data = await api('/admin/orders?after=' + encodeURIComponent(orderLastTimestamp));
+      if (data.orders && data.orders.length > 0) {
+        data.orders.forEach(order => {
+          if (!notifiedOrderIds.has(order.id)) {
+            notifiedOrderIds.add(order.id);
+            showOrderNotification(order);
+          }
+          // 다음 폴링 기준점 갱신
+          if (order.createdAt > orderLastTimestamp) {
+            orderLastTimestamp = order.createdAt;
+          }
+        });
+      }
+    } catch (e) { /* 폴링 에러 무시 */ }
+  }
+
+  function showOrderNotification(order) {
+    // 알림음
+    playNotificationSound();
+
+    const container = document.getElementById('order-noti-container');
+    if (!container) return;
+
+    const noti = document.createElement('div');
+    noti.className = 'order-noti';
+    noti.style.position = 'relative';
+    noti.innerHTML = `
+      <button class="order-noti-close" onclick="event.stopPropagation();this.parentElement.classList.replace('show','hide');setTimeout(()=>this.parentElement.remove(),350);">&times;</button>
+      <div class="order-noti-title">🔔 신규 주문</div>
+      <div class="order-noti-body">
+        <div><b>${escapeHtml(order.orderNo || '')}</b></div>
+        <div>${escapeHtml(order.name || '고객')} · ${fmt(order.total || 0)}</div>
+      </div>
+    `;
+    noti.addEventListener('click', () => {
+      noti.classList.replace('show', 'hide');
+      setTimeout(() => noti.remove(), 350);
+      navigate('orders');
+    });
+    container.appendChild(noti);
+
+    // 슬라이드 인
+    requestAnimationFrame(() => { requestAnimationFrame(() => { noti.classList.add('show'); }); });
+
+    // 5초 후 자동 닫힘
+    setTimeout(() => {
+      if (noti.parentElement) {
+        noti.classList.replace('show', 'hide');
+        setTimeout(() => noti.remove(), 350);
+      }
+    }, 5000);
+  }
+
+  function playNotificationSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1047, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) { /* 소리 재생 불가 시 무시 */ }
   }
 
   // ============================================================
@@ -1084,9 +1195,9 @@
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>ID</th><th>이름</th><th>닉네임</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>평균 주문가</th><th>최근 주문</th><th>가입일</th></tr></thead>
+              <thead><tr><th>ID</th><th>역할</th><th>이름</th><th>닉네임</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>평균 주문가</th><th>최근 주문</th><th>가입일</th></tr></thead>
               <tbody>
-                ${data.members.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
+                ${data.members.length === 0 ? '<tr><td colspan="10" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
                 ${data.members.map(m => {
                   const d = new Date(m.createdAt);
                   const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
@@ -1095,6 +1206,7 @@
                   return `
                     <tr>
                       <td class="text-[10px] text-warm-300 font-mono">${m.id.slice(0,8)}</td>
+                      <td class="text-[11px]">${m.role === 'admin' ? '<span class="text-rose-500 font-semibold">관리자</span>' : '<span class="text-warm-400">일반</span>'}</td>
                       <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openMemberModal('${m.id}')">${escapeHtml(m.name)}</td>
                       <td class="text-[12px] text-warm-500">${m.nickname ? escapeHtml(m.nickname) : '-'}</td>
                       <td class="text-[12px]">${escapeHtml(m.phone)}</td>
@@ -1147,7 +1259,7 @@
             <div><span class="text-[11px] text-warm-400 block">연락처</span><span>${escapeHtml(m.phone)}</span></div>
             <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role === 'admin' ? '관리자' : '일반회원'}</span></div>
             <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
-            ${m.address ? `<div><span class="text-[11px] text-warm-400 block">주소</span><span class="text-[12px]">${escapeHtml(m.address)}</span></div>` : ''}
+            ${m.addressFull ? `<div class="col-span-2"><span class="text-[11px] text-warm-400 block">주소</span><span class="text-[12px]">${escapeHtml(m.addressFull)}</span></div>` : ''}
           </div>
           <div class="grid grid-cols-3 gap-3 mb-6">
             <div class="card text-center py-3">
@@ -1190,6 +1302,17 @@
     }
   }
 
+  // 관리자 주소검색 (다음 우편번호)
+  function openAdminPostcode(prefix) {
+    new daum.Postcode({
+      oncomplete: function(data) {
+        document.getElementById(prefix + '-zipcode').value = data.zonecode;
+        document.getElementById(prefix + '-addr').value = data.roadAddress || data.jibunAddress;
+        document.getElementById(prefix + '-addr-detail').focus();
+      }
+    }).open();
+  }
+
   // 회원 등록 모달
   function openMemberAddModal() {
     const modal = document.createElement('div');
@@ -1206,6 +1329,15 @@
           <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">닉네임</label><input id="ma-nickname" class="input-field" placeholder="@chicmood_viewer" /></div>
           <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">전화번호 *</label><input id="ma-phone" class="input-field" placeholder="010-1234-5678" /></div>
           <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">비밀번호 (4자리, 미입력시 0000)</label><input id="ma-pw" class="input-field" maxlength="4" placeholder="●●●●" /></div>
+          <div>
+            <label class="text-[11px] font-semibold text-warm-500 block mb-1">주소</label>
+            <div class="flex gap-2 mb-2">
+              <input id="ma-zipcode" class="input-field flex-1" placeholder="우편번호" readonly />
+              <button type="button" class="btn-outline btn-sm" onclick="openAdminPostcode('ma')">주소검색</button>
+            </div>
+            <input id="ma-addr" class="input-field mb-2" placeholder="기본주소" readonly />
+            <input id="ma-addr-detail" class="input-field" placeholder="상세주소 입력" />
+          </div>
           <button class="btn-primary w-full" onclick="submitMemberAdd()">등록</button>
         </div>
       </div>
@@ -1219,9 +1351,12 @@
     const nickname = document.getElementById('ma-nickname').value.trim();
     const phone = document.getElementById('ma-phone').value.trim();
     const password = document.getElementById('ma-pw').value.trim() || '0000';
+    const zipcode = document.getElementById('ma-zipcode').value.trim();
+    const address = document.getElementById('ma-addr').value.trim();
+    const addressDetail = document.getElementById('ma-addr-detail').value.trim();
     if (!name || !phone) { showToast('이름과 전화번호는 필수입니다'); return; }
     try {
-      await api('/admin/members', { method: 'POST', body: JSON.stringify({ name, nickname, phone, password }) });
+      await api('/admin/members', { method: 'POST', body: JSON.stringify({ name, nickname, phone, password, zipcode, address, addressDetail }) });
       document.getElementById('member-add-modal').remove();
       showToast('회원이 등록되었습니다');
       renderMembers(document.getElementById('page-content'));
@@ -1247,6 +1382,15 @@
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">이름</label><input id="me-name" class="input-field" value="${escapeHtml(m.name)}" /></div>
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">닉네임</label><input id="me-nickname" class="input-field" value="${escapeHtml(m.nickname || '')}" /></div>
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">전화번호</label><input id="me-phone" class="input-field" value="${escapeHtml(m.phone)}" /></div>
+            <div>
+              <label class="text-[11px] font-semibold text-warm-500 block mb-1">주소</label>
+              <div class="flex gap-2 mb-2">
+                <input id="me-zipcode" class="input-field flex-1" placeholder="우편번호" value="${escapeHtml(m.zipcode || '')}" readonly />
+                <button type="button" class="btn-outline btn-sm" onclick="openAdminPostcode('me')">주소검색</button>
+              </div>
+              <input id="me-addr" class="input-field mb-2" placeholder="기본주소" value="${escapeHtml(m.address || '')}" readonly />
+              <input id="me-addr-detail" class="input-field" placeholder="상세주소 입력" value="${escapeHtml(m.addressDetail || '')}" />
+            </div>
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">역할</label>
               <select id="me-role" class="input-field"><option value="user" ${m.role !== 'admin' ? 'selected' : ''}>일반회원</option><option value="admin" ${m.role === 'admin' ? 'selected' : ''}>관리자</option></select>
             </div>
@@ -1263,10 +1407,13 @@
     const name = document.getElementById('me-name').value.trim();
     const nickname = document.getElementById('me-nickname').value.trim();
     const phone = document.getElementById('me-phone').value.trim();
+    const zipcode = document.getElementById('me-zipcode').value.trim();
+    const address = document.getElementById('me-addr').value.trim();
+    const addressDetail = document.getElementById('me-addr-detail').value.trim();
     const role = document.getElementById('me-role').value;
     if (!name || !phone) { showToast('이름과 전화번호는 필수입니다'); return; }
     try {
-      await api('/admin/members/' + userId, { method: 'PATCH', body: JSON.stringify({ name, nickname, phone, role }) });
+      await api('/admin/members/' + userId, { method: 'PATCH', body: JSON.stringify({ name, nickname, phone, zipcode, address, addressDetail, role }) });
       document.getElementById('member-edit-modal').remove();
       showToast('회원 정보가 수정되었습니다');
       renderMembers(document.getElementById('page-content'));
@@ -3384,13 +3531,13 @@
                 <span class="text-[12px] text-warm-400 ml-auto">총 ${total}건</span>
               </div>
               <table>
-                <thead><tr><th>일시</th><th>관리자</th><th>액션</th><th>대상</th><th>상세</th></tr></thead>
+                <thead><tr><th>일시</th><th>관리자</th><th>메뉴</th><th>내용</th></tr></thead>
                 <tbody>
-                  ${(data.logs||[]).length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-8">로그가 없습니다</td></tr>':''}
+                  ${(data.logs||[]).length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">로그가 없습니다</td></tr>':''}
                   ${(data.logs||[]).map(l => {
                     const d = new Date(l.createdAt);
                     const ds = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                    return `<tr><td class="text-warm-400 text-[12px] whitespace-nowrap">${ds}</td><td>${escapeHtml(l.userName||'')}</td><td><span class="text-[11px] px-1.5 py-0.5 rounded bg-warm-100 text-warm-600">${escapeHtml(l.action)}</span></td><td class="text-[12px]">${escapeHtml(l.targetType||'')} ${escapeHtml(l.targetId||'')}</td><td class="text-[11px] text-warm-400 max-w-[200px]">${escapeHtml(JSON.stringify(l.detail||{}))}</td></tr>`;
+                    return `<tr><td class="text-warm-400 text-[12px] whitespace-nowrap">${ds}</td><td>${escapeHtml(l.userName||'')}</td><td class="text-[12px]"><span class="text-[11px] px-1.5 py-0.5 rounded bg-warm-100 text-warm-600">${escapeHtml(l.targetType||'')}</span></td><td class="text-[13px]">${escapeHtml(l.targetId||'')}</td></tr>`;
                   }).join('')}
                 </tbody>
               </table>

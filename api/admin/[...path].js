@@ -2,11 +2,57 @@ const { supabaseAdmin } = require('../_lib/supabase');
 const { requireAdmin, getUserFromRequest } = require('../_lib/auth');
 const { ok, fail, handleCors } = require('../_lib/response');
 
+// 관리자 활동 로그 기록
+const LOG_ACTION_KR = {
+  'CREATE': '등록', 'UPDATE': '수정', 'DELETE': '삭제', 'STATUS_CHANGE': '상태변경',
+};
+const LOG_TARGET_KR = {
+  'order': '주문관리', 'product': '상품관리', 'broadcast': '방송관리',
+  'member': '회원관리', 'vendor': '거래처관리', 'settings': '시스템설정',
+};
+async function writeLog(admin, action, targetType, targetId, detail) {
+  try {
+    // 사람이 읽기 좋은 요약 생성
+    const menu = LOG_TARGET_KR[targetType] || targetType;
+    const act = LOG_ACTION_KR[action] || action;
+    let summary = `[${menu}] `;
+    if (action === 'STATUS_CHANGE' && detail.from && detail.to) {
+      summary += detail.item
+        ? `주문 ${targetId} [${detail.item}] "${detail.from || '없음'}" → "${detail.to}"`
+        : `주문 ${targetId} 상태 "${detail.from}" → "${detail.to}"`;
+    } else if (action === 'CREATE') {
+      const label = detail.name || detail.title || detail.phone || targetId;
+      summary += `"${label}" ${act}`;
+    } else if (action === 'DELETE') {
+      const label = detail.name || detail.title || targetId;
+      summary += `"${label}" ${act}`;
+    } else if (action === 'UPDATE' && targetType === 'order' && detail.trackingNo) {
+      summary += `주문 ${targetId} 송장입력 (${detail.trackingCarrier || ''} ${detail.trackingNo})`;
+    } else if (action === 'UPDATE' && targetType === 'settings') {
+      summary += `${targetId} 설정 변경`;
+    } else {
+      const label = detail.name || detail.title || targetId;
+      summary += `"${label}" ${act}`;
+    }
+
+    const { error } = await supabaseAdmin.from('admin_logs').insert({
+      user_id: admin.id,
+      user_name: admin.name,
+      action,
+      target_type: menu,
+      target_id: summary,
+      detail: detail || {},
+    });
+    if (error) console.error('writeLog DB error:', error.message, error.details);
+  } catch (e) { console.error('writeLog error:', e.message); }
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
 
   const admin = requireAdmin(req, res, fail);
   if (!admin) return;
+  req._admin = admin;  // 핸들러에서 로그 기록용
 
   // path 파싱: /api/admin/orders/123 → ['orders','123']
   // Vercel rewrite에서 path가 문자열로 올 수 있음
@@ -125,7 +171,21 @@ async function handleStats(req, res) {
 async function handleOrders(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { status, search, page = '1', limit = '20' } = req.query || {};
+  const { status, search, page = '1', limit = '20', after } = req.query || {};
+
+  // 신규 주문 알림용: after 이후에 생성된 주문만 경량 반환
+  if (after) {
+    let q = supabaseAdmin
+      .from('orders')
+      .select('id, order_no, name, total, created_at')
+      .gt('created_at', after)
+      .order('created_at', { ascending: true })
+      .limit(20);
+    const { data, error } = await q;
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { orders: (data || []).map(o => ({ id: o.id, orderNo: o.order_no, name: o.name, total: o.total, createdAt: o.created_at })) });
+  }
+
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
   const offset = (pageNum - 1) * limitNum;
@@ -219,6 +279,7 @@ async function handleOrderDetail(req, res, id) {
     await supabaseAdmin.from('order_items').delete().eq('order_id', id);
     const { error } = await supabaseAdmin.from('orders').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'order', id, { status: order.status });
     return ok(res, { deleted: true });
   }
 
@@ -317,6 +378,9 @@ async function handleOrderDetail(req, res, id) {
       .eq('order_id', id)
       .not('status', 'in', '("배송중","송장완료","취소")');
   }
+
+  if (status) await writeLog(req._admin, 'STATUS_CHANGE', 'order', data.order_no, { from: prevStatus, to: status });
+  if (trackingNo !== undefined) await writeLog(req._admin, 'UPDATE', 'order', data.order_no, { trackingNo, trackingCarrier });
 
   return ok(res, { id: data.id, orderNo: data.order_no, status: data.status, trackingNo: data.tracking_no, trackingCarrier: data.tracking_carrier });
 }
@@ -446,6 +510,13 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
 
   // 주문 상태 자동 재계산
   await recalcOrderStatus(orderId);
+
+  // 활동 로그
+  const { data: orderInfo } = await supabaseAdmin.from('orders').select('order_no').eq('id', orderId).single();
+  const orderNo = orderInfo?.order_no || orderId;
+  const productName = item.product_name || item.product_id;
+  if (status) await writeLog(req._admin, 'STATUS_CHANGE', 'order', orderNo, { from: prevStatus, to: status, item: productName });
+  if (trackingNo !== undefined) await writeLog(req._admin, 'UPDATE', 'order', orderNo, { trackingNo, trackingCarrier, item: productName });
 
   return ok(res, { id: parseInt(itemId), status: status || prevStatus });
 }
@@ -957,6 +1028,7 @@ async function handleProducts(req, res) {
       await supabaseAdmin.from('product_colors').insert(colors.map((c, i) => ({ product_id: product.id, name: c.name, hex_code: c.hex, sort_order: i })));
     }
 
+    await writeLog(req._admin, 'CREATE', 'product', product.id, { name });
     return ok(res, { id: product.id }, 201);
   }
 
@@ -1001,12 +1073,15 @@ async function handleProductDetail(req, res, id) {
       }
     }
 
+    await writeLog(req._admin, 'UPDATE', 'product', id, { name: name || undefined });
     return ok(res, { id: parseInt(id) });
   }
 
   if (req.method === 'DELETE') {
+    const { data: delProd } = await supabaseAdmin.from('products').select('name').eq('id', id).single();
     const { error } = await supabaseAdmin.from('products').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'product', id, { name: delProd?.name });
     return ok(res, { deleted: true });
   }
 
@@ -1059,6 +1134,7 @@ async function handleBroadcasts(req, res) {
       await supabaseAdmin.from('broadcast_products').insert(productIds.map((pid, i) => ({ broadcast_id: broadcast.id, product_id: pid, sort_order: i })));
     }
 
+    await writeLog(req._admin, 'CREATE', 'broadcast', broadcast.id, { title });
     return ok(res, { id: broadcast.id }, 201);
   }
 
@@ -1123,12 +1199,15 @@ async function handleBroadcastDetail(req, res, id) {
       }
     }
 
+    await writeLog(req._admin, 'UPDATE', 'broadcast', id, { title: title || undefined, status: status || undefined });
     return ok(res, { id: parseInt(id) });
   }
 
   if (req.method === 'DELETE') {
+    const { data: delBc } = await supabaseAdmin.from('broadcasts').select('title').eq('id', id).single();
     const { error } = await supabaseAdmin.from('broadcasts').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'broadcast', id, { title: delBc?.title });
     return ok(res, { deleted: true });
   }
 
@@ -1185,7 +1264,7 @@ async function handleShippingExcel(req, res) {
 async function handleMembers(req, res) {
   // POST: 회원 등록
   if (req.method === 'POST') {
-    const { name, phone, password, nickname } = req.body;
+    const { name, phone, password, nickname, zipcode, address, addressDetail } = req.body;
     if (!name || !phone) return fail(res, '이름과 전화번호는 필수입니다');
 
     const { data: existing } = await supabaseAdmin.from('users').select('id').eq('phone', phone).single();
@@ -1193,9 +1272,13 @@ async function handleMembers(req, res) {
 
     const userData = { name, phone, password: password || '0000' };
     if (nickname) userData.nickname = nickname;
+    if (zipcode) userData.zipcode = zipcode;
+    if (address) userData.address = address;
+    if (addressDetail) userData.address_detail = addressDetail;
 
     const { data: user, error } = await supabaseAdmin.from('users').insert(userData).select('id, name, phone, nickname').single();
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'CREATE', 'member', user.id, { name, phone });
     return ok(res, { member: user }, 201);
   }
 
@@ -1268,13 +1351,16 @@ async function handleMemberDetail(req, res, id) {
 
     const { data: user, error } = await supabaseAdmin.from('users').update(updates).eq('id', id).select('id, name, phone, nickname').single();
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'UPDATE', 'member', id, updates);
     return ok(res, { member: user });
   }
 
   // DELETE: 회원 삭제
   if (req.method === 'DELETE') {
+    const { data: delUser } = await supabaseAdmin.from('users').select('name, phone').eq('id', id).single();
     const { error } = await supabaseAdmin.from('users').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'member', id, { name: delUser?.name, phone: delUser?.phone });
     return ok(res, { message: '회원이 삭제되었습니다' });
   }
 
@@ -1297,7 +1383,10 @@ async function handleMemberDetail(req, res, id) {
       nickname: user.nickname || '',
       phone: user.phone,
       role: user.role,
-      address: [user.zipcode, user.address, user.address_detail].filter(Boolean).join(' ') || '',
+      zipcode: user.zipcode || '',
+      address: user.address || '',
+      addressDetail: user.address_detail || '',
+      addressFull: [user.zipcode, user.address, user.address_detail].filter(Boolean).join(' ') || '',
       createdAt: user.created_at,
       orders: (orders || []).map(o => ({
         id: o.id, orderNo: o.order_no, total: o.total, status: o.status, createdAt: o.created_at,
@@ -1351,6 +1440,7 @@ async function handleVendors(req, res) {
       .insert({ name, contact: contact||'', phone: phone||'', email: email||'', address: address||'', bank_info: bankInfo||'', memo: memo||'' })
       .select('id').single();
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'CREATE', 'vendor', data.id, { name });
     return ok(res, { id: data.id }, 201);
   }
 
@@ -1409,12 +1499,15 @@ async function handleVendorDetail(req, res, id) {
     if (Object.keys(update).length === 0) return fail(res, '변경할 내용이 없습니다');
     const { error } = await supabaseAdmin.from('vendors').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'UPDATE', 'vendor', id, { name: name || undefined });
     return ok(res, { id: parseInt(id) });
   }
 
   if (req.method === 'DELETE') {
+    const { data: delV } = await supabaseAdmin.from('vendors').select('name').eq('id', id).single();
     const { error } = await supabaseAdmin.from('vendors').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'vendor', id, { name: delV?.name });
     return ok(res, { deleted: true });
   }
 
@@ -2095,6 +2188,7 @@ async function handleSettings(req, res) {
     const { error } = await supabaseAdmin.from('system_settings')
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'UPDATE', 'settings', key, {});
     return ok(res, { key });
   }
 
