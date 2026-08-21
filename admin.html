@@ -555,7 +555,10 @@
         <div class="fade-in">
           <div class="flex items-center justify-between mb-4">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">대시보드</h2>
-            <p class="text-[12px] text-warm-400">${dateStr}</p>
+            <div class="flex gap-2 items-center">
+              <button class="btn-outline btn-sm" onclick="renderDashboard(document.getElementById('page-content'))">🔄 새로고침</button>
+              <p class="text-[12px] text-warm-400">${dateStr}</p>
+            </div>
           </div>
 
           <!-- 매출 요약 -->
@@ -757,7 +760,10 @@
 
       el.innerHTML = `
         <div class="fade-in">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">주문관리</h2>
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">주문관리</h2>
+            <button class="btn-outline btn-sm" onclick="renderOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+          </div>
 
           <!-- 필터 + 검색 -->
           <div class="flex flex-wrap items-center gap-3 mb-6">
@@ -1098,6 +1104,7 @@
           <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
             <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderShipping(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-outline flex items-center gap-2" onclick="bulkShipItems()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                 선택 품목 배송처리
@@ -1228,7 +1235,10 @@
 
       el.innerHTML = `
         <div class="fade-in">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">회원관리</h2>
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">회원관리</h2>
+            <button class="btn-outline btn-sm" onclick="renderMembers(document.getElementById('page-content'))">🔄 새로고침</button>
+          </div>
           <div class="mb-4 flex gap-3 items-center flex-wrap">
             <input type="text" class="input-field flex-1" style="max-width:400px;" placeholder="이름, 전화번호 검색..." value="${escapeHtml(memberSearch)}" onkeydown="if(event.key==='Enter'){memberSearch=this.value;memberPage=1;renderMembers(document.getElementById('page-content'))}" />
             <button class="btn-primary btn-sm" onclick="openMemberAddModal()">+ 회원 등록</button>
@@ -1483,7 +1493,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">상품관리</h2>
-            <button class="btn-primary" onclick="openProductModal()">+ 상품 등록</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderProducts(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openProductModal()">+ 상품 등록</button>
+            </div>
           </div>
 
           <div class="card overflow-x-auto">
@@ -1774,7 +1787,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">방송관리</h2>
-            <button class="btn-primary" onclick="openBroadcastModal()">+ 방송 등록</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderBroadcasts(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openBroadcastModal()">+ 방송 등록</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
@@ -2001,7 +2017,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">거래처관리</h2>
-            <button class="btn-primary" onclick="openVendorModal()">+ 거래처 등록</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderVendors(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openVendorModal()">+ 거래처 등록</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-2">
@@ -2233,7 +2252,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">발주관리</h2>
-            <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderPurchaseOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex flex-wrap gap-2">
@@ -2708,7 +2730,10 @@
 
       el.innerHTML = `
         <div class="fade-in">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">매출관리</h2>
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">매출관리</h2>
+            <button class="btn-outline btn-sm" onclick="renderSales(document.getElementById('page-content'))">🔄 새로고침</button>
+          </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
               ${tabs.map(t => `<button class="sub-tab ${salesTab===t?'active':''}" onclick="salesTab='${t}';salesSearch='';renderSales(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
@@ -2808,6 +2833,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
             <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderInventory(document.getElementById('page-content'))">🔄 새로고침</button>
               ${zeroCount > 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllZeroInventory()" style="font-size:12px;">재고0 전체삭제 (${zeroCount}건)</button>` : ''}
               <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
             </div>
@@ -2874,7 +2900,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
-            <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderInventory(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-2">
@@ -3119,7 +3148,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">반품/교환/취소</h2>
-            <button class="btn-primary" onclick="openReturnModal()">+ 접수 등록</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderReturns(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openReturnModal()">+ 접수 등록</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
@@ -3423,7 +3455,10 @@
 
       el.innerHTML = `
         <div class="fade-in">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">통계/리포트</h2>
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">통계/리포트</h2>
+            <button class="btn-outline btn-sm" onclick="renderReports(document.getElementById('page-content'))">🔄 새로고침</button>
+          </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
               ${tabs.map(t => `<button class="sub-tab ${reportTab===t?'active':''}" onclick="reportTab='${t}';renderReports(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}
@@ -3493,7 +3528,10 @@
         const bank = data.bank || {};
         el.innerHTML = `
           <div class="fade-in">
-            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
             <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
             <div class="grid md:grid-cols-2 gap-6">
               <div class="card">
@@ -3523,7 +3561,10 @@
         const myId = adminUser?.id;
         el.innerHTML = `
           <div class="fade-in">
-            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
             <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
             <div class="card mb-4">
               <div class="flex justify-between items-center mb-2">
@@ -3561,7 +3602,10 @@
         const actionOptions = ['LOGIN','CREATE','UPDATE','DELETE','STATUS_CHANGE'];
         el.innerHTML = `
           <div class="fade-in">
-            <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-6">시스템관리</h2>
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
             <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
             <div class="card overflow-x-auto">
               <div class="flex flex-wrap gap-2 mb-4 items-end">
@@ -3727,7 +3771,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">A/S 관리</h2>
-            <button class="btn-primary" onclick="openAsModal()">+ 요청 등록</button>
+            <div class="flex gap-2">
+              <button class="btn-outline btn-sm" onclick="renderAfterService(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-primary" onclick="openAsModal()">+ 요청 등록</button>
+            </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-1">
