@@ -1223,8 +1223,33 @@
                   ${currentUser.addrBase ? `<p class="text-[11px] text-warm-300 mt-1">${escapeHtml(currentUser.addrBase)}${currentUser.addrDetail ? ' ' + escapeHtml(currentUser.addrDetail) : ''}</p>` : ''}
                 </div>
               </div>
-              <button class="btn-outline w-full text-[13px]" onclick="doLogout()">로그아웃</button>
+              <div class="flex gap-2">
+                <button class="btn-outline flex-1 text-[13px]" onclick="toggleProfileEdit()">프로필 수정</button>
+                <button class="btn-outline flex-1 text-[13px]" onclick="doLogout()">로그아웃</button>
+              </div>
             </div>
+
+            <!-- 프로필 수정 폼 -->
+            <div id="profile-edit-form" class="bg-white border border-warm-200 rounded-lg p-6 mb-8 hidden">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-500 uppercase mb-4">프로필 수정</p>
+              <div class="space-y-4">
+                <div>
+                  <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">닉네임 (유튜브/소셜)</label>
+                  <input id="pf-nickname" type="text" class="input-field" placeholder="@chicmood_viewer" value="${escapeHtml(currentUser.nickname || '')}" />
+                </div>
+                <div>
+                  <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">배송지 주소</label>
+                  <div class="flex gap-2 mb-2">
+                    <input id="pf-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly value="${escapeHtml(currentUser.zipcode || '')}" />
+                    <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openProfilePostcode()">주소 검색</button>
+                  </div>
+                  <input id="pf-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly value="${escapeHtml(currentUser.addrBase || '')}" />
+                  <input id="pf-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" value="${escapeHtml(currentUser.addrDetail || '')}" />
+                </div>
+                <button class="btn-primary w-full text-[13px]" onclick="saveProfile()">저장</button>
+              </div>
+            </div>
+
             <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-6">My Orders</p>
             ${orders.length === 0 ? `
               <div class="text-center py-12">
@@ -1264,6 +1289,42 @@
       `;
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">주문 내역을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  function toggleProfileEdit() {
+    const form = document.getElementById('profile-edit-form');
+    if (form) form.classList.toggle('hidden');
+  }
+
+  function openProfilePostcode() {
+    new daum.Postcode({
+      oncomplete: function(data) {
+        document.getElementById('pf-zipcode').value = data.zonecode;
+        document.getElementById('pf-address').value = data.roadAddress || data.jibunAddress;
+        document.getElementById('pf-address-detail').focus();
+      }
+    }).open();
+  }
+
+  async function saveProfile() {
+    const nickname = document.getElementById('pf-nickname').value.trim();
+    const zipcode = document.getElementById('pf-zipcode').value.trim();
+    const addrBase = document.getElementById('pf-address').value.trim();
+    const addrDetail = document.getElementById('pf-address-detail').value.trim();
+
+    try {
+      const res = await api('/auth/login', {
+        method: 'PATCH',
+        body: JSON.stringify({ nickname, zipcode, addrBase, addrDetail })
+      });
+
+      currentUser = { ...currentUser, ...res.user };
+      localStorage.setItem('chicmood_current_user', JSON.stringify(currentUser));
+      showToast('프로필이 수정되었습니다');
+      renderMypage(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '프로필 수정에 실패했습니다');
     }
   }
 
