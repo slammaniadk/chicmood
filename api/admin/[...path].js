@@ -74,6 +74,7 @@ module.exports = async function handler(req, res) {
     case 'products': return resourceId ? handleProductDetail(req, res, resourceId) : handleProducts(req, res);
     case 'broadcasts': return resourceId ? handleBroadcastDetail(req, res, resourceId) : handleBroadcasts(req, res);
     case 'shipping-excel': return handleShippingExcel(req, res);
+    case 'shipping-import': return handleShippingImport(req, res);
     case 'members':  return resourceId ? handleMemberDetail(req, res, resourceId) : handleMembers(req, res);
     case 'vendors':  return resourceId ? handleVendorDetail(req, res, resourceId) : handleVendors(req, res);
     case 'purchase-orders': return resourceId ? handlePurchaseOrderDetail(req, res, resourceId) : handlePurchaseOrders(req, res);
@@ -1497,6 +1498,79 @@ async function handleShippingExcel(req, res) {
   });
 
   return ok(res, { rows });
+}
+
+// ============================================================
+//  SHIPPING IMPORT (운송장 엑셀 업로드)
+// ============================================================
+async function handleShippingImport(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+  const { rows } = req.body;
+  if (!rows || !Array.isArray(rows) || rows.length === 0) return fail(res, '업로드할 데이터가 없습니다');
+
+  // 배송준비 상태 주문만 대상
+  const { data: orders, error } = await supabaseAdmin
+    .from('orders')
+    .select('id, order_no, name, phone, status, tracking_no')
+    .eq('status', '배송준비');
+  if (error) return fail(res, error.message, 500);
+
+  let success = 0, skipped = 0, failed = 0;
+  const details = [];
+
+  for (const row of rows) {
+    const [trackingNo, name, phone] = row;
+    if (!trackingNo || !name) { skipped++; details.push({ name: name || '(빈)', reason: '운송장 또는 이름 없음' }); continue; }
+
+    // phone 정규화: - 제거, 앞 7자리
+    const normalizePhone = (p) => (p || '').replace(/-/g, '').slice(0, 7);
+    const rowPhone7 = normalizePhone(phone);
+
+    // 매칭: 이름 + 전화 앞 7자리
+    const matched = orders.find(o =>
+      o.name === name && normalizePhone(o.phone) === rowPhone7
+    );
+
+    if (!matched) {
+      skipped++;
+      details.push({ name, phone, reason: '매칭 주문 없음' });
+      continue;
+    }
+
+    try {
+      // 주문 상태 업데이트
+      await supabaseAdmin.from('orders')
+        .update({ status: '배송완료', tracking_no: String(trackingNo), tracking_carrier: '로젠택배' })
+        .eq('id', matched.id);
+
+      // 미배송 품목 재고 차감 + 상태 갱신
+      const { data: pendingItems } = await supabaseAdmin.from('order_items')
+        .select('*').eq('order_id', matched.id)
+        .not('status', 'in', '("배송완료")');
+      if (pendingItems && pendingItems.length > 0) {
+        for (const item of pendingItems) {
+          await deductInventoryForItem(item);
+        }
+        const pendingIds = pendingItems.map(i => i.id);
+        await supabaseAdmin.from('order_items')
+          .update({ status: '배송완료', allocated_qty: 0, tracking_no: String(trackingNo), tracking_carrier: '로젠택배' })
+          .in('id', pendingIds);
+      }
+
+      // 매칭된 주문은 다시 매칭하지 않도록 배열에서 제거
+      const idx = orders.indexOf(matched);
+      if (idx > -1) orders.splice(idx, 1);
+
+      await writeLog(req._admin, 'STATUS_CHANGE', 'order', matched.order_no, { from: '배송준비', to: '배송완료', trackingNo: String(trackingNo) });
+      success++;
+      details.push({ name, orderNo: matched.order_no, trackingNo: String(trackingNo), result: '성공' });
+    } catch (e) {
+      failed++;
+      details.push({ name, orderNo: matched.order_no, reason: e.message });
+    }
+  }
+
+  return ok(res, { success, skipped, failed, details });
 }
 
 // ============================================================
