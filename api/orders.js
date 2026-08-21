@@ -4,6 +4,42 @@ const { ok, fail, handleCors } = require('./_lib/response');
 
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
+
+  // GET: 배송비 확인 (체크아웃 미리보기용)
+  if (req.method === 'GET') {
+    const tokenUser = getUserFromRequest(req);
+    if (!tokenUser || !tokenUser.id) return fail(res, '로그인이 필요합니다', 401);
+
+    const broadcastId = req.query.broadcastId;
+    const subtotal = parseInt(req.query.subtotal) || 0;
+    if (!broadcastId || !subtotal) return fail(res, '필수 정보가 누락되었습니다');
+
+    let shippingFee = subtotal >= 100000 ? 0 : 4000;
+    let shippingRefund = 0;
+    let cumulativeSubtotal = subtotal;
+
+    const { data: prevOrders, error: prevErr } = await supabaseAdmin
+      .from('orders')
+      .select('subtotal, shipping_fee, shipping_refund')
+      .eq('broadcast_id', parseInt(broadcastId))
+      .eq('user_id', tokenUser.id)
+      .neq('status', '취소');
+
+    if (!prevErr && prevOrders && prevOrders.length > 0) {
+      const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
+      const previousShippingFees = prevOrders.reduce((s, o) => s + o.shipping_fee, 0);
+      const previousRefunds = prevOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
+      cumulativeSubtotal = previousSubtotal + subtotal;
+
+      if (cumulativeSubtotal >= 100000) {
+        shippingFee = 0;
+        shippingRefund = Math.max(0, previousShippingFees - previousRefunds);
+      }
+    }
+
+    return ok(res, { shippingFee, shippingRefund, total: subtotal + shippingFee - shippingRefund, cumulativeSubtotal });
+  }
+
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
 
   const { name, phone, social, address, memo, items, broadcastId } = req.body;

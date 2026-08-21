@@ -827,10 +827,7 @@
 
   async function checkShippingFee(broadcastId, subtotal) {
     try {
-      const result = await api('/orders/check-shipping', {
-        method: 'POST',
-        body: JSON.stringify({ broadcastId, subtotal })
-      });
+      const result = await api(`/orders?broadcastId=${broadcastId}&subtotal=${subtotal}`);
 
       const feeEl = document.getElementById('co-shipping-fee');
       const refundEl = document.getElementById('co-shipping-refund');

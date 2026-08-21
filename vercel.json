@@ -3,7 +3,6 @@
     { "source": "/api/admin/:path*", "destination": "/api/admin/[...path]" },
     { "source": "/api/broadcasts/:id", "destination": "/api/broadcasts/[id]" },
     { "source": "/api/products/:id", "destination": "/api/products/[id]" },
-    { "source": "/api/orders/check-shipping", "destination": "/api/orders/check-shipping" },
     { "source": "/api/orders/lookup", "destination": "/api/orders/lookup" },
     { "source": "/api/orders/:orderNo", "destination": "/api/orders/[orderNo]" },
     { "source": "/admin", "destination": "/admin.html" },
