@@ -275,7 +275,7 @@ async function handleOrderMerge(req, res) {
     return fail(res, 'targetId와 sourceIds가 필요합니다', 400);
   }
 
-  const BLOCKED_STATUSES = ['배송완료', '취소'];
+  const BLOCKED_STATUSES = ['배송완료', '결제취소'];
 
   // 1) target + source 주문 전체 조회
   const allIds = [targetId, ...sourceIds];
@@ -296,7 +296,7 @@ async function handleOrderMerge(req, res) {
     return fail(res, '같은 주문자(이름+연락처)의 주문만 병합할 수 있습니다', 400);
   }
 
-  // 3) 검증: 배송완료/취소 상태는 병합 불가
+  // 3) 검증: 배송완료/결제취소 상태는 병합 불가
   const blocked = orders.filter(o => BLOCKED_STATUSES.includes(o.status));
   if (blocked.length > 0) {
     return fail(res, `병합 불가 상태(${blocked.map(o => o.status).join(', ')})의 주문이 포함되어 있습니다`, 400);
@@ -367,7 +367,7 @@ async function handleOrderDetail(req, res, id) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['입금확인', '결제완료', '배송준비', '배송완료', '취소'];
+  const validStatuses = ['입금확인', '결제완료', '결제취소', '배송준비', '배송완료'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 상태입니다: ${status}`);
 
   // 기존 상태 확인 (중복 차감 방지 + 발주 진행 체크)
@@ -376,7 +376,7 @@ async function handleOrderDetail(req, res, id) {
   if (prev) prevStatus = prev.status;
 
   // 결제완료에서 취소/되돌릴 때만 발주 진행 상태 체크 (배송 진행은 허용)
-  if (prevStatus === '결제완료' && ['입금확인', '취소'].includes(status)) {
+  if (prevStatus === '결제완료' && ['입금확인', '결제취소'].includes(status)) {
     const poBlock = await checkAdvancedPurchaseOrders(id);
     if (poBlock) return fail(res, poBlock);
   }
@@ -426,17 +426,16 @@ async function handleOrderDetail(req, res, id) {
     }
   }
   // 배송완료에서 이전 상태로 되돌릴 때 재고 복원
-  if (prevStatus === '배송완료' && status !== '배송완료' && status !== '취소') {
+  if (prevStatus === '배송완료' && status !== '배송완료' && status !== '결제취소') {
     await deductInventory(id, 'restore');
   }
-  // 취소 시 전 품목 취소 + 배정 수량 초기화 + 재고 복원
-  if (status === '취소') {
-    // 배송완료였던 품목이 있으면 재고 복원
-    if (prevStatus === '배송완료') {
-      await deductInventory(id, 'restore');
+  // 결제취소 시: 배송준비 이후 불가 + 전 품목 취소 + 배정 수량 초기화
+  if (status === '결제취소') {
+    if (['배송준비', '배송완료'].includes(prevStatus)) {
+      return fail(res, '배송준비 이후에는 결제취소가 불가능합니다');
     }
     await supabaseAdmin.from('order_items')
-      .update({ status: '취소', allocated_qty: 0 })
+      .update({ status: '결제취소', allocated_qty: 0 })
       .eq('order_id', id);
   }
   // 입금확인 전환 시 품목 상태 NULL로 초기화
@@ -450,7 +449,7 @@ async function handleOrderDetail(req, res, id) {
     await supabaseAdmin.from('order_items')
       .update({ status: '배송준비' })
       .eq('order_id', id)
-      .not('status', 'in', '("배송완료","취소")');
+      .not('status', 'in', '("배송완료","결제취소")');
   }
 
   if (status) await writeLog(req._admin, 'STATUS_CHANGE', 'order', data.order_no, { from: prevStatus, to: status });
@@ -522,14 +521,14 @@ async function recalcOrderStatus(orderId) {
     const statuses = items.map(i => i.status).filter(Boolean);
     if (statuses.length === 0) return;
 
-    // 전부 취소 → 주문도 취소
-    if (statuses.every(s => s === '취소')) {
-      await supabaseAdmin.from('orders').update({ status: '취소' }).eq('id', orderId);
+    // 전부 결제취소 → 주문도 결제취소
+    if (statuses.every(s => s === '결제취소')) {
+      await supabaseAdmin.from('orders').update({ status: '결제취소' }).eq('id', orderId);
       return;
     }
 
-    // 취소가 아닌 품목만으로 가장 낮은 단계 계산
-    const activeStatuses = statuses.filter(s => s !== '취소');
+    // 결제취소가 아닌 품목만으로 가장 낮은 단계 계산
+    const activeStatuses = statuses.filter(s => s !== '결제취소');
     if (activeStatuses.length === 0) return;
 
     const priority = { '결제완료': 1, '배정완료': 2, '배송준비': 3, '배송완료': 4 };
@@ -550,7 +549,7 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['결제완료', '배정완료', '배송준비', '배송완료', '취소'];
+  const validStatuses = ['결제완료', '배정완료', '결제취소', '배송준비', '배송완료'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 품목 상태입니다: ${status}`);
 
   // 기존 품목 조회
@@ -574,8 +573,11 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
       .eq('id', itemId);
   }
 
-  // 취소 시 배정 수량 초기화
-  if (status === '취소') {
+  // 결제취소 시: 배송준비 이후 불가 + 배정 수량 초기화
+  if (status === '결제취소') {
+    if (['배송준비', '배송완료'].includes(prevStatus)) {
+      return fail(res, '배송준비 이후에는 결제취소가 불가능합니다');
+    }
     update.allocated_qty = 0;
   }
 
@@ -1399,7 +1401,7 @@ async function handleBroadcastDetail(req, res, id) {
     const productIds = (b.broadcast_products || []).map(bp => bp.product_id);
     let salesData = { orderCount: 0, revenue: 0, qty: 0 };
     if (productIds.length > 0) {
-      const { data: allOrders } = await supabaseAdmin.from('orders').select('id').neq('status', '취소');
+      const { data: allOrders } = await supabaseAdmin.from('orders').select('id').neq('status', '결제취소');
       const orderIds = (allOrders || []).map(o => o.id);
       if (orderIds.length > 0) {
         const { data: items } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds).in('product_id', productIds);
@@ -1941,7 +1943,7 @@ async function handleSales(req, res) {
   const { type = 'daily', from, to, search } = req.query || {};
 
   let query = supabaseAdmin.from('orders').select('id, total, status, created_at');
-  query = query.neq('status', '취소');
+  query = query.neq('status', '결제취소');
   if (from) query = query.gte('created_at', from + 'T00:00:00');
   if (to) query = query.lte('created_at', to + 'T23:59:59');
 
@@ -1963,7 +1965,7 @@ async function handleSales(req, res) {
     const prevFromStr = prevFromDate.toISOString().split('T')[0];
     const prevToStr = prevToDate.toISOString().split('T')[0];
     const { data: prevOrders } = await supabaseAdmin.from('orders')
-      .select('total').neq('status', '취소')
+      .select('total').neq('status', '결제취소')
       .gte('created_at', prevFromStr + 'T00:00:00')
       .lte('created_at', prevToStr + 'T23:59:59');
     prevRevenue = (prevOrders || []).reduce((s, o) => s + o.total, 0);
@@ -2347,7 +2349,7 @@ async function handleReports(req, res) {
   let summary = {};
 
   // 날짜 범위 적용된 주문 조회
-  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at').neq('status', '취소');
+  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at').neq('status', '결제취소');
   if (from) orderQuery = orderQuery.gte('created_at', from + 'T00:00:00');
   if (to) orderQuery = orderQuery.lte('created_at', to + 'T23:59:59');
   const { data: orders } = await orderQuery;

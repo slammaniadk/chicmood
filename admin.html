@@ -64,6 +64,7 @@
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
     .status-배송준비 { background: #dbeafe; color: #1e40af; }
     .status-배송완료 { background: #d1fae5; color: #065f46; }
+    .status-결제취소 { background: #fee2e2; color: #991b1b; }
     .status-취소 { background: #fee2e2; color: #991b1b; }
     .status-배정완료 { background: #c6f6d5; color: #276749; }
 
@@ -531,11 +532,11 @@
         api('/admin/orders?limit=5'),
       ]);
 
-      const statuses = ['입금확인','결제완료','배송준비','배송완료','취소'];
+      const statuses = ['입금확인','결제완료','결제취소','배송준비','배송완료'];
       const topProducts = stats.topProducts || [];
       const statusColorMap = {
-        '입금확인': '#f59e0b', '결제완료': '#10b981', '배송준비': '#3b82f6',
-        '배송완료': '#059669', '취소': '#ef4444',
+        '입금확인': '#f59e0b', '결제완료': '#10b981', '결제취소': '#ef4444',
+        '배송준비': '#3b82f6', '배송완료': '#059669',
       };
 
       // Prep chart data for 3 views
@@ -753,8 +754,8 @@
       if (orderSearch) params.set('search', orderSearch);
 
       const data = await api('/admin/orders?' + params.toString());
-      const statuses = ['all','입금확인','결제완료','배송준비','배송완료','취소'];
-      const statusLabels = { all: '전체', 입금확인:'입금확인', 결제완료:'결제완료', 배송준비:'배송준비', 배송완료:'배송완료', 취소:'취소' };
+      const statuses = ['all','입금확인','결제완료','결제취소','배송준비','배송완료'];
+      const statusLabels = { all: '전체', 입금확인:'입금확인', 결제완료:'결제완료', 결제취소:'결제취소', 배송준비:'배송준비', 배송완료:'배송완료' };
       const totalPages = Math.ceil(data.total / data.limit);
 
       el.innerHTML = `
@@ -807,7 +808,7 @@
                   const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
-                  const mergeDisabled = ['배송완료','취소'].includes(o.status);
+                  const mergeDisabled = ['배송완료','결제취소'].includes(o.status);
                   return `
                     <tr>
                       <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked)" /></td>
@@ -857,8 +858,8 @@
     try { items = JSON.parse(decodeURIComponent(escape(atob(itemsB64 || '')))); } catch(e) {}
     _orderModalItems = items;
 
-    const orderStatuses = ['입금확인','결제완료','배송준비','배송완료','취소'];
-    const itemStatuses = ['결제완료','배정완료','배송준비','배송완료','취소'];
+    const orderStatuses = ['입금확인','결제완료','결제취소','배송준비','배송완료'];
+    const itemStatuses = ['결제완료','배정완료','결제취소','배송준비','배송완료'];
     const hasItemStatus = items.some(i => i.status);
 
     const modal = document.createElement('div');

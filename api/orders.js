@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
       .select('subtotal, shipping_fee, shipping_refund')
       .eq('broadcast_id', parseInt(broadcastId))
       .eq('user_id', tokenUser.id)
-      .neq('status', '취소');
+      .neq('status', '결제취소');
 
     if (!prevErr && prevOrders && prevOrders.length > 0) {
       const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
@@ -108,7 +108,7 @@ module.exports = async function handler(req, res) {
       .select('subtotal, shipping_fee, shipping_refund')
       .eq('broadcast_id', parseInt(broadcastId))
       .eq('user_id', userId)
-      .neq('status', '취소');
+      .neq('status', '결제취소');
 
     if (!prevErr && prevOrders && prevOrders.length > 0) {
       const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
