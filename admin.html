@@ -1092,8 +1092,8 @@
   let shippingFrom = '';
   let shippingTo = '';
   let shippingPage = 1;
-  let shippingChecked = new Set(); // 'orderId:itemId' format for item-level
-  let _shippingItemKeys = [];
+  let shippingChecked = new Set(); // orderId (주문 단위)
+  let _shippingOrderKeys = [];
   let _shippingOrders = [];
 
   async function renderShipping(el) {
@@ -1106,36 +1106,31 @@
 
       const data = await api('/admin/orders?' + params.toString());
       _shippingOrders = data.orders;
-      _shippingItemKeys = [];
+      _shippingOrderKeys = [];
       const statuses = ['all','결제완료','배송준비','배송중','송장완료'];
       const statusLabels = { all:'전체', 결제완료:'결제완료', 배송준비:'배송준비', 배송중:'배송중', 송장완료:'송장완료' };
       const totalPages = Math.ceil(data.total / data.limit);
 
-      // Build item-level rows
-      let itemRows = '';
-      let emptyCount = 0;
+      // Build order-level rows (1 order = 1 row)
+      let orderRows = '';
       data.orders.forEach(o => {
+        const key = o.id;
+        _shippingOrderKeys.push(key);
         const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
-        o.items.forEach((item, iIdx) => {
-          const key = `${o.id}:${item.id}`;
-          _shippingItemKeys.push(key);
-          const itemStatus = item.status || o.status;
-          itemRows += `
-            <tr>
-              <td><input type="checkbox" class="ship-chk" value="${key}" ${shippingChecked.has(key)?'checked':''} onchange="toggleShippingCheck('${key}',this.checked)" /></td>
-              <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
-              <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
-              <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
-              <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
-              <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(item.name)} <span class="text-warm-400">${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')}</span></td>
-              <td class="text-[12px]">${item.qty}</td>
-              <td><span class="status-badge status-${itemStatus}" style="font-size:10px;padding:2px 8px;">${itemStatus}</span></td>
-              <td class="whitespace-nowrap">
-                <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
-              </td>
-            </tr>`;
-        });
-        if (o.items.length === 0) emptyCount++;
+        const itemSummary = o.items.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')})x${item.qty}`).join('<br>');
+        orderRows += `
+          <tr>
+            <td><input type="checkbox" class="ship-chk" value="${key}" ${shippingChecked.has(key)?'checked':''} onchange="toggleShippingCheck('${key}',this.checked)" /></td>
+            <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
+            <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
+            <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
+            <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
+            <td class="text-[12px] text-warm-500">${itemSummary}</td>
+            <td><span class="status-badge status-${o.status}" style="font-size:10px;padding:2px 8px;">${o.status}</span></td>
+            <td class="whitespace-nowrap">
+              <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
+            </td>
+          </tr>`;
       });
 
       el.innerHTML = `
@@ -1144,9 +1139,9 @@
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
             <div class="flex gap-2">
               <button class="btn-outline btn-sm" onclick="renderShipping(document.getElementById('page-content'))">🔄 새로고침</button>
-              <button class="btn-outline flex items-center gap-2" onclick="bulkShipItems()">
+              <button class="btn-outline flex items-center gap-2" onclick="bulkShipOrders()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                선택 품목 배송처리
+                선택 주문 배송처리
               </button>
               <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -1171,16 +1166,16 @@
               <thead>
                 <tr>
                   <th><input type="checkbox" onchange="toggleAllShipping(this.checked)" /></th>
-                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>수량</th><th>품목상태</th><th>관리</th>
+                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>상태</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${_shippingItemKeys.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
-                ${itemRows}
+                ${_shippingOrderKeys.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${orderRows}
               </tbody>
             </table>
           </div>
-          <p class="text-[12px] text-warm-400 mt-2">선택된 품목: <span id="ship-count">${shippingChecked.size}</span>건</p>
+          <p class="text-[12px] text-warm-400 mt-2">선택된 주문: <span id="ship-count">${shippingChecked.size}</span>건</p>
           ${totalPages > 1 ? `
             <div class="flex justify-center gap-2 mt-4">
               ${shippingPage > 1 ? `<button class="btn-outline btn-sm" onclick="shippingPage--;renderShipping(document.getElementById('page-content'))">← 이전</button>` : ''}
@@ -1201,22 +1196,21 @@
     if (cnt) cnt.textContent = shippingChecked.size;
   }
   function toggleAllShipping(checked) {
-    _shippingItemKeys.forEach(key => { if (checked) shippingChecked.add(key); else shippingChecked.delete(key); });
+    _shippingOrderKeys.forEach(key => { if (checked) shippingChecked.add(key); else shippingChecked.delete(key); });
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
   }
 
-  async function bulkShipItems() {
-    if (shippingChecked.size === 0) { showToast('배송처리할 품목을 선택해주세요'); return; }
-    if (!confirm(`선택한 ${shippingChecked.size}건의 품목을 배송중으로 변경하시겠습니까?`)) return;
+  async function bulkShipOrders() {
+    if (shippingChecked.size === 0) { showToast('배송처리할 주문을 선택해주세요'); return; }
+    if (!confirm(`선택한 ${shippingChecked.size}건의 주문을 배송중으로 변경하시겠습니까?`)) return;
 
     let success = 0, failed = 0;
-    for (const key of shippingChecked) {
-      const [orderId, itemId] = key.split(':');
-      if (!orderId || !itemId) continue;
+    for (const orderId of shippingChecked) {
+      if (!orderId) continue;
       try {
-        await api(`/admin/orders/${orderId}/items/${itemId}`, {
+        await api(`/admin/orders/${orderId}`, {
           method: 'PATCH', body: JSON.stringify({ status: '배송중' })
         });
         success++;
@@ -1228,10 +1222,9 @@
   }
 
   async function downloadLozenExcel() {
-    if (shippingChecked.size === 0) { showToast('엑셀로 내보낼 품목을 선택해주세요'); return; }
+    if (shippingChecked.size === 0) { showToast('엑셀로 내보낼 주문을 선택해주세요'); return; }
     try {
-      // Extract unique order IDs from 'orderId:itemId' keys
-      const orderIds = [...new Set(Array.from(shippingChecked).map(k => k.split(':')[0]))];
+      const orderIds = Array.from(shippingChecked);
       const data = await api('/admin/shipping-excel', {
         method: 'POST',
         body: JSON.stringify({ orderIds })
