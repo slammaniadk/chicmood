@@ -4077,6 +4077,7 @@
       clearInterval(chatPollingTimer);
       chatPollingTimer = null;
     }
+    document.body.style.overflow = '';
   }
 
   async function renderChat(el) {
@@ -4102,6 +4103,7 @@
       const data = await api('/admin/chat?page=1&limit=50');
       chatLastTimestamp = null;
 
+      document.body.style.overflow = 'hidden';
       el.innerHTML = `
         <div class="fade-in" style="display:flex;flex-direction:column;height:calc(100vh - 160px);max-width:700px;margin:0 auto;">
           <div class="flex justify-between items-center mb-3">
@@ -4137,8 +4139,7 @@
         </div>
       `;
 
-      renderChatMessages(data.messages || []);
-      setTimeout(() => { const c = document.getElementById('chat-messages'); if (c) c.scrollTop = c.scrollHeight; }, 100);
+      renderChatMessages(data.messages || [], true);
 
       // 읽음 처리
       api('/admin/chat/mark-read', { method: 'PATCH' }).catch(() => {});
@@ -4172,7 +4173,7 @@
     }
   }
 
-  function renderChatMessages(messages) {
+  function renderChatMessages(messages, scrollToBottom) {
     const container = document.getElementById('chat-messages');
     if (!container) return;
     const userId = adminUser ? adminUser.id : null;
@@ -4180,7 +4181,7 @@
     if (messages.length > 0) {
       chatLastTimestamp = messages[messages.length - 1].createdAt;
     }
-    container.scrollTop = container.scrollHeight;
+    if (scrollToBottom) container.scrollTop = container.scrollHeight;
   }
 
   function appendChatMessages(messages) {
@@ -4193,7 +4194,6 @@
     if (messages.length > 0) {
       chatLastTimestamp = messages[messages.length - 1].createdAt;
     }
-    container.scrollTop = container.scrollHeight;
   }
 
   function chatBubble(m, userId) {
