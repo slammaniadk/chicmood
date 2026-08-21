@@ -531,11 +531,10 @@ async function recalcOrderStatus(orderId) {
     const activeStatuses = statuses.filter(s => s !== '결제취소');
     if (activeStatuses.length === 0) return;
 
-    const priority = { '결제완료': 1, '배정완료': 2, '배송준비': 3, '배송완료': 4 };
+    const priority = { '결제완료': 1, '배송준비': 2, '배송완료': 3 };
     const minPriority = Math.min(...activeStatuses.map(s => priority[s] || 1));
 
-    // 배정완료는 주문 상태로는 결제완료로 표시
-    const statusMap = { 1: '결제완료', 2: '결제완료', 3: '배송준비', 4: '배송완료' };
+    const statusMap = { 1: '결제완료', 2: '배송준비', 3: '배송완료' };
     const newStatus = statusMap[minPriority] || '결제완료';
 
     await supabaseAdmin.from('orders').update({ status: newStatus }).eq('id', orderId);
@@ -549,7 +548,7 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['결제완료', '배정완료', '결제취소', '배송준비', '배송완료'];
+  const validStatuses = ['결제완료', '결제취소', '배송준비', '배송완료'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 품목 상태입니다: ${status}`);
 
   // 기존 품목 조회
@@ -740,11 +739,8 @@ async function allocateReceivedToOrders(poId) {
         const allocate = Math.min(needed, remaining);
         const newAllocated = (oi.allocated_qty || 0) + allocate;
 
-        // 품목 상태 갱신: 전량 배정 → 배정완료, 아니면 결제완료 유지
+        // 품목 배정 수량만 갱신 (상태는 전량 배정 시 일괄 배송준비로 처리)
         const itemUpdate = { allocated_qty: newAllocated };
-        if (newAllocated >= oi.qty) {
-          itemUpdate.status = '배정완료';
-        }
         await supabaseAdmin.from('order_items')
           .update(itemUpdate)
           .eq('id', oi.id);
@@ -762,11 +758,11 @@ async function allocateReceivedToOrders(poId) {
       if (!orderItems || orderItems.length === 0) continue;
 
       // 전량 배정된 품목 → 배송준비로 자동 승격
-      const fullyAllocated = orderItems.filter(oi => (oi.allocated_qty || 0) >= oi.qty && oi.status === '배정완료');
       const allAllocated = orderItems.every(oi => (oi.allocated_qty || 0) >= oi.qty);
       if (allAllocated) {
-        // 모든 품목 전량 배정 → 모든 배정완료 품목을 배송준비로
-        for (const oi of fullyAllocated) {
+        // 모든 품목 전량 배정 → 결제완료 품목을 배송준비로
+        const pendingItems = orderItems.filter(oi => oi.status === '결제완료');
+        for (const oi of pendingItems) {
           await supabaseAdmin.from('order_items')
             .update({ status: '배송준비' })
             .eq('id', oi.id);

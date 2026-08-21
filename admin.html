@@ -66,7 +66,6 @@
     .status-배송완료 { background: #d1fae5; color: #065f46; }
     .status-결제취소 { background: #fee2e2; color: #991b1b; }
     .status-취소 { background: #fee2e2; color: #991b1b; }
-    .status-배정완료 { background: #c6f6d5; color: #276749; }
 
     .tab { padding: 10px 10px; font-size: 13.5px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: #a86e35; border-bottom: 2px solid transparent; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; white-space: nowrap; }
     .tab:hover { color: #6b4220; }
@@ -804,7 +803,7 @@
                   const vendorNames = [...new Set(o.items.map(i => i.vendorName).filter(Boolean))].join(', ');
                   const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
                   const totalAlloc = o.items.reduce((s,i) => s + (i.allocatedQty || 0), 0);
-                  const allocLabel = totalQty === 0 ? '-' : totalAlloc >= totalQty ? '배정완료' : totalAlloc > 0 ? '부분배정(' + totalAlloc + '/' + totalQty + ')' : '미배정';
+                  const allocLabel = totalQty === 0 ? '-' : totalAlloc >= totalQty ? '전량배정' : totalAlloc > 0 ? '부분배정(' + totalAlloc + '/' + totalQty + ')' : '미배정';
                   const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
@@ -859,7 +858,7 @@
     _orderModalItems = items;
 
     const orderStatuses = ['입금확인','결제완료','결제취소','배송준비','배송완료'];
-    const itemStatuses = ['결제완료','배정완료','결제취소','배송준비','배송완료'];
+    const itemStatuses = ['결제완료','결제취소','배송준비','배송완료'];
     const hasItemStatus = items.some(i => i.status);
 
     const modal = document.createElement('div');
