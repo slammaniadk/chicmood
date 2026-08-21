@@ -66,6 +66,7 @@ module.exports = async function handler(req, res) {
   switch (resource) {
     case 'stats':    return handleStats(req, res);
     case 'orders':
+      if (resourceId === 'merge') return handleOrderMerge(req, res);
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3]) {
         return handleOrderItemDetail(req, res, resourceId, pathSegments[3]);
       }
@@ -261,6 +262,83 @@ async function handleOrders(req, res) {
   }));
 
   return ok(res, { orders: result, total: count, page: pageNum, limit: limitNum });
+}
+
+// ============================================================
+//  ORDER MERGE (POST)
+// ============================================================
+async function handleOrderMerge(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  const { targetId, sourceIds } = req.body || {};
+  if (!targetId || !Array.isArray(sourceIds) || sourceIds.length === 0) {
+    return fail(res, 'targetId와 sourceIds가 필요합니다', 400);
+  }
+
+  const BLOCKED_STATUSES = ['배송중', '송장완료', '취소'];
+
+  // 1) target + source 주문 전체 조회
+  const allIds = [targetId, ...sourceIds];
+  const { data: orders, error: fetchErr } = await supabaseAdmin.from('orders')
+    .select('id, name, phone, status, broadcast_id')
+    .in('id', allIds);
+  if (fetchErr) return fail(res, fetchErr.message, 500);
+  if (!orders || orders.length !== allIds.length) {
+    return fail(res, '일부 주문을 찾을 수 없습니다', 404);
+  }
+
+  const target = orders.find(o => o.id === targetId);
+  if (!target) return fail(res, '대상 주문을 찾을 수 없습니다', 404);
+
+  // 2) 검증: 같은 name + phone
+  const sameBuyer = orders.every(o => o.name === target.name && o.phone === target.phone);
+  if (!sameBuyer) {
+    return fail(res, '같은 주문자(이름+연락처)의 주문만 병합할 수 있습니다', 400);
+  }
+
+  // 3) 검증: 배송중/송장완료/취소 상태는 병합 불가
+  const blocked = orders.filter(o => BLOCKED_STATUSES.includes(o.status));
+  if (blocked.length > 0) {
+    return fail(res, `병합 불가 상태(${blocked.map(o => o.status).join(', ')})의 주문이 포함되어 있습니다`, 400);
+  }
+
+  // 4) source의 order_items → target order_id로 UPDATE
+  for (const srcId of sourceIds) {
+    const { error: moveErr } = await supabaseAdmin.from('order_items')
+      .update({ order_id: targetId })
+      .eq('order_id', srcId);
+    if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
+  }
+
+  // 5) source 발주 수량 차감
+  for (const srcId of sourceIds) {
+    await deductPurchaseOrderQty(srcId);
+  }
+
+  // 6) target subtotal/total 재계산
+  const { data: targetItems } = await supabaseAdmin.from('order_items')
+    .select('qty, price')
+    .eq('order_id', targetId);
+  const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.qty * i.price), 0);
+  const { error: updateErr } = await supabaseAdmin.from('orders')
+    .update({ subtotal: newSubtotal, total: newSubtotal, updated_at: new Date().toISOString() })
+    .eq('id', targetId);
+  if (updateErr) return fail(res, `금액 재계산 실패: ${updateErr.message}`, 500);
+
+  // 7) source 주문 DELETE (order_items는 이미 이동됨)
+  for (const srcId of sourceIds) {
+    await supabaseAdmin.from('order_items').delete().eq('order_id', srcId);
+    await supabaseAdmin.from('orders').delete().eq('id', srcId);
+  }
+
+  // 8) 로그 기록
+  await writeLog(req._admin, 'UPDATE', 'order', targetId, {
+    action: '주문병합',
+    mergedFrom: sourceIds,
+    name: target.name,
+  });
+
+  return ok(res, { merged: true, targetId, mergedCount: sourceIds.length });
 }
 
 // ============================================================

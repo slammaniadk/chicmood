@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.4.0</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.5.0</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -745,6 +745,7 @@
   let orderFilter = 'all';
   let orderSearch = '';
   let orderPage = 1;
+  let mergeChecked = new Set();
 
   async function renderOrders(el) {
     showSpinner(el);
@@ -762,7 +763,11 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">주문관리</h2>
-            <button class="btn-outline btn-sm" onclick="renderOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+            <div class="flex items-center gap-2">
+              <span id="merge-counter" class="text-[12px] text-warm-500">${mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : ''}</span>
+              <button class="btn-outline btn-sm" style="color:#6366f1;border-color:#6366f1" onclick="mergeOrders()">주문 병합</button>
+              <button class="btn-outline btn-sm" onclick="mergeChecked.clear();renderOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
           </div>
 
           <!-- 필터 + 검색 -->
@@ -782,11 +787,12 @@
             <table>
               <thead>
                 <tr>
+                  <th style="width:32px"><input type="checkbox" onchange="toggleAllMerge(this.checked)" /></th>
                   <th>주문번호</th><th>주문자</th><th>닉네임</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="11" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="12" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -803,8 +809,10 @@
                   const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
+                  const mergeDisabled = ['배송중','송장완료','취소'].includes(o.status);
                   return `
                     <tr>
+                      <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked)" /></td>
                       <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
                       <td class="whitespace-nowrap">
                         <p class="font-semibold">${escapeHtml(o.name)}</p>
@@ -1000,6 +1008,71 @@
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '상태 변경에 실패했습니다');
+    }
+  }
+
+  function toggleMergeCheck(id, checked) {
+    if (checked) mergeChecked.add(id); else mergeChecked.delete(id);
+    const counter = document.getElementById('merge-counter');
+    if (counter) counter.textContent = mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : '';
+  }
+
+  function toggleAllMerge(checked) {
+    document.querySelectorAll('tbody input[type="checkbox"]:not(:disabled)').forEach(cb => {
+      cb.checked = checked;
+      const id = cb.getAttribute('onchange').match(/'([^']+)'/)?.[1];
+      if (id) { if (checked) mergeChecked.add(id); else mergeChecked.delete(id); }
+    });
+    const counter = document.getElementById('merge-counter');
+    if (counter) counter.textContent = mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : '';
+  }
+
+  async function mergeOrders() {
+    if (mergeChecked.size < 2) {
+      showToast('병합할 주문을 2건 이상 선택해주세요');
+      return;
+    }
+    const ids = [...mergeChecked];
+    // 선택된 주문의 주문자 정보 확인 (현재 테이블 행에서 추출)
+    const rows = document.querySelectorAll('tbody tr');
+    const selectedInfo = [];
+    rows.forEach(row => {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (!cb || !cb.checked || cb.disabled) return;
+      const onchange = cb.getAttribute('onchange') || '';
+      const idMatch = onchange.match(/'([^']+)'/);
+      if (!idMatch) return;
+      const orderId = idMatch[1];
+      if (!mergeChecked.has(orderId)) return;
+      const cells = row.querySelectorAll('td');
+      const name = cells[2]?.querySelector('p')?.textContent?.trim() || '';
+      const phone = cells[2]?.querySelector('p:nth-child(2)')?.textContent?.trim() || '';
+      selectedInfo.push({ id: orderId, name, phone });
+    });
+
+    // 프론트 검증: 같은 주문자인지
+    const firstName = selectedInfo[0]?.name;
+    const firstPhone = selectedInfo[0]?.phone;
+    const allSame = selectedInfo.every(s => s.name === firstName && s.phone === firstPhone);
+    if (!allSame) {
+      showToast('같은 주문자(이름+연락처)의 주문만 병합할 수 있습니다');
+      return;
+    }
+
+    if (!confirm(`${firstName}(${firstPhone})님의 주문 ${ids.length}건을 병합하시겠습니까?\n첫 번째 주문에 나머지 품목이 합쳐지고, 나머지 주문은 삭제됩니다.`)) return;
+
+    try {
+      const targetId = ids[0];
+      const sourceIds = ids.slice(1);
+      await api('/admin/orders/merge', {
+        method: 'POST',
+        body: JSON.stringify({ targetId, sourceIds })
+      });
+      showToast(`${ids.length}건의 주문이 병합되었습니다`);
+      mergeChecked.clear();
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '주문 병합에 실패했습니다');
     }
   }
 
