@@ -315,13 +315,16 @@ async function handleOrderMerge(req, res) {
     await deductPurchaseOrderQty(srcId);
   }
 
-  // 6) target subtotal/total 재계산
+  // 6) target subtotal/total 재계산 (shipping_fee 유지)
   const { data: targetItems } = await supabaseAdmin.from('order_items')
-    .select('qty, price')
+    .select('subtotal')
     .eq('order_id', targetId);
-  const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.qty * i.price), 0);
+  const { data: targetOrder } = await supabaseAdmin.from('orders')
+    .select('shipping_fee').eq('id', targetId).single();
+  const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.subtotal || 0), 0);
+  const shippingFee = targetOrder?.shipping_fee || 0;
   const { error: updateErr } = await supabaseAdmin.from('orders')
-    .update({ subtotal: newSubtotal, total: newSubtotal, updated_at: new Date().toISOString() })
+    .update({ subtotal: newSubtotal, total: newSubtotal + shippingFee })
     .eq('id', targetId);
   if (updateErr) return fail(res, `금액 재계산 실패: ${updateErr.message}`, 500);
 
