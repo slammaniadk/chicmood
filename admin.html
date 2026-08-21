@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 21:53</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:05</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1086,7 +1086,7 @@
   // ============================================================
   //  SHIPPING (배송관리 + 로젠택배 엑셀)
   // ============================================================
-  let shippingFilter = '결제완료';
+  let shippingFilter = '배송준비';
   let shippingFrom = '';
   let shippingTo = '';
   let shippingPage = 1;
@@ -1105,8 +1105,8 @@
       const data = await api('/admin/orders?' + params.toString());
       _shippingOrders = data.orders;
       _shippingOrderKeys = [];
-      const statuses = ['all','결제완료','배송준비','배송완료'];
-      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송준비:'배송준비', 배송완료:'배송완료' };
+      const statuses = ['all','배송준비','배송완료'];
+      const statusLabels = { all:'전체', 배송준비:'배송준비', 배송완료:'배송완료' };
       const totalPages = Math.ceil(data.total / data.limit);
 
       // Build order-level rows (1 order = 1 row)
@@ -1114,20 +1114,19 @@
       data.orders.forEach(o => {
         const key = o.id;
         _shippingOrderKeys.push(key);
-        const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
         const itemSummary = o.items.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')})x${item.qty}`).join('<br>');
+        const trackingCol = o.status === '배송완료'
+          ? `<span class="text-[12px]">${escapeHtml(o.trackingNo||'')}</span>`
+          : `<input type="text" class="input-field" style="width:120px;padding:4px 6px;font-size:12px;" placeholder="송장번호" id="track-${key}" onkeydown="if(event.key==='Enter')saveTrackingNo('${key}')" onblur="saveTrackingNo('${key}')" />`;
         orderRows += `
           <tr>
             <td><input type="checkbox" class="ship-chk" value="${key}" ${shippingChecked.has(key)?'checked':''} onchange="toggleShippingCheck('${key}',this.checked)" /></td>
             <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
             <td class="whitespace-nowrap font-semibold">${escapeHtml(o.name)}</td>
-            <td class="text-[12px] max-w-[200px]">${escapeHtml(o.address||'')}</td>
             <td class="text-[12px] whitespace-nowrap">${escapeHtml(o.phone)}</td>
             <td class="text-[12px] text-warm-500">${itemSummary}</td>
             <td><span class="status-badge status-${o.status}" style="font-size:10px;padding:2px 8px;">${o.status}</span></td>
-            <td class="whitespace-nowrap">
-              <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
-            </td>
+            <td class="whitespace-nowrap">${trackingCol}</td>
           </tr>`;
       });
 
@@ -1165,11 +1164,11 @@
               <thead>
                 <tr>
                   <th><input type="checkbox" onchange="toggleAllShipping(this.checked)" /></th>
-                  <th>주문번호</th><th>수취인</th><th>주소</th><th>연락처</th><th>상품</th><th>상태</th><th>관리</th>
+                  <th>주문번호</th><th>수취인</th><th>연락처</th><th>상품</th><th>상태</th><th>송장번호</th>
                 </tr>
               </thead>
               <tbody>
-                ${_shippingOrderKeys.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${_shippingOrderKeys.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${orderRows}
               </tbody>
             </table>
@@ -1199,6 +1198,27 @@
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
+  }
+
+  async function saveTrackingNo(orderId) {
+    const inp = document.getElementById('track-' + orderId);
+    if (!inp) return;
+    const trackingNo = inp.value.trim();
+    if (!trackingNo) return;
+    // 중복 호출 방지 (blur + Enter)
+    if (inp.dataset.saving) return;
+    inp.dataset.saving = '1';
+    try {
+      await api('/admin/orders/' + orderId, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: '배송완료', trackingNo, trackingCarrier: '로젠택배' })
+      });
+      showToast('송장번호 저장 완료');
+      renderShipping(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '송장번호 저장 실패');
+      delete inp.dataset.saving;
+    }
   }
 
   async function uploadTrackingExcel(input) {
@@ -1262,7 +1282,12 @@
 
       const today = new Date();
       const fname = `로젠택배_${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}.xlsx`;
-      XLSX.writeFile(wb, fname);
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname; a.click();
+      URL.revokeObjectURL(url);
       showToast(`${rows.length}건 엑셀 다운로드 완료`);
     } catch (e) {
       showToast(e.message || '엑셀 생성에 실패했습니다');
