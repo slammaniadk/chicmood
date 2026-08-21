@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.3.9</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.4.0</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -819,7 +819,7 @@
                       <td class="text-[12px] font-semibold whitespace-nowrap" style="${allocColor}">${allocLabel}</td>
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
                       <td class="whitespace-nowrap">
-                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}','${itemsJson}')">변경</button>
+                        <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
                         <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
                       </td>
                     </tr>
@@ -846,14 +846,13 @@
 
   let _orderModalItems = [];
 
-  function openOrderModal(id, orderNo, currentStatus, trackingNo, trackingCarrier, itemsB64) {
+  function openOrderModal(id, orderNo, currentStatus, itemsB64) {
     let items = [];
     try { items = JSON.parse(decodeURIComponent(escape(atob(itemsB64 || '')))); } catch(e) {}
     _orderModalItems = items;
 
     const orderStatuses = ['입금대기','확인요청','결제완료','배송준비','배송중','송장완료','취소'];
     const itemStatuses = ['결제완료','배정완료','배송준비','배송중','송장완료','취소'];
-    const carriers = ['로젠택배','CJ대한통운','한진택배','롯데택배','우체국택배'];
     const hasItemStatus = items.some(i => i.status);
 
     const modal = document.createElement('div');
@@ -875,18 +874,6 @@
               ${orderStatuses.map(s => `<option value="${s}" ${s === currentStatus ? 'selected' : ''}>${s}</option>`).join('')}
             </select>
             <button class="btn-primary btn-sm" onclick="updateOrderBulk('${id}')">전체 일괄 변경</button>
-          </div>
-          <div class="grid grid-cols-2 gap-3 mt-3">
-            <div>
-              <label class="text-[11px] text-warm-500 block mb-1">전체 택배사</label>
-              <select id="modal-carrier" class="input-field">
-                ${carriers.map(c => `<option value="${c}" ${trackingCarrier === c || (!trackingCarrier && c === '로젠택배') ? 'selected' : ''}>${c}</option>`).join('')}
-              </select>
-            </div>
-            <div>
-              <label class="text-[11px] text-warm-500 block mb-1">전체 송장번호</label>
-              <input id="modal-tracking" type="text" class="input-field" placeholder="송장번호 입력" value="${trackingNo}" />
-            </div>
           </div>
         </div>
 
@@ -912,8 +899,6 @@
                   <th style="padding:6px 8px;">수량</th>
                   <th style="padding:6px 8px;">현재상태</th>
                   <th style="padding:6px 8px;">변경</th>
-                  <th style="padding:6px 8px;">택배사</th>
-                  <th style="padding:6px 8px;">송장번호</th>
                   <th style="padding:6px 8px;"></th>
                 </tr>
               </thead>
@@ -929,14 +914,6 @@
                         <option value="">변경안함</option>
                         ${itemStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}
                       </select>
-                    </td>
-                    <td style="padding:6px 8px;">
-                      <select class="input-field item-carrier-sel" data-idx="${idx}" style="padding:4px 6px;font-size:11px;width:auto;">
-                        ${carriers.map(c => `<option value="${c}" ${(item.trackingCarrier||'로젠택배') === c ? 'selected' : ''}>${c}</option>`).join('')}
-                      </select>
-                    </td>
-                    <td style="padding:6px 8px;">
-                      <input type="text" class="input-field item-tracking-inp" data-idx="${idx}" style="padding:4px 6px;font-size:11px;width:120px;" placeholder="송장번호" value="${escapeHtml(item.trackingNo||'')}" />
                     </td>
                     <td style="padding:6px 8px;">
                       <button class="btn-primary btn-sm" style="padding:3px 8px;font-size:10px;" onclick="updateSingleItem('${id}',${idx})">저장</button>
@@ -976,11 +953,6 @@
       if (!item || !item.id) continue;
       try {
         const body = { status: bulkStatus };
-        // 택배사/송장번호도 함께 전송
-        const carrierSel = document.querySelector(`.item-carrier-sel[data-idx="${idx}"]`);
-        const trackingInp = document.querySelector(`.item-tracking-inp[data-idx="${idx}"]`);
-        if (carrierSel) body.trackingCarrier = carrierSel.value;
-        if (trackingInp && trackingInp.value.trim()) body.trackingNo = trackingInp.value.trim();
         await api(`/admin/orders/${orderId}/items/${item.id}`, {
           method: 'PATCH', body: JSON.stringify(body)
         });
@@ -997,15 +969,11 @@
     if (!item || !item.id) { showToast('품목 정보가 없습니다'); return; }
 
     const statusSel = document.querySelector(`.item-status-sel[data-idx="${idx}"]`);
-    const carrierSel = document.querySelector(`.item-carrier-sel[data-idx="${idx}"]`);
-    const trackingInp = document.querySelector(`.item-tracking-inp[data-idx="${idx}"]`);
 
     const body = {};
     if (statusSel && statusSel.value) body.status = statusSel.value;
-    if (carrierSel) body.trackingCarrier = carrierSel.value;
-    if (trackingInp) body.trackingNo = trackingInp.value.trim();
 
-    if (!body.status && !body.trackingNo) { showToast('변경할 내용이 없습니다'); return; }
+    if (!body.status) { showToast('변경할 상태를 선택해주세요'); return; }
 
     try {
       await api(`/admin/orders/${orderId}/items/${item.id}`, {
@@ -1021,13 +989,11 @@
 
   async function updateOrderBulk(id) {
     const status = document.getElementById('modal-status').value;
-    const trackingNo = document.getElementById('modal-tracking').value.trim();
-    const trackingCarrier = document.getElementById('modal-carrier').value;
 
     try {
       await api('/admin/orders/' + id, {
         method: 'PATCH',
-        body: JSON.stringify({ status, trackingNo, trackingCarrier })
+        body: JSON.stringify({ status })
       });
       document.getElementById('order-modal').remove();
       showToast('주문 상태가 변경되었습니다');
@@ -1092,7 +1058,7 @@
               <td class="text-[12px]">${item.qty}</td>
               <td><span class="status-badge status-${itemStatus}" style="font-size:10px;padding:2px 8px;">${itemStatus}</span></td>
               <td class="whitespace-nowrap">
-                <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${escapeHtml(o.trackingNo||'')}','${escapeHtml(o.trackingCarrier||'')}','${itemsJson}')">변경</button>
+                <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
               </td>
             </tr>`;
         });
