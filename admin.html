@@ -60,12 +60,10 @@
     .btn-danger:hover { background: #b91c1c; }
 
     .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-    .status-입금대기 { background: #fef1d1; color: #a86e35; }
-    .status-확인요청 { background: #c9daf8; color: #2b5797; }
+    .status-입금확인 { background: #fef1d1; color: #a86e35; }
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
     .status-배송준비 { background: #dbeafe; color: #1e40af; }
-    .status-배송중 { background: #e4d7f5; color: #5b3a8e; }
-    .status-송장완료 { background: #d1fae5; color: #065f46; }
+    .status-배송완료 { background: #d1fae5; color: #065f46; }
     .status-취소 { background: #fee2e2; color: #991b1b; }
     .status-배정완료 { background: #c6f6d5; color: #276749; }
 
@@ -166,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.6.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 20:28</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 23:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -533,11 +531,11 @@
         api('/admin/orders?limit=5'),
       ]);
 
-      const statuses = ['입금대기','확인요청','결제완료','배송중','송장완료','취소'];
+      const statuses = ['입금확인','결제완료','배송준비','배송완료','취소'];
       const topProducts = stats.topProducts || [];
       const statusColorMap = {
-        '입금대기': '#f59e0b', '확인요청': '#3b82f6', '결제완료': '#10b981',
-        '배송중': '#8b5cf6', '송장완료': '#059669', '취소': '#ef4444',
+        '입금확인': '#f59e0b', '결제완료': '#10b981', '배송준비': '#3b82f6',
+        '배송완료': '#059669', '취소': '#ef4444',
       };
 
       // Prep chart data for 3 views
@@ -755,8 +753,8 @@
       if (orderSearch) params.set('search', orderSearch);
 
       const data = await api('/admin/orders?' + params.toString());
-      const statuses = ['all','입금대기','확인요청','결제완료','배송준비','배송중','송장완료','취소'];
-      const statusLabels = { all: '전체', 입금대기:'입금대기', 확인요청:'확인요청', 결제완료:'결제완료', 배송준비:'배송준비', 배송중:'배송중', 송장완료:'송장완료', 취소:'취소' };
+      const statuses = ['all','입금확인','결제완료','배송준비','배송완료','취소'];
+      const statusLabels = { all: '전체', 입금확인:'입금확인', 결제완료:'결제완료', 배송준비:'배송준비', 배송완료:'배송완료', 취소:'취소' };
       const totalPages = Math.ceil(data.total / data.limit);
 
       el.innerHTML = `
@@ -809,7 +807,7 @@
                   const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
-                  const mergeDisabled = ['배송중','송장완료','취소'].includes(o.status);
+                  const mergeDisabled = ['배송완료','취소'].includes(o.status);
                   return `
                     <tr>
                       <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked)" /></td>
@@ -859,8 +857,8 @@
     try { items = JSON.parse(decodeURIComponent(escape(atob(itemsB64 || '')))); } catch(e) {}
     _orderModalItems = items;
 
-    const orderStatuses = ['입금대기','확인요청','결제완료','배송준비','배송중','송장완료','취소'];
-    const itemStatuses = ['결제완료','배정완료','배송준비','배송중','송장완료','취소'];
+    const orderStatuses = ['입금확인','결제완료','배송준비','배송완료','취소'];
+    const itemStatuses = ['결제완료','배정완료','배송준비','배송완료','취소'];
     const hasItemStatus = items.some(i => i.status);
 
     const modal = document.createElement('div');
@@ -1107,8 +1105,8 @@
       const data = await api('/admin/orders?' + params.toString());
       _shippingOrders = data.orders;
       _shippingOrderKeys = [];
-      const statuses = ['all','결제완료','배송준비','배송중','송장완료'];
-      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송준비:'배송준비', 배송중:'배송중', 송장완료:'송장완료' };
+      const statuses = ['all','결제완료','배송준비','배송완료'];
+      const statusLabels = { all:'전체', 결제완료:'결제완료', 배송준비:'배송준비', 배송완료:'배송완료' };
       const totalPages = Math.ceil(data.total / data.limit);
 
       // Build order-level rows (1 order = 1 row)
@@ -1204,14 +1202,14 @@
 
   async function bulkShipOrders() {
     if (shippingChecked.size === 0) { showToast('배송처리할 주문을 선택해주세요'); return; }
-    if (!confirm(`선택한 ${shippingChecked.size}건의 주문을 배송중으로 변경하시겠습니까?`)) return;
+    if (!confirm(`선택한 ${shippingChecked.size}건의 주문을 배송완료로 변경하시겠습니까?`)) return;
 
     let success = 0, failed = 0;
     for (const orderId of shippingChecked) {
       if (!orderId) continue;
       try {
         await api(`/admin/orders/${orderId}`, {
-          method: 'PATCH', body: JSON.stringify({ status: '배송중' })
+          method: 'PATCH', body: JSON.stringify({ status: '배송완료' })
         });
         success++;
       } catch (e) { failed++; }
@@ -2166,7 +2164,7 @@
                     return `
                       <tr>
                         <td class="font-medium text-[12px]">${escapeHtml(po.poNo)}</td>
-                        <td><span class="status-badge status-${po.status==='입고완료'?'송장완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                        <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                         <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                         <td class="text-warm-400 text-[12px]">${ds}</td>
                       </tr>
@@ -2307,7 +2305,7 @@
                     <tr>
                       <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openPODetailModal(${po.id})">${escapeHtml(po.poNo)}</td>
                       <td>${escapeHtml(po.vendorName||'')}</td>
-                      <td><span class="status-badge status-${po.status==='입고완료'?'송장완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                      <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
@@ -2926,7 +2924,7 @@
     try {
       const data = await api('/admin/inventory-log?limit=100');
       const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
-      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-확인요청', sale: 'status-배송중' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -2982,7 +2980,7 @@
     try {
       const data = await api('/admin/inventory-log?inventoryId=' + invId);
       const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
-      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-확인요청', sale: 'status-배송중' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료' };
 
       document.querySelector('#inv-history-modal .overlay-content').innerHTML = `
         <div class="flex justify-between items-center mb-6">
@@ -3203,8 +3201,8 @@
                   <tr>
                     <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openReturnDetailModal(${r.id})">${escapeHtml(r.returnNo)}</td>
                     <td class="text-[12px]">${escapeHtml(r.orderNo||'')}</td>
-                    <td><span class="status-badge ${r.type==='반품'?'status-확인요청':r.type==='교환'?'status-배송중':'status-취소'}">${r.type}</span></td>
-                    <td><span class="status-badge ${r.status==='완료'?'status-송장완료':r.status==='거부'?'status-취소':'status-결제완료'}">${r.status}</span></td>
+                    <td><span class="status-badge ${r.type==='반품'?'status-배송준비':r.type==='교환'?'status-배송완료':'status-취소'}">${r.type}</span></td>
+                    <td><span class="status-badge ${r.status==='완료'?'status-배송완료':r.status==='거부'?'status-취소':'status-결제완료'}">${r.status}</span></td>
                     <td class="font-semibold">${fmt(r.refundAmount||0)}</td>
                     <td class="text-[12px] text-warm-500 max-w-[150px]">${escapeHtml(r.reason||'')}</td>
                     <td class="text-warm-400 text-[12px]">${dateStr}</td>
@@ -3828,7 +3826,7 @@
                   <tr>
                     <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline whitespace-nowrap" onclick="openAsDetailModal(${r.id})">${escapeHtml(r.asNo)}</td>
                     <td class="text-[13px]">${escapeHtml(shortDesc)}</td>
-                    <td><span class="status-badge ${r.status==='완료'?'status-송장완료':r.status==='처리중'?'status-결제완료':'status-입금대기'}">${r.status}</span></td>
+                    <td><span class="status-badge ${r.status==='완료'?'status-배송완료':r.status==='처리중'?'status-결제완료':'status-입금확인'}">${r.status}</span></td>
                     <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
                   </tr>`;
                 }).join('')}

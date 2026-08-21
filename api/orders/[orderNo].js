@@ -8,9 +8,8 @@ module.exports = async function handler(req, res) {
   const { orderNo } = req.query;
   const { status } = req.body;
 
-  // 허용되는 상태 전이: 입금대기 → 확인요청
+  // 고객 상태 변경 비활성화 (관리자만 상태 변경 가능)
   const ALLOWED_TRANSITIONS = {
-    '입금대기': '확인요청',
   };
 
   // 현재 주문 조회

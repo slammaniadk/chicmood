@@ -159,7 +159,7 @@ module.exports = async function handler(req, res) {
     shipping_fee: shippingFee,
     shipping_refund: shippingRefund,
     total,
-    status: '입금대기',
+    status: '입금확인',
   };
   if (broadcastId) orderData.broadcast_id = parseInt(broadcastId);
 

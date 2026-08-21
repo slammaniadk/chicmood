@@ -88,11 +88,9 @@
     .badge { position: absolute; top: -6px; right: -8px; background: #b85a6c; color: #fff; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
     .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
-    .status-입금대기 { background: #fef1d1; color: #a86e35; }
-    .status-확인요청 { background: #c9daf8; color: #2b5797; }
+    .status-입금확인 { background: #fef1d1; color: #a86e35; }
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
-    .status-배송중 { background: #e4d7f5; color: #5b3a8e; }
-    .status-송장완료 { background: #d1fae5; color: #065f46; }
+    .status-배송완료 { background: #d1fae5; color: #065f46; }
     .status-취소 { background: #fee2e2; color: #991b1b; }
 
     ::-webkit-scrollbar { width: 6px; }
@@ -988,7 +986,6 @@
         const d = new Date(order.createdAt);
         const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         const statusClass = 'status-' + order.status;
-        const canConfirm = order.status === '입금대기';
 
         return `
           <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4 slide-up">
@@ -1015,27 +1012,11 @@
               <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${escapeHtml(order.address)}</p>
               ${order.memo ? `<p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">요청사항</span> ${escapeHtml(order.memo)}</p>` : ''}
             </div>
-            ${canConfirm ? `
-              <button class="btn-primary w-full mt-4 text-[13px]" onclick="confirmDeposit('${order.orderNo}')">입금완료 (확인요청)</button>
-            ` : ''}
           </div>
         `;
       }).join('');
     } catch (e) {
       resultEl.innerHTML = '<p class="py-8 text-center text-warm-400">조회 중 오류가 발생했습니다.</p>';
-    }
-  }
-
-  async function confirmDeposit(orderNo) {
-    try {
-      await api('/orders/' + orderNo, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: '확인요청' })
-      });
-      showToast('입금 확인 요청이 전송되었습니다');
-      doLookup();
-    } catch (e) {
-      showToast(e.message || '상태 변경에 실패했습니다');
     }
   }
 

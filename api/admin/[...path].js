@@ -275,7 +275,7 @@ async function handleOrderMerge(req, res) {
     return fail(res, 'targetId와 sourceIds가 필요합니다', 400);
   }
 
-  const BLOCKED_STATUSES = ['배송중', '송장완료', '취소'];
+  const BLOCKED_STATUSES = ['배송완료', '취소'];
 
   // 1) target + source 주문 전체 조회
   const allIds = [targetId, ...sourceIds];
@@ -296,7 +296,7 @@ async function handleOrderMerge(req, res) {
     return fail(res, '같은 주문자(이름+연락처)의 주문만 병합할 수 있습니다', 400);
   }
 
-  // 3) 검증: 배송중/송장완료/취소 상태는 병합 불가
+  // 3) 검증: 배송완료/취소 상태는 병합 불가
   const blocked = orders.filter(o => BLOCKED_STATUSES.includes(o.status));
   if (blocked.length > 0) {
     return fail(res, `병합 불가 상태(${blocked.map(o => o.status).join(', ')})의 주문이 포함되어 있습니다`, 400);
@@ -367,7 +367,7 @@ async function handleOrderDetail(req, res, id) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['입금대기', '확인요청', '결제완료', '배송준비', '배송중', '송장완료', '취소'];
+  const validStatuses = ['입금확인', '결제완료', '배송준비', '배송완료', '취소'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 상태입니다: ${status}`);
 
   // 기존 상태 확인 (중복 차감 방지 + 발주 진행 체크)
@@ -376,7 +376,7 @@ async function handleOrderDetail(req, res, id) {
   if (prev) prevStatus = prev.status;
 
   // 결제완료에서 취소/되돌릴 때만 발주 진행 상태 체크 (배송 진행은 허용)
-  if (prevStatus === '결제완료' && ['입금대기', '확인요청', '취소'].includes(status)) {
+  if (prevStatus === '결제완료' && ['입금확인', '취소'].includes(status)) {
     const poBlock = await checkAdvancedPurchaseOrders(id);
     if (poBlock) return fail(res, poBlock);
   }
@@ -409,45 +409,38 @@ async function handleOrderDetail(req, res, id) {
   if (prevStatus === '결제완료' && status !== '결제완료') {
     await deductPurchaseOrderQty(id);
   }
-  // 배송중 전환 시 미배송 품목만 재고 차감 + 배정 해제 + status 갱신
-  if (status === '배송중' && prevStatus !== '배송중') {
-    // 아직 배송중/송장완료가 아닌 품목만 처리
+  // 배송완료 전환 시 미배송 품목만 재고 차감 + 배정 해제 + 송장번호 기록 + status 갱신
+  if (status === '배송완료' && prevStatus !== '배송완료') {
+    // 아직 배송완료가 아닌 품목만 처리
     const { data: pendingItems } = await supabaseAdmin.from('order_items')
       .select('*').eq('order_id', id)
-      .not('status', 'in', '("배송중","송장완료")');
+      .not('status', 'in', '("배송완료")');
     if (pendingItems && pendingItems.length > 0) {
       for (const item of pendingItems) {
         await deductInventoryForItem(item);
       }
       const pendingIds = pendingItems.map(i => i.id);
       await supabaseAdmin.from('order_items')
-        .update({ status: '배송중', allocated_qty: 0 })
+        .update({ status: '배송완료', allocated_qty: 0, tracking_no: trackingNo || '', tracking_carrier: trackingCarrier || '' })
         .in('id', pendingIds);
     }
   }
-  // 송장완료 전환 시 미완료 품목 일괄 변경
-  if (status === '송장완료' && prevStatus !== '송장완료') {
-    await supabaseAdmin.from('order_items')
-      .update({ status: '송장완료', tracking_no: trackingNo || '', tracking_carrier: trackingCarrier || '' })
-      .eq('order_id', id)
-      .not('status', 'in', '("송장완료","취소")');
-  }
-  // 배송중/송장완료에서 이전 상태로 되돌릴 때 재고 복원
-  if ((prevStatus === '배송중' || prevStatus === '송장완료') && status !== '배송중' && status !== '송장완료' && status !== '취소') {
+  // 배송완료에서 이전 상태로 되돌릴 때 재고 복원
+  if (prevStatus === '배송완료' && status !== '배송완료' && status !== '취소') {
     await deductInventory(id, 'restore');
   }
   // 취소 시 전 품목 취소 + 배정 수량 초기화 + 재고 복원
   if (status === '취소') {
-    // 배송중/송장완료였던 품목이 있으면 재고 복원
-    if (prevStatus === '배송중' || prevStatus === '송장완료') {
+    // 배송완료였던 품목이 있으면 재고 복원
+    if (prevStatus === '배송완료') {
       await deductInventory(id, 'restore');
     }
     await supabaseAdmin.from('order_items')
       .update({ status: '취소', allocated_qty: 0 })
       .eq('order_id', id);
   }
-  // 입금대기/확인요청 전환 시 품목 상태 NULL로 초기화
-  if (status === '입금대기' || status === '확인요청') {
+  // 입금확인 전환 시 품목 상태 NULL로 초기화
+  if (status === '입금확인') {
     await supabaseAdmin.from('order_items')
       .update({ status: null })
       .eq('order_id', id);
@@ -457,7 +450,7 @@ async function handleOrderDetail(req, res, id) {
     await supabaseAdmin.from('order_items')
       .update({ status: '배송준비' })
       .eq('order_id', id)
-      .not('status', 'in', '("배송중","송장완료","취소")');
+      .not('status', 'in', '("배송완료","취소")');
   }
 
   if (status) await writeLog(req._admin, 'STATUS_CHANGE', 'order', data.order_no, { from: prevStatus, to: status });
@@ -539,11 +532,11 @@ async function recalcOrderStatus(orderId) {
     const activeStatuses = statuses.filter(s => s !== '취소');
     if (activeStatuses.length === 0) return;
 
-    const priority = { '결제완료': 1, '배정완료': 2, '배송준비': 3, '배송중': 4, '송장완료': 5 };
+    const priority = { '결제완료': 1, '배정완료': 2, '배송준비': 3, '배송완료': 4 };
     const minPriority = Math.min(...activeStatuses.map(s => priority[s] || 1));
 
     // 배정완료는 주문 상태로는 결제완료로 표시
-    const statusMap = { 1: '결제완료', 2: '결제완료', 3: '배송준비', 4: '배송중', 5: '송장완료' };
+    const statusMap = { 1: '결제완료', 2: '결제완료', 3: '배송준비', 4: '배송완료' };
     const newStatus = statusMap[minPriority] || '결제완료';
 
     await supabaseAdmin.from('orders').update({ status: newStatus }).eq('id', orderId);
@@ -557,7 +550,7 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['결제완료', '배정완료', '배송준비', '배송중', '송장완료', '취소'];
+  const validStatuses = ['결제완료', '배정완료', '배송준비', '배송완료', '취소'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 품목 상태입니다: ${status}`);
 
   // 기존 품목 조회
@@ -573,8 +566,8 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
 
   if (Object.keys(update).length === 0) return fail(res, '변경할 내용이 없습니다');
 
-  // 배송중 전환 시 해당 품목만 재고 차감 + 배정 해제
-  if (status === '배송중' && prevStatus !== '배송중') {
+  // 배송완료 전환 시 해당 품목만 재고 차감 + 배정 해제
+  if (status === '배송완료' && prevStatus !== '배송완료') {
     await deductInventoryForItem(item);
     await supabaseAdmin.from('order_items')
       .update({ allocated_qty: 0 })
