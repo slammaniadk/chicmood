@@ -589,6 +589,15 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   const { error } = await supabaseAdmin.from('order_items').update(update).eq('id', itemId);
   if (error) return fail(res, error.message, 500);
 
+  // 결제완료 전환 시 발주에 품목 추가
+  if (status === '결제완료' && prevStatus !== '결제완료') {
+    await addItemToPurchaseOrder(orderId, item);
+  }
+  // 결제완료에서 다른 상태로 변경 시 발주에서 품목 차감
+  if (prevStatus === '결제완료' && status && status !== '결제완료') {
+    await deductItemFromPurchaseOrder(orderId, item);
+  }
+
   // 주문 상태 자동 재계산
   await recalcOrderStatus(orderId);
 
@@ -881,7 +890,167 @@ async function deductPurchaseOrderQty(orderId) {
         }
       }
     }
-  } catch (e) { /* 발주 차감 실패해도 주문 처리는 유지 */ }
+  } catch (e) { console.error('발주 차감 오류:', e.message || e); }
+}
+
+// 단일 품목 발주 추가 헬퍼 (품목별 결제완료 전환 시)
+async function addItemToPurchaseOrder(orderId, item) {
+  try {
+    if (!item.product_id) return;
+
+    // 주문의 broadcast 정보 조회
+    let orderBroadcastId = null;
+    let orderBroadcastTitle = '';
+    try {
+      const { data: orderData } = await supabaseAdmin.from('orders')
+        .select('broadcast_id, broadcasts:broadcast_id(id, title)').eq('id', orderId).single();
+      if (orderData && orderData.broadcast_id) {
+        orderBroadcastId = orderData.broadcast_id;
+        orderBroadcastTitle = orderData.broadcasts ? orderData.broadcasts.title : '';
+      }
+    } catch (e) { /* broadcast 조회 실패 무시 */ }
+
+    // 상품 정보 조회 (vendor_id, cost_price)
+    const { data: product } = await supabaseAdmin.from('products')
+      .select('id, name, vendor_id, cost_price').eq('id', item.product_id).single();
+    if (!product || !product.vendor_id) return;
+
+    // 기존 발주대기 발주서 찾기 (동일 거래처 + 동일 방송)
+    let query = supabaseAdmin.from('purchase_orders')
+      .select('id').eq('vendor_id', product.vendor_id).eq('status', '발주대기');
+    if (orderBroadcastId) {
+      query = query.eq('broadcast_id', orderBroadcastId);
+    }
+    const { data: existingPOs } = await query.order('id', { ascending: false }).limit(1);
+
+    let poId;
+    if (existingPOs && existingPOs.length > 0) {
+      poId = existingPOs[0].id;
+
+      // 기존 품목 매칭
+      const { data: existingItem } = await supabaseAdmin.from('purchase_order_items')
+        .select('id, qty, cost_price')
+        .eq('purchase_order_id', poId)
+        .eq('product_id', item.product_id)
+        .eq('color_name', item.color || '')
+        .eq('size_name', item.size || '')
+        .single();
+
+      if (existingItem) {
+        const newQty = existingItem.qty + item.qty;
+        await supabaseAdmin.from('purchase_order_items')
+          .update({ qty: newQty, subtotal: newQty * (existingItem.cost_price || product.cost_price || 0) })
+          .eq('id', existingItem.id);
+      } else {
+        const costPrice = product.cost_price || 0;
+        await supabaseAdmin.from('purchase_order_items').insert({
+          purchase_order_id: poId, product_id: item.product_id,
+          product_name: item.name || product.name,
+          color_name: item.color || '', size_name: item.size || '',
+          qty: item.qty, cost_price: costPrice, subtotal: item.qty * costPrice,
+        });
+      }
+    } else {
+      // 새 발주서 생성
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+      const { count } = await supabaseAdmin.from('purchase_orders')
+        .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
+      const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
+
+      const costPrice = product.cost_price || 0;
+      const totalAmount = item.qty * costPrice;
+      const insertData = {
+        po_no: poNo, vendor_id: product.vendor_id, status: '발주대기',
+        total_amount: totalAmount, memo: orderBroadcastTitle || ''
+      };
+      if (orderBroadcastId) insertData.broadcast_id = orderBroadcastId;
+
+      let newPO;
+      ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+        .insert(insertData).select('id').single());
+      if (!newPO && orderBroadcastId) {
+        delete insertData.broadcast_id;
+        ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+          .insert(insertData).select('id').single());
+      }
+      if (!newPO) return;
+      poId = newPO.id;
+
+      await supabaseAdmin.from('purchase_order_items').insert({
+        purchase_order_id: poId, product_id: item.product_id,
+        product_name: item.name || product.name,
+        color_name: item.color || '', size_name: item.size || '',
+        qty: item.qty, cost_price: costPrice, subtotal: totalAmount,
+      });
+    }
+
+    // total_amount 재계산
+    const { data: allItems } = await supabaseAdmin.from('purchase_order_items')
+      .select('subtotal').eq('purchase_order_id', poId);
+    const newTotal = (allItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+    await supabaseAdmin.from('purchase_orders').update({
+      total_amount: newTotal, updated_at: new Date().toISOString()
+    }).eq('id', poId);
+  } catch (e) { console.error('품목별 발주 추가 오류:', e.message || e); }
+}
+
+// 단일 품목 발주 차감 헬퍼 (품목별 취소/상태 변경 시)
+async function deductItemFromPurchaseOrder(orderId, item) {
+  try {
+    if (!item.product_id) return;
+
+    // 주문의 broadcast 정보 조회
+    const { data: order } = await supabaseAdmin.from('orders')
+      .select('broadcast_id').eq('id', orderId).single();
+
+    // 상품의 vendor_id 조회
+    const { data: product } = await supabaseAdmin.from('products')
+      .select('id, vendor_id').eq('id', item.product_id).single();
+    if (!product || !product.vendor_id) return;
+
+    // 해당 거래처의 발주대기 발주서 찾기
+    let query = supabaseAdmin.from('purchase_orders')
+      .select('id').eq('vendor_id', product.vendor_id).eq('status', '발주대기');
+    if (order && order.broadcast_id) {
+      query = query.eq('broadcast_id', order.broadcast_id);
+    }
+    const { data: pos } = await query;
+    if (!pos || pos.length === 0) return;
+
+    for (const po of pos) {
+      const { data: poItem } = await supabaseAdmin.from('purchase_order_items')
+        .select('id, qty, cost_price')
+        .eq('purchase_order_id', po.id)
+        .eq('product_id', item.product_id)
+        .eq('color_name', item.color || '')
+        .eq('size_name', item.size || '')
+        .single();
+
+      if (poItem) {
+        const newQty = poItem.qty - item.qty;
+        if (newQty <= 0) {
+          await supabaseAdmin.from('purchase_order_items').delete().eq('id', poItem.id);
+        } else {
+          await supabaseAdmin.from('purchase_order_items')
+            .update({ qty: newQty, subtotal: newQty * poItem.cost_price }).eq('id', poItem.id);
+        }
+
+        // 남은 품목 확인 후 발주서 total 재계산 또는 삭제
+        const { data: remaining } = await supabaseAdmin.from('purchase_order_items')
+          .select('subtotal').eq('purchase_order_id', po.id);
+        if (!remaining || remaining.length === 0) {
+          await supabaseAdmin.from('purchase_orders').delete().eq('id', po.id);
+        } else {
+          const newTotal = remaining.reduce((s, i) => s + (i.subtotal || 0), 0);
+          await supabaseAdmin.from('purchase_orders').update({
+            total_amount: newTotal, updated_at: new Date().toISOString()
+          }).eq('id', po.id);
+        }
+        break;
+      }
+    }
+  } catch (e) { console.error('품목별 발주 차감 오류:', e.message || e); }
 }
 
 // 자동 발주 생성 헬퍼 (결제완료 시 거래처+방송 단위로 발주서 자동 생성/합산)
