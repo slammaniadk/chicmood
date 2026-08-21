@@ -438,10 +438,10 @@ async function handleOrderDetail(req, res, id) {
       .update({ status: '결제취소', allocated_qty: 0 })
       .eq('order_id', id);
   }
-  // 입금확인 전환 시 품목 상태 NULL로 초기화
+  // 입금확인 전환 시 품목 상태도 입금확인으로
   if (status === '입금확인') {
     await supabaseAdmin.from('order_items')
-      .update({ status: null })
+      .update({ status: '입금확인' })
       .eq('order_id', id);
   }
   // 배송준비 전환 시 미배송 품목 상태 갱신
@@ -548,7 +548,7 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
   const { status, trackingNo, trackingCarrier } = req.body;
-  const validStatuses = ['결제완료', '결제취소', '배송준비', '배송완료'];
+  const validStatuses = ['입금확인', '결제완료', '결제취소', '배송준비', '배송완료'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 품목 상태입니다: ${status}`);
 
   // 기존 품목 조회

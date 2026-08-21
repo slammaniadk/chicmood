@@ -187,6 +187,7 @@ module.exports = async function handler(req, res) {
   const itemsToInsert = orderItems.map(item => ({
     ...item,
     order_id: order.id,
+    status: '입금확인',
   }));
 
   const { error: iErr } = await supabaseAdmin

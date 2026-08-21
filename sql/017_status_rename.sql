@@ -10,3 +10,4 @@ UPDATE order_items SET status = '배송완료' WHERE status = '배송중';
 UPDATE order_items SET status = '배송완료' WHERE status = '송장완료';
 UPDATE order_items SET status = '결제취소' WHERE status = '취소';
 UPDATE order_items SET status = '결제완료' WHERE status = '배정완료';
+UPDATE order_items SET status = '입금확인' WHERE status IS NULL;
