@@ -280,7 +280,7 @@ async function handleOrderMerge(req, res) {
   // 1) target + source 주문 전체 조회
   const allIds = [targetId, ...sourceIds];
   const { data: orders, error: fetchErr } = await supabaseAdmin.from('orders')
-    .select('id, name, phone, status, broadcast_id')
+    .select('id, name, phone, status, broadcast_id, subtotal, total')
     .in('id', allIds);
   if (fetchErr) return fail(res, fetchErr.message, 500);
   if (!orders || orders.length !== allIds.length) {
@@ -315,16 +315,11 @@ async function handleOrderMerge(req, res) {
     await deductPurchaseOrderQty(srcId);
   }
 
-  // 6) target subtotal/total 재계산 (shipping_fee 유지)
-  const { data: targetItems } = await supabaseAdmin.from('order_items')
-    .select('subtotal')
-    .eq('order_id', targetId);
-  const { data: targetOrder } = await supabaseAdmin.from('orders')
-    .select('shipping_fee').eq('id', targetId).single();
-  const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.subtotal || 0), 0);
-  const shippingFee = targetOrder?.shipping_fee || 0;
+  // 6) target subtotal/total 재계산 (모든 주문의 금액 합산)
+  const newSubtotal = orders.reduce((sum, o) => sum + (o.subtotal || 0), 0);
+  const newTotal = orders.reduce((sum, o) => sum + (o.total || 0), 0);
   const { error: updateErr } = await supabaseAdmin.from('orders')
-    .update({ subtotal: newSubtotal, total: newSubtotal + shippingFee })
+    .update({ subtotal: newSubtotal, total: newTotal })
     .eq('id', targetId);
   if (updateErr) return fail(res, `금액 재계산 실패: ${updateErr.message}`, 500);
 
