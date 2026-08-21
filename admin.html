@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:09</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:14</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1089,6 +1089,7 @@
   let shippingFilter = '배송준비';
   let shippingFrom = '';
   let shippingTo = '';
+  let shippingSearch = '';
   let shippingPage = 1;
   let shippingChecked = new Set(); // orderId (주문 단위)
   let _shippingOrderKeys = [];
@@ -1101,6 +1102,7 @@
       if (shippingFilter !== 'all') params.set('status', shippingFilter);
       if (shippingFrom) params.set('from', shippingFrom);
       if (shippingTo) params.set('to', shippingTo);
+      if (shippingSearch) params.set('search', shippingSearch);
 
       const data = await api('/admin/orders?' + params.toString());
       _shippingOrders = data.orders;
@@ -1145,6 +1147,7 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 로젠택배 엑셀 다운로드
               </button>
+              <button class="btn-primary flex items-center gap-2" style="background:#16a765;" onclick="saveAllTrackingNo()">전체 저장</button>
             </div>
           </div>
 
@@ -1154,6 +1157,7 @@
                 <button class="filter-tab ${shippingFilter === s ? 'active' : ''}" onclick="shippingFilter='${s}';shippingPage=1;shippingChecked.clear();renderShipping(document.getElementById('page-content'))">${statusLabels[s]}</button>
               `).join('')}
             </div>
+            <input type="text" class="input-field" style="width:180px;" placeholder="수취인/연락처/주문번호" value="${escapeHtml(shippingSearch)}" onkeydown="if(event.key==='Enter'){shippingSearch=this.value.trim();shippingPage=1;renderShipping(document.getElementById('page-content'))}" />
             <input type="date" class="input-field" style="width:auto;" value="${shippingFrom}" onchange="shippingFrom=this.value;shippingPage=1;renderShipping(document.getElementById('page-content'))" />
             <span class="text-warm-400">~</span>
             <input type="date" class="input-field" style="width:auto;" value="${shippingTo}" onchange="shippingTo=this.value;shippingPage=1;renderShipping(document.getElementById('page-content'))" />
@@ -1221,6 +1225,29 @@
     }
   }
 
+  async function saveAllTrackingNo() {
+    const inputs = document.querySelectorAll('[id^="track-"]');
+    const toSave = [];
+    inputs.forEach(inp => {
+      const val = inp.value.trim();
+      if (val) toSave.push({ id: inp.id.replace('track-', ''), trackingNo: val });
+    });
+    if (toSave.length === 0) { showToast('저장할 송장번호가 없습니다'); return; }
+    if (!confirm(`${toSave.length}건의 송장번호를 저장하시겠습니까?`)) return;
+    let success = 0, fail = 0;
+    for (const item of toSave) {
+      try {
+        await api('/admin/orders/' + item.id, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: '배송완료', trackingNo: item.trackingNo, trackingCarrier: '로젠택배' })
+        });
+        success++;
+      } catch (e) { fail++; }
+    }
+    showToast(`저장 완료: ${success}건${fail > 0 ? `, 실패: ${fail}건` : ''}`);
+    renderShipping(document.getElementById('page-content'));
+  }
+
   async function revertShipping(orderId, orderNo) {
     if (!confirm(`주문 ${orderNo}을(를) 배송준비로 되돌리시겠습니까?`)) return;
     try {
@@ -1267,6 +1294,11 @@
       });
 
       showToast(`성공: ${result.success}건, 스킵: ${result.skipped}건${result.failed > 0 ? `, 실패: ${result.failed}건` : ''}`);
+      if (result.skipped > 0 && result.details) {
+        const skippedList = result.details.filter(d => d.reason).map(d => `${d.name||''}: ${d.reason}`).join('\n');
+        if (skippedList) console.log('스킵 상세:\n' + skippedList);
+        if (result.success === 0) alert('매칭 실패 상세:\n' + skippedList);
+      }
       renderShipping(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '운송장 업로드에 실패했습니다');

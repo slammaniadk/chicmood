@@ -1518,18 +1518,24 @@ async function handleShippingImport(req, res) {
   let success = 0, skipped = 0, failed = 0;
   const details = [];
 
+  // phone 정규화: 숫자만 남기고 앞 7자리
+  const normalizePhone = (p) => (p || '').replace(/[^0-9]/g, '').slice(0, 7);
+  // 이름 정규화: 앞뒤 공백 제거
+  const normalizeName = (n) => (n || '').trim();
+
   for (const row of rows) {
-    const [trackingNo, name, phone] = row;
+    const [trackingNo, rawName, phone] = row;
+    const name = normalizeName(rawName);
     if (!trackingNo || !name) { skipped++; details.push({ name: name || '(빈)', reason: '운송장 또는 이름 없음' }); continue; }
 
-    // phone 정규화: - 제거, 앞 7자리
-    const normalizePhone = (p) => (p || '').replace(/-/g, '').slice(0, 7);
     const rowPhone7 = normalizePhone(phone);
 
-    // 매칭: 이름 + 전화 앞 7자리
-    const matched = orders.find(o =>
-      o.name === name && normalizePhone(o.phone) === rowPhone7
-    );
+    // 매칭: 이름(trim) + 전화 앞 7자리, 전화 없으면 이름만으로 매칭
+    const matched = orders.find(o => {
+      if (normalizeName(o.name) !== name) return false;
+      if (!rowPhone7 || !normalizePhone(o.phone)) return true;
+      return normalizePhone(o.phone) === rowPhone7;
+    });
 
     if (!matched) {
       skipped++;
