@@ -396,6 +396,7 @@
   function startOrderPolling() {
     if (orderPollingTimer) return; // 이미 실행 중
     orderLastTimestamp = new Date().toISOString();
+    console.log('[주문알림] 폴링 시작, 기준시각:', orderLastTimestamp);
     orderPollingTimer = setInterval(pollNewOrders, 10000);
   }
 
@@ -410,10 +411,12 @@
     if (!adminToken) return;
     try {
       const data = await api('/admin/orders?after=' + encodeURIComponent(orderLastTimestamp));
+      console.log('[주문알림] 폴링 응답:', data.orders?.length || 0, '건, 기준:', orderLastTimestamp);
       if (data.orders && data.orders.length > 0) {
         data.orders.forEach(order => {
           if (!notifiedOrderIds.has(order.id)) {
             notifiedOrderIds.add(order.id);
+            console.log('[주문알림] 새 주문 감지:', order.orderNo, order.name);
             showOrderNotification(order);
           }
           // 다음 폴링 기준점 갱신
@@ -422,7 +425,7 @@
           }
         });
       }
-    } catch (e) { /* 폴링 에러 무시 */ }
+    } catch (e) { console.error('[주문알림] 폴링 에러:', e.message); }
   }
 
   function showOrderNotification(order) {
