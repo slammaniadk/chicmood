@@ -82,16 +82,28 @@
     .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #6b4220; color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    /* 신규 주문 알림 팝업 */
-    .order-noti-container { position: fixed; top: 70px; right: 16px; z-index: 90; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-    .order-noti { pointer-events: auto; background: #fff; border: 2px solid #e53e3e; border-radius: 12px; padding: 14px 16px; width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); cursor: pointer; transform: translateX(120%); transition: transform 0.35s cubic-bezier(.4,0,.2,1), opacity 0.35s ease; opacity: 0; }
-    .order-noti.show { transform: translateX(0); opacity: 1; }
-    .order-noti.hide { transform: translateX(120%); opacity: 0; }
-    .order-noti-title { font-size: 13px; font-weight: 700; color: #e53e3e; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-    .order-noti-body { font-size: 12px; color: #3d2e22; line-height: 1.5; }
-    .order-noti-close { position: absolute; top: 8px; right: 10px; background: none; border: none; font-size: 16px; color: #a0a0a0; cursor: pointer; line-height: 1; }
-    .order-noti-close:hover { color: #333; }
-    @media (max-width: 480px) { .order-noti { width: calc(100vw - 32px); } }
+    /* 신규 주문 알림 팝업 - 화면 중앙 */
+    .order-noti-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 95; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+    .order-noti-overlay.show { opacity: 1; pointer-events: auto; }
+    .order-noti-panel { background: #fff; border-radius: 16px; width: 380px; max-width: calc(100vw - 32px); max-height: 70vh; box-shadow: 0 20px 60px rgba(0,0,0,0.25); transform: scale(0.85); transition: transform 0.3s cubic-bezier(.4,0,.2,1); overflow: hidden; }
+    .order-noti-overlay.show .order-noti-panel { transform: scale(1); }
+    .order-noti-header { background: #e53e3e; color: #fff; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+    .order-noti-header h3 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .order-noti-header .noti-count { background: #fff; color: #e53e3e; font-size: 13px; font-weight: 800; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .order-noti-close { background: none; border: none; color: rgba(255,255,255,0.8); font-size: 22px; cursor: pointer; line-height: 1; padding: 0; }
+    .order-noti-close:hover { color: #fff; }
+    .order-noti-list { padding: 8px; max-height: calc(70vh - 120px); overflow-y: auto; }
+    .order-noti-item { padding: 12px 14px; border-radius: 10px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0e6da; }
+    .order-noti-item:last-child { border-bottom: none; }
+    .order-noti-item:hover { background: #fdf8f4; }
+    .order-noti-icon { width: 40px; height: 40px; background: #fef2f2; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .order-noti-info { flex: 1; min-width: 0; }
+    .order-noti-orderno { font-size: 14px; font-weight: 700; color: #3d2e22; }
+    .order-noti-detail { font-size: 12px; color: #8b7355; margin-top: 2px; }
+    .order-noti-amount { font-size: 15px; font-weight: 700; color: #e53e3e; flex-shrink: 0; }
+    .order-noti-footer { padding: 12px 20px; background: #fdf8f4; text-align: center; }
+    .order-noti-footer button { background: #e53e3e; color: #fff; border: none; padding: 10px 32px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .order-noti-footer button:hover { background: #c53030; }
 
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; font-size: 11px; font-weight: 600; color: #a86e35; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 12px; border-bottom: 2px solid #f0dcc8; }
@@ -132,7 +144,18 @@
 <body>
 
   <div id="toast" class="toast"></div>
-  <div id="order-noti-container" class="order-noti-container"></div>
+  <div id="order-noti-overlay" class="order-noti-overlay" onclick="if(event.target===this)closeOrderNotification()">
+    <div class="order-noti-panel">
+      <div class="order-noti-header">
+        <h3>🔔 신규 주문 <span id="order-noti-count" class="noti-count">0</span></h3>
+        <button class="order-noti-close" onclick="closeOrderNotification()">&times;</button>
+      </div>
+      <div id="order-noti-list" class="order-noti-list"></div>
+      <div class="order-noti-footer">
+        <button onclick="closeOrderNotification();navigate('orders');">주문관리 바로가기</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 헤더 -->
   <header class="bg-warm-800 text-white">
@@ -428,41 +451,58 @@
     } catch (e) { console.error('[주문알림] 폴링 에러:', e.message); }
   }
 
+  let orderNotiQueue = [];
+  let orderNotiAutoCloseTimer = null;
+
   function showOrderNotification(order) {
     // 알림음
     playNotificationSound();
 
-    const container = document.getElementById('order-noti-container');
-    if (!container) return;
+    // 큐에 추가
+    orderNotiQueue.push(order);
 
-    const noti = document.createElement('div');
-    noti.className = 'order-noti';
-    noti.style.position = 'relative';
-    noti.innerHTML = `
-      <button class="order-noti-close" onclick="event.stopPropagation();this.parentElement.classList.replace('show','hide');setTimeout(()=>this.parentElement.remove(),350);">&times;</button>
-      <div class="order-noti-title">🔔 신규 주문</div>
-      <div class="order-noti-body">
-        <div><b>${escapeHtml(order.orderNo || '')}</b></div>
-        <div>${escapeHtml(order.name || '고객')} · ${fmt(order.total || 0)}</div>
+    // 팝업 목록 갱신
+    const list = document.getElementById('order-noti-list');
+    const countEl = document.getElementById('order-noti-count');
+    if (!list || !countEl) return;
+
+    const item = document.createElement('div');
+    item.className = 'order-noti-item';
+    item.onclick = () => { closeOrderNotification(); navigate('orders'); };
+    item.innerHTML = `
+      <div class="order-noti-icon">🛒</div>
+      <div class="order-noti-info">
+        <div class="order-noti-orderno">${escapeHtml(order.orderNo || '')}</div>
+        <div class="order-noti-detail">${escapeHtml(order.name || '고객')}</div>
       </div>
+      <div class="order-noti-amount">${fmt(order.total || 0)}</div>
     `;
-    noti.addEventListener('click', () => {
-      noti.classList.replace('show', 'hide');
-      setTimeout(() => noti.remove(), 350);
-      navigate('orders');
-    });
-    container.appendChild(noti);
+    list.appendChild(item);
+    countEl.textContent = orderNotiQueue.length;
 
-    // 슬라이드 인
-    requestAnimationFrame(() => { requestAnimationFrame(() => { noti.classList.add('show'); }); });
+    // 오버레이 표시
+    const overlay = document.getElementById('order-noti-overlay');
+    if (overlay && !overlay.classList.contains('show')) {
+      overlay.classList.add('show');
+    }
 
-    // 5초 후 자동 닫힘
+    // 자동 닫힘 타이머 리셋 (마지막 알림 기준 8초)
+    if (orderNotiAutoCloseTimer) clearTimeout(orderNotiAutoCloseTimer);
+    orderNotiAutoCloseTimer = setTimeout(() => closeOrderNotification(), 8000);
+  }
+
+  function closeOrderNotification() {
+    const overlay = document.getElementById('order-noti-overlay');
+    if (overlay) overlay.classList.remove('show');
+    // 300ms 후 목록 초기화
     setTimeout(() => {
-      if (noti.parentElement) {
-        noti.classList.replace('show', 'hide');
-        setTimeout(() => noti.remove(), 350);
-      }
-    }, 5000);
+      const list = document.getElementById('order-noti-list');
+      if (list) list.innerHTML = '';
+      orderNotiQueue = [];
+      const countEl = document.getElementById('order-noti-count');
+      if (countEl) countEl.textContent = '0';
+    }, 300);
+    if (orderNotiAutoCloseTimer) { clearTimeout(orderNotiAutoCloseTimer); orderNotiAutoCloseTimer = null; }
   }
 
   function playNotificationSound() {
