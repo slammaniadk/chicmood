@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.3.8</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">v1.3.9</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -800,7 +800,7 @@
                   const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
                   const totalAlloc = o.items.reduce((s,i) => s + (i.allocatedQty || 0), 0);
                   const allocLabel = totalQty === 0 ? '-' : totalAlloc >= totalQty ? '배정완료' : totalAlloc > 0 ? '부분배정(' + totalAlloc + '/' + totalQty + ')' : '미배정';
-                  const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#a0aec0';
+                  const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
                   return `
