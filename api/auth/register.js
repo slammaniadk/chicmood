@@ -6,7 +6,7 @@ module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
 
-  const { name, phone, password } = req.body;
+  const { name, phone, password, nickname, zipcode, addrBase, addrDetail } = req.body;
 
   if (!name || !phone || !password) {
     return fail(res, '이름, 전화번호, 비밀번호는 필수입니다');
@@ -27,10 +27,16 @@ module.exports = async function handler(req, res) {
   }
 
   // 회원 생성
+  const userData = { name, phone, password };
+  if (nickname) userData.nickname = nickname;
+  if (zipcode) userData.zipcode = zipcode;
+  if (addrBase) userData.address = addrBase;
+  if (addrDetail) userData.address_detail = addrDetail;
+
   const { data: user, error } = await supabaseAdmin
     .from('users')
-    .insert({ name, phone, password })
-    .select('id, name, phone')
+    .insert(userData)
+    .select('id, name, phone, nickname, zipcode, address, address_detail')
     .single();
 
   if (error) return fail(res, error.message, 500);
@@ -39,6 +45,14 @@ module.exports = async function handler(req, res) {
 
   return ok(res, {
     token,
-    user: { name: user.name, phone: user.phone },
+    user: {
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      nickname: user.nickname || '',
+      zipcode: user.zipcode || '',
+      addrBase: user.address || '',
+      addrDetail: user.address_detail || '',
+    },
   }, 201);
 };

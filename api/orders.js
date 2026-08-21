@@ -16,6 +16,13 @@ module.exports = async function handler(req, res) {
     return fail(res, '주문 상품이 없습니다');
   }
 
+  // 로그인 필수
+  const tokenUser = getUserFromRequest(req);
+  if (!tokenUser || !tokenUser.id) {
+    return fail(res, '주문하시려면 로그인이 필요합니다', 401);
+  }
+  const userId = tokenUser.id;
+
   // 방송 없이 주문 차단
   if (!broadcastId) {
     return fail(res, '방송을 통해서만 주문이 가능합니다');
@@ -54,8 +61,33 @@ module.exports = async function handler(req, res) {
   }
 
   const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0);
-  const shippingFee = subtotal >= 100000 ? 0 : 4000;
-  const total = subtotal + shippingFee;
+
+  // 동일방송 동일회원 누적 배송비 로직
+  let shippingFee = subtotal >= 100000 ? 0 : 4000;
+  let shippingRefund = 0;
+
+  if (broadcastId) {
+    const { data: prevOrders, error: prevErr } = await supabaseAdmin
+      .from('orders')
+      .select('subtotal, shipping_fee, shipping_refund')
+      .eq('broadcast_id', parseInt(broadcastId))
+      .eq('user_id', userId)
+      .neq('status', '취소');
+
+    if (!prevErr && prevOrders && prevOrders.length > 0) {
+      const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
+      const previousShippingFees = prevOrders.reduce((s, o) => s + o.shipping_fee, 0);
+      const previousRefunds = prevOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
+      const cumulativeSubtotal = previousSubtotal + subtotal;
+
+      if (cumulativeSubtotal >= 100000) {
+        shippingFee = 0;
+        shippingRefund = Math.max(0, previousShippingFees - previousRefunds);
+      }
+    }
+  }
+
+  const total = subtotal + shippingFee - shippingRefund;
 
   // 주문번호 생성 (DB 시퀀스 기반)
   const { data: seqData, error: seqErr } = await supabaseAdmin
@@ -78,13 +110,6 @@ module.exports = async function handler(req, res) {
   const ds = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
   const orderNo = `CM-${ds}-${String(orderSeq).padStart(4, '0')}`;
 
-  // JWT에서 user_id 추출 (선택적)
-  const tokenUser = getUserFromRequest(req);
-  let userId = null;
-  if (tokenUser && tokenUser.id) {
-    userId = tokenUser.id;
-  }
-
   // 주문 생성
   const orderData = {
     order_no: orderNo,
@@ -96,6 +121,7 @@ module.exports = async function handler(req, res) {
     memo: memo || null,
     subtotal,
     shipping_fee: shippingFee,
+    shipping_refund: shippingRefund,
     total,
     status: '입금대기',
   };
@@ -108,9 +134,10 @@ module.exports = async function handler(req, res) {
     .select('id, order_no, subtotal, shipping_fee, total, status, created_at')
     .single());
 
-  // broadcast_id 컬럼이 아직 없으면 컬럼 제외 후 재시도
-  if (oErr && oErr.message && oErr.message.includes('broadcast_id')) {
-    delete orderData.broadcast_id;
+  // 컬럼이 아직 없으면 제외 후 재시도
+  if (oErr && oErr.message) {
+    if (oErr.message.includes('broadcast_id')) delete orderData.broadcast_id;
+    if (oErr.message.includes('shipping_refund')) delete orderData.shipping_refund;
     ({ data: order, error: oErr } = await supabaseAdmin
       .from('orders')
       .insert(orderData)
@@ -136,6 +163,7 @@ module.exports = async function handler(req, res) {
     orderNo: order.order_no,
     subtotal: order.subtotal,
     shippingFee: order.shipping_fee,
+    shippingRefund: shippingRefund,
     total: order.total,
     status: order.status,
     items: orderItems.map(i => ({

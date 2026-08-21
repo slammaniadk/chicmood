@@ -1,0 +1,8 @@
+-- 1. 사용자 프로필 확장 (닉네임, 주소)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS zipcode TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address_detail TEXT DEFAULT '';
+
+-- 2. 동일방송 재주문 배송비 환급 컬럼
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_refund INTEGER NOT NULL DEFAULT 0;

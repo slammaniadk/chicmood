@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
 
   const { data: user, error } = await supabaseAdmin
     .from('users')
-    .select('id, name, phone, password, role')
+    .select('id, name, phone, password, role, nickname, zipcode, address, address_detail')
     .eq('phone', phone)
     .single();
 
@@ -26,6 +26,15 @@ module.exports = async function handler(req, res) {
 
   return ok(res, {
     token,
-    user: { id: user.id, name: user.name, phone: user.phone, role: user.role || 'user' },
+    user: {
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      role: user.role || 'user',
+      nickname: user.nickname || '',
+      zipcode: user.zipcode || '',
+      addrBase: user.address || '',
+      addrDetail: user.address_detail || '',
+    },
   });
 };

@@ -204,7 +204,7 @@
         </div>
         <div>
           <p class="text-[10px] font-semibold tracking-wider uppercase text-warm-400 mb-0.5">결제 금액</p>
-          <p id="complete-total" class="font-serif text-xl font-bold text-warm-800"></p>
+          <p id="complete-total" class="text-xl font-bold text-warm-800"></p>
         </div>
         <div id="complete-items" class="border-t border-warm-100 pt-3 space-y-1.5"></div>
         <p class="text-[10px] text-warm-400 leading-relaxed font-light">위 계좌로 입금 후 주문조회에서 "입금완료" 버튼을 눌러주세요. 확인 후 순차적으로 발송됩니다.</p>
@@ -539,7 +539,7 @@
             </div>
             <div class="flex flex-col">
               <p class="text-[11px] text-warm-400 tracking-[0.2em] uppercase mb-2 font-light">CHICMOOD LIVE</p>
-              <h1 class="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-warm-900 italic mb-1">${p.name}</h1>
+              <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-warm-900 mb-1">${p.name}</h1>
               <div class="flex items-baseline gap-3 mt-4 mb-6">
                 <span class="text-3xl font-bold text-warm-800">${fmt(p.price)}</span>
               </div>
@@ -694,6 +694,7 @@
             <span class="text-warm-800 font-semibold">${shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(shippingFee)}</span>
           </div>
           ${shippingFee > 0 ? `<p class="text-[11px] text-warm-400 font-light">${fmt(100000 - subtotal)} 더 담으면 무료배송!</p>` : ''}
+          <p class="text-[10px] text-warm-300 font-light mt-1">동일방송 재주문 누적 10만원 이상 시 배송비 환급</p>
           <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
             <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
             <span class="text-2xl font-bold text-warm-800">${fmt(total)}</span>
@@ -723,12 +724,32 @@
   function renderCheckout(el) {
     if (cart.length === 0) { location.hash = '#cart'; return; }
 
+    // 로그인 필수
+    if (!currentUser) {
+      sessionStorage.setItem('chicmood_checkout_redirect', '1');
+      el.innerHTML = `
+        <section class="py-20 text-center fade-in">
+          <svg class="w-12 h-12 mx-auto text-warm-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          <p class="text-warm-600 mb-2 font-semibold">주문하시려면 로그인이 필요합니다</p>
+          <p class="text-[12px] text-warm-400 mb-6">회원 정보로 배송비 혜택을 확인할 수 있어요.</p>
+          <div class="flex justify-center gap-3">
+            <a href="#login" class="btn-primary text-[13px] px-6">로그인</a>
+            <a href="#register" class="btn-outline text-[13px] px-6">회원가입</a>
+          </div>
+        </section>
+      `;
+      return;
+    }
+
     const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
     const shippingFee = subtotal >= 100000 ? 0 : 4000;
     const total = subtotal + shippingFee;
 
-    const userName = currentUser ? currentUser.name : '';
-    const userPhone = currentUser ? currentUser.phone : '';
+    const userName = currentUser.name || '';
+    const userPhone = currentUser.phone || '';
+    const userZipcode = currentUser.zipcode || '';
+    const userAddrBase = currentUser.addrBase || '';
+    const userAddrDetail = currentUser.addrDetail || '';
 
     el.innerHTML = `
       <section class="py-10 fade-in">
@@ -748,11 +769,12 @@
           </div>
           <div class="border-t border-warm-200 mt-3 pt-3 flex justify-between">
             <span class="text-sm text-warm-500">배송비</span>
-            <span class="text-sm font-semibold text-warm-800">${shippingFee === 0 ? '무료' : fmt(shippingFee)}</span>
+            <span id="co-shipping-fee" class="text-sm font-semibold text-warm-800">${shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(shippingFee)}</span>
           </div>
+          <div id="co-shipping-refund"></div>
           <div class="border-t border-warm-200 mt-3 pt-3 flex justify-between items-center">
             <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
-            <span class="text-xl font-bold text-warm-800">${fmt(total)}</span>
+            <span id="co-total" class="text-xl font-bold text-warm-800">${fmt(total)}</span>
           </div>
         </div>
 
@@ -768,16 +790,16 @@
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">유튜브 / 소셜 닉네임</label>
-            <input id="co-social" type="text" class="input-field" placeholder="@chicmood_viewer" />
+            <input id="co-social" type="text" class="input-field" placeholder="@chicmood_viewer" value="${escapeHtml(currentUser.nickname || '')}" />
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송지 주소 <span class="text-rose-400">*</span></label>
             <div class="flex gap-2 mb-2">
-              <input id="co-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly />
+              <input id="co-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly value="${escapeHtml(userZipcode)}" />
               <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openPostcode()">주소 검색</button>
             </div>
-            <input id="co-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly />
-            <input id="co-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" />
+            <input id="co-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly value="${escapeHtml(userAddrBase)}" />
+            <input id="co-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" value="${escapeHtml(userAddrDetail)}" />
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송 요청사항</label>
@@ -791,10 +813,45 @@
             <p>· 입금 확인 후 주문조회에서 "입금완료" 버튼을 눌러주세요.</p>
           </div>
 
-          <button class="btn-primary w-full mt-4" onclick="submitCheckout()">구매하기 · ${fmt(total)}</button>
+          <button id="co-submit-btn" class="btn-primary w-full mt-4" onclick="submitCheckout()">구매하기 · ${fmt(total)}</button>
         </form>
       </section>
     `;
+
+    // 동일방송 재주문 배송비 자동 체크
+    const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
+    if (broadcastId && currentUser) {
+      checkShippingFee(broadcastId, subtotal);
+    }
+  }
+
+  async function checkShippingFee(broadcastId, subtotal) {
+    try {
+      const result = await api('/orders/check-shipping', {
+        method: 'POST',
+        body: JSON.stringify({ broadcastId, subtotal })
+      });
+
+      const feeEl = document.getElementById('co-shipping-fee');
+      const refundEl = document.getElementById('co-shipping-refund');
+      const totalEl = document.getElementById('co-total');
+      const btnEl = document.getElementById('co-submit-btn');
+
+      if (feeEl) feeEl.innerHTML = result.shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(result.shippingFee);
+      if (refundEl && result.shippingRefund > 0) {
+        refundEl.innerHTML = `
+          <div class="flex justify-between text-sm mt-2">
+            <span class="text-green-600 text-[12px]">선구매 배송비 환급</span>
+            <span class="font-semibold text-green-600">-${fmt(result.shippingRefund)}</span>
+          </div>`;
+      } else if (refundEl) {
+        refundEl.innerHTML = '';
+      }
+      if (totalEl) totalEl.textContent = fmt(result.total);
+      if (btnEl) btnEl.textContent = '구매하기 · ' + fmt(result.total);
+    } catch (e) {
+      console.error('Shipping check error:', e);
+    }
   }
 
   function openPostcode() {
@@ -851,6 +908,11 @@
         <div class="flex justify-between items-center text-sm">
           <span class="text-warm-600">배송비</span>
           <span class="font-semibold text-warm-800">${fmt(order.shippingFee)}</span>
+        </div>
+      ` : '') + (order.shippingRefund > 0 ? `
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-green-600">선구매 배송비 환급</span>
+          <span class="font-semibold text-green-600">-${fmt(order.shippingRefund)}</span>
         </div>
       ` : '');
 
@@ -998,8 +1060,21 @@
               <input id="reg-name" type="text" class="input-field" placeholder="홍길동" required />
             </div>
             <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">닉네임 (유튜브/소셜)</label>
+              <input id="reg-nickname" type="text" class="input-field" placeholder="@chicmood_viewer" />
+            </div>
+            <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">전화번호 <span class="text-rose-400">*</span></label>
               <input id="reg-phone" type="tel" class="input-field" placeholder="010-1234-5678" required />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">배송지 주소</label>
+              <div class="flex gap-2 mb-2">
+                <input id="reg-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly />
+                <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openRegPostcode()">주소 검색</button>
+              </div>
+              <input id="reg-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly />
+              <input id="reg-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" />
             </div>
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">비밀번호 (숫자 4자리) <span class="text-rose-400">*</span></label>
@@ -1014,9 +1089,23 @@
     `;
   }
 
+  function openRegPostcode() {
+    new daum.Postcode({
+      oncomplete: function(data) {
+        document.getElementById('reg-zipcode').value = data.zonecode;
+        document.getElementById('reg-address').value = data.roadAddress || data.jibunAddress;
+        document.getElementById('reg-address-detail').focus();
+      }
+    }).open();
+  }
+
   async function doRegister() {
     const name = document.getElementById('reg-name').value.trim();
+    const nickname = document.getElementById('reg-nickname').value.trim();
     const phone = document.getElementById('reg-phone').value.trim();
+    const zipcode = document.getElementById('reg-zipcode').value.trim();
+    const addrBase = document.getElementById('reg-address').value.trim();
+    const addrDetail = document.getElementById('reg-address-detail').value.trim();
     const pw = document.getElementById('reg-pw').value.trim();
 
     if (!name) { showToast('이름을 입력해주세요'); return; }
@@ -1026,7 +1115,7 @@
     try {
       const res = await api('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name, phone, password: pw })
+        body: JSON.stringify({ name, phone, password: pw, nickname, zipcode, addrBase, addrDetail })
       });
 
       authToken = res.token;
@@ -1036,7 +1125,12 @@
       updateAuthNav();
 
       showToast('회원가입이 완료되었습니다');
-      location.hash = '#mypage';
+      if (sessionStorage.getItem('chicmood_checkout_redirect')) {
+        sessionStorage.removeItem('chicmood_checkout_redirect');
+        location.hash = '#checkout';
+      } else {
+        location.hash = '#mypage';
+      }
     } catch (e) {
       showToast(e.message || '회원가입에 실패했습니다');
     }
@@ -1091,7 +1185,12 @@
       updateAuthNav();
 
       showToast(`${res.user.name}님, 환영합니다!`);
-      location.hash = '#mypage';
+      if (sessionStorage.getItem('chicmood_checkout_redirect')) {
+        sessionStorage.removeItem('chicmood_checkout_redirect');
+        location.hash = '#checkout';
+      } else {
+        location.hash = '#mypage';
+      }
     } catch (e) {
       showToast(e.message || '로그인에 실패했습니다');
     }
@@ -1122,8 +1221,9 @@
                   <span class="font-serif text-lg font-bold text-warm-700">${currentUser.name.charAt(0)}</span>
                 </div>
                 <div>
-                  <p class="font-semibold text-warm-800">${escapeHtml(currentUser.name)}</p>
+                  <p class="font-semibold text-warm-800">${escapeHtml(currentUser.name)}${currentUser.nickname ? ` <span class="text-[12px] text-warm-400 font-normal">(${escapeHtml(currentUser.nickname)})</span>` : ''}</p>
                   <p class="text-[12px] text-warm-400">${escapeHtml(currentUser.phone)}</p>
+                  ${currentUser.addrBase ? `<p class="text-[11px] text-warm-300 mt-1">${escapeHtml(currentUser.addrBase)}${currentUser.addrDetail ? ' ' + escapeHtml(currentUser.addrDetail) : ''}</p>` : ''}
                 </div>
               </div>
               <button class="btn-outline w-full text-[13px]" onclick="doLogout()">로그아웃</button>
