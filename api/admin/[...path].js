@@ -1221,6 +1221,7 @@ async function handleMembers(req, res) {
     return {
       id: u.id,
       name: u.name,
+      nickname: u.nickname || '',
       phone: u.phone,
       role: u.role,
       orderCount: stats.count,
@@ -1251,8 +1252,10 @@ async function handleMemberDetail(req, res, id) {
     member: {
       id: user.id,
       name: user.name,
+      nickname: user.nickname || '',
       phone: user.phone,
       role: user.role,
+      address: [user.zipcode, user.address, user.address_detail].filter(Boolean).join(' ') || '',
       createdAt: user.created_at,
       orders: (orders || []).map(o => ({
         id: o.id, orderNo: o.order_no, total: o.total, status: o.status, createdAt: o.created_at,

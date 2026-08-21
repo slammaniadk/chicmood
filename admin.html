@@ -1083,9 +1083,9 @@
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>이름</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>평균 주문가</th><th>최근 주문</th><th>가입일</th></tr></thead>
+              <thead><tr><th>ID</th><th>이름</th><th>닉네임</th><th>연락처</th><th>주문수</th><th>총 구매액</th><th>평균 주문가</th><th>최근 주문</th><th>가입일</th></tr></thead>
               <tbody>
-                ${data.members.length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
+                ${data.members.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">회원이 없습니다</td></tr>' : ''}
                 ${data.members.map(m => {
                   const d = new Date(m.createdAt);
                   const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
@@ -1093,7 +1093,9 @@
                   const lastOrderStr = lastOrder ? `${lastOrder.getMonth()+1}/${lastOrder.getDate()}` : '-';
                   return `
                     <tr>
+                      <td class="text-[10px] text-warm-300 font-mono">${m.id.slice(0,8)}</td>
                       <td class="font-semibold text-warm-700 cursor-pointer hover:text-warm-900 hover:underline" onclick="openMemberModal('${m.id}')">${escapeHtml(m.name)}</td>
+                      <td class="text-[12px] text-warm-500">${m.nickname ? escapeHtml(m.nickname) : '-'}</td>
                       <td class="text-[12px]">${escapeHtml(m.phone)}</td>
                       <td>${m.orderCount}건</td>
                       <td class="font-semibold">${fmt(m.totalSpent)}</td>
@@ -1135,11 +1137,16 @@
             <h3 class="font-serif text-lg font-semibold text-warm-800 italic">회원 상세</h3>
             <button onclick="document.getElementById('member-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
           </div>
+          <div class="mb-3">
+            <span class="text-[10px] text-warm-300 font-mono">ID: ${m.id}</span>
+          </div>
           <div class="grid grid-cols-2 gap-4 mb-4">
             <div><span class="text-[11px] text-warm-400 block">이름</span><span class="font-semibold">${escapeHtml(m.name)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">닉네임</span><span>${m.nickname ? escapeHtml(m.nickname) : '-'}</span></div>
             <div><span class="text-[11px] text-warm-400 block">연락처</span><span>${escapeHtml(m.phone)}</span></div>
-            <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
             <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role === 'admin' ? '관리자' : '일반회원'}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
+            ${m.address ? `<div><span class="text-[11px] text-warm-400 block">주소</span><span class="text-[12px]">${escapeHtml(m.address)}</span></div>` : ''}
           </div>
           <div class="grid grid-cols-3 gap-3 mb-6">
             <div class="card text-center py-3">
