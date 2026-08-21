@@ -1183,6 +1183,22 @@ async function handleShippingExcel(req, res) {
 //  MEMBERS (회원관리)
 // ============================================================
 async function handleMembers(req, res) {
+  // POST: 회원 등록
+  if (req.method === 'POST') {
+    const { name, phone, password, nickname } = req.body;
+    if (!name || !phone) return fail(res, '이름과 전화번호는 필수입니다');
+
+    const { data: existing } = await supabaseAdmin.from('users').select('id').eq('phone', phone).single();
+    if (existing) return fail(res, '이미 가입된 전화번호입니다', 409);
+
+    const userData = { name, phone, password: password || '0000' };
+    if (nickname) userData.nickname = nickname;
+
+    const { data: user, error } = await supabaseAdmin.from('users').insert(userData).select('id, name, phone, nickname').single();
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { member: user }, 201);
+  }
+
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
   const { search, page = '1', limit = '20' } = req.query || {};
@@ -1236,6 +1252,32 @@ async function handleMembers(req, res) {
 }
 
 async function handleMemberDetail(req, res, id) {
+  // PATCH: 회원 수정
+  if (req.method === 'PATCH') {
+    const { name, phone, nickname, zipcode, address, addressDetail, role } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (phone !== undefined) updates.phone = phone;
+    if (nickname !== undefined) updates.nickname = nickname;
+    if (zipcode !== undefined) updates.zipcode = zipcode;
+    if (address !== undefined) updates.address = address;
+    if (addressDetail !== undefined) updates.address_detail = addressDetail;
+    if (role !== undefined) updates.role = role;
+
+    if (Object.keys(updates).length === 0) return fail(res, '수정할 항목이 없습니다');
+
+    const { data: user, error } = await supabaseAdmin.from('users').update(updates).eq('id', id).select('id, name, phone, nickname').single();
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { member: user });
+  }
+
+  // DELETE: 회원 삭제
+  if (req.method === 'DELETE') {
+    const { error } = await supabaseAdmin.from('users').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    return ok(res, { message: '회원이 삭제되었습니다' });
+  }
+
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
   const { data: user, error } = await supabaseAdmin.from('users').select('*').eq('id', id).single();
