@@ -1508,11 +1508,11 @@ async function handleShippingImport(req, res) {
   const { rows } = req.body;
   if (!rows || !Array.isArray(rows) || rows.length === 0) return fail(res, '업로드할 데이터가 없습니다');
 
-  // 배송준비 상태 주문만 대상
+  // 배송준비 또는 결제완료 상태 주문 대상
   const { data: orders, error } = await supabaseAdmin
     .from('orders')
     .select('id, order_no, name, phone, status, tracking_no')
-    .eq('status', '배송준비');
+    .in('status', ['배송준비', '결제완료']);
   if (error) return fail(res, error.message, 500);
 
   let success = 0, skipped = 0, failed = 0;
@@ -1567,7 +1567,7 @@ async function handleShippingImport(req, res) {
       const idx = orders.indexOf(matched);
       if (idx > -1) orders.splice(idx, 1);
 
-      await writeLog(req._admin, 'STATUS_CHANGE', 'order', matched.order_no, { from: '배송준비', to: '배송완료', trackingNo: String(trackingNo) });
+      await writeLog(req._admin, 'STATUS_CHANGE', 'order', matched.order_no, { from: matched.status, to: '배송완료', trackingNo: String(trackingNo) });
       success++;
       details.push({ name, orderNo: matched.order_no, trackingNo: String(trackingNo), result: '성공' });
     } catch (e) {
