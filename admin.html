@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:05</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:09</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1116,8 +1116,8 @@
         _shippingOrderKeys.push(key);
         const itemSummary = o.items.map(item => `${escapeHtml(item.name)}(${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')})x${item.qty}`).join('<br>');
         const trackingCol = o.status === '배송완료'
-          ? `<span class="text-[12px]">${escapeHtml(o.trackingNo||'')}</span>`
-          : `<input type="text" class="input-field" style="width:120px;padding:4px 6px;font-size:12px;" placeholder="송장번호" id="track-${key}" onkeydown="if(event.key==='Enter')saveTrackingNo('${key}')" onblur="saveTrackingNo('${key}')" />`;
+          ? `<div class="flex items-center gap-1"><span class="text-[12px]">${escapeHtml(o.trackingNo||'')}</span><button class="btn-outline" style="padding:2px 6px;font-size:10px;color:#b91c1c;" onclick="revertShipping('${key}','${escapeHtml(o.orderNo)}')">취소</button></div>`
+          : `<div class="flex items-center gap-1"><input type="text" class="input-field" style="width:120px;padding:4px 6px;font-size:12px;" placeholder="송장번호" id="track-${key}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveTrackingNo('${key}')}" /><button class="btn-primary" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="saveTrackingNo('${key}')">저장</button></div>`;
         orderRows += `
           <tr>
             <td><input type="checkbox" class="ship-chk" value="${key}" ${shippingChecked.has(key)?'checked':''} onchange="toggleShippingCheck('${key}',this.checked)" /></td>
@@ -1218,6 +1218,20 @@
     } catch (e) {
       showToast(e.message || '송장번호 저장 실패');
       delete inp.dataset.saving;
+    }
+  }
+
+  async function revertShipping(orderId, orderNo) {
+    if (!confirm(`주문 ${orderNo}을(를) 배송준비로 되돌리시겠습니까?`)) return;
+    try {
+      await api('/admin/orders/' + orderId, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: '배송준비', trackingNo: '', trackingCarrier: '' })
+      });
+      showToast('배송준비로 되돌림');
+      renderShipping(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '상태 변경 실패');
     }
   }
 
