@@ -873,6 +873,78 @@ async function allocateReceivedToOrders(poId) {
   }
 }
 
+// 입고수량 감소 시 초과 배정 해제 (LIFO: 최근 배정부터 해제)
+async function deallocateExcessFromOrders(poId) {
+  try {
+    const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+      .select('id, product_id, color_name, size_name, received_qty')
+      .eq('purchase_order_id', poId);
+    if (!poItems || poItems.length === 0) return { deallocated: 0, orders: 0 };
+
+    let totalDeallocated = 0;
+    const affectedOrderIds = new Set();
+    const processedCombos = new Set();
+
+    for (const poItem of poItems) {
+      if (!poItem.product_id) continue;
+
+      const comboKey = `${poItem.product_id}|${poItem.color_name}|${poItem.size_name}`;
+      if (processedCombos.has(comboKey)) continue;
+      processedCombos.add(comboKey);
+
+      // 해당 상품/색상/사이즈의 전체 PO 입고수량 합계
+      const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('received_qty')
+        .eq('product_id', poItem.product_id)
+        .eq('color_name', poItem.color_name)
+        .eq('size_name', poItem.size_name);
+      const totalReceived = (allPOItems || []).reduce((s, i) => s + (i.received_qty || 0), 0);
+
+      // 현재 총 배정수량
+      const { data: allocItems } = await supabaseAdmin.from('order_items')
+        .select('id, order_id, qty, allocated_qty, status')
+        .eq('product_id', poItem.product_id)
+        .eq('color', poItem.color_name)
+        .eq('size', poItem.size_name)
+        .gt('allocated_qty', 0);
+      const totalAllocated = (allocItems || []).reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
+
+      // 초과분 계산
+      let excess = totalAllocated - totalReceived;
+      if (excess <= 0) continue;
+
+      // LIFO: 최근 배정(배송준비 상태)부터 해제 — 배송완료는 건드리지 않음
+      const deallocCandidates = (allocItems || [])
+        .filter(oi => oi.status === '배송준비' || oi.status === '결제완료')
+        .sort((a, b) => b.id - a.id); // 최근 것부터
+
+      for (const oi of deallocCandidates) {
+        if (excess <= 0) break;
+        const canDealloc = Math.min(oi.allocated_qty || 0, excess);
+        if (canDealloc <= 0) continue;
+
+        const newAllocated = (oi.allocated_qty || 0) - canDealloc;
+        await supabaseAdmin.from('order_items')
+          .update({ allocated_qty: newAllocated, status: '결제완료' })
+          .eq('id', oi.id);
+
+        excess -= canDealloc;
+        totalDeallocated += canDealloc;
+        affectedOrderIds.add(oi.order_id);
+      }
+    }
+
+    // 영향받은 주문의 상태 재계산
+    for (const orderId of affectedOrderIds) {
+      await recalcOrderStatus(orderId);
+    }
+
+    return { deallocated: totalDeallocated, orders: affectedOrderIds.size };
+  } catch (e) {
+    return { deallocated: 0, orders: 0, error: e.message };
+  }
+}
+
 // 발주가 발주대기 이후 단계로 진행되었는지 확인 (주문 삭제/취소 차단용)
 async function checkAdvancedPurchaseOrders(orderId) {
   try {
@@ -2173,23 +2245,29 @@ async function handlePurchaseOrderDetail(req, res, id) {
 
     // 입고수량 변경 시: 상태와 무관하게 항상 재고 반영 (수량 감소도 처리)
     let allocationResult = null;
+    let deallocationResult = null;
     let inventoryResult = null;
     if (receivedItems || update.status === '부분입고' || update.status === '입고완료') {
       // 입고 수량을 재고에 반영 (diff 기반: 증가/감소 모두 처리)
       inventoryResult = await updateInventoryFromPO(parseInt(id));
-      // 고객별 FIFO 배정 (입고 상태일 때만)
+      // 초과 배정 해제 (입고수량 감소 시)
+      deallocationResult = await deallocateExcessFromOrders(parseInt(id));
+      // 고객별 FIFO 배정 (입고 상태일 때만 — 추가 배정)
       if (update.status === '부분입고' || update.status === '입고완료') {
         allocationResult = await allocateReceivedToOrders(parseInt(id));
       }
     }
 
-    return ok(res, { id: parseInt(id), allocation: allocationResult, inventory: inventoryResult });
+    return ok(res, { id: parseInt(id), allocation: allocationResult, deallocation: deallocationResult, inventory: inventoryResult });
   }
 
   if (req.method === 'DELETE') {
-    // 입고완료 발주 삭제 시 재고 역반영
+    // 입고완료/부분입고 발주 삭제 시 배정 해제 + 재고 역반영
     const { data: po } = await supabaseAdmin.from('purchase_orders').select('status').eq('id', id).single();
     if (po && (po.status === '입고완료' || po.status === '부분입고')) {
+      // 배정 해제 먼저 (재고 차감 전에 처리)
+      await deallocateExcessFromOrders(parseInt(id));
+
       const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
         .select('product_id, color_name, size_name, received_qty')
         .eq('purchase_order_id', id);
