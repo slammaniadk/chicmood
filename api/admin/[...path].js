@@ -664,57 +664,66 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   return ok(res, { id: parseInt(itemId), status: status || prevStatus });
 }
 
-// 입고 시 재고(inventory) 반영 — received_qty 기준으로 재고 upsert
+// 입고 시 재고(inventory) 반영 — received_qty 기준으로 재고 upsert (부분입고 → 추가입고 지원)
 async function updateInventoryFromPO(poId) {
   try {
     const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
-      .select('product_id, color_name, size_name, received_qty')
+      .select('id, product_id, color_name, size_name, received_qty')
       .eq('purchase_order_id', poId);
     if (!poItems || poItems.length === 0) return { updated: 0 };
 
     let updated = 0;
+    const poRef = `PO#${poId}`;
+
     for (const item of poItems) {
       const receivedQty = item.received_qty || 0;
-      if (receivedQty <= 0 || !item.product_id) continue;
+      if (!item.product_id) continue;
 
-      // 기존 재고 조회
-      const { data: inv } = await supabaseAdmin.from('inventory')
+      // 기존 재고 조회 (없으면 생성)
+      let { data: inv } = await supabaseAdmin.from('inventory')
         .select('id, stock_qty')
         .eq('product_id', item.product_id)
         .eq('color_name', item.color_name || '')
         .eq('size_name', item.size_name || '')
         .single();
 
-      // 이미 이 PO에서 반영된 입고 로그가 있는지 확인 (중복 방지)
-      const poRef = `PO#${poId}`;
-      const { data: existingLog } = await supabaseAdmin.from('inventory_log')
-        .select('id')
-        .eq('product_id', item.product_id)
-        .eq('reason', poRef)
-        .limit(1);
-      if (existingLog && existingLog.length > 0) continue; // 이미 반영됨
-
-      let invId;
-      if (inv) {
-        const newQty = inv.stock_qty + receivedQty;
-        await supabaseAdmin.from('inventory')
-          .update({ stock_qty: newQty, updated_at: new Date().toISOString() })
-          .eq('id', inv.id);
-        invId = inv.id;
-      } else {
+      if (!inv && receivedQty > 0) {
         const { data: newInv } = await supabaseAdmin.from('inventory')
-          .insert({ product_id: item.product_id, color_name: item.color_name || '', size_name: item.size_name || '', stock_qty: receivedQty })
-          .select('id').single();
-        if (newInv) invId = newInv.id;
+          .insert({ product_id: item.product_id, color_name: item.color_name || '', size_name: item.size_name || '', stock_qty: 0 })
+          .select('id, stock_qty').single();
+        inv = newInv;
       }
+      if (!inv) continue;
 
-      if (invId) {
+      // 이 PO에서 이 재고에 이전에 반영된 수량 확인 (inventory_id 기준)
+      const { data: existingLog } = await supabaseAdmin.from('inventory_log')
+        .select('id, qty')
+        .eq('inventory_id', inv.id)
+        .eq('reason', poRef)
+        .single();
+
+      const previouslyReflected = existingLog ? (existingLog.qty || 0) : 0;
+      const diff = receivedQty - previouslyReflected;
+      if (diff === 0) continue; // 변동 없음
+
+      // 재고 수량 업데이트 (차이만 적용)
+      const newStockQty = Math.max(0, (inv.stock_qty || 0) + diff);
+      await supabaseAdmin.from('inventory')
+        .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
+        .eq('id', inv.id);
+
+      // 로그 업데이트 또는 생성
+      if (existingLog) {
+        await supabaseAdmin.from('inventory_log')
+          .update({ qty: receivedQty, type: 'in' })
+          .eq('id', existingLog.id);
+      } else {
         await supabaseAdmin.from('inventory_log').insert({
-          inventory_id: invId, product_id: item.product_id,
+          inventory_id: inv.id, product_id: item.product_id,
           type: 'in', qty: receivedQty, reason: poRef,
         });
-        updated++;
       }
+      updated++;
     }
     return { updated };
   } catch (e) { return { updated: 0, error: e.message }; }
