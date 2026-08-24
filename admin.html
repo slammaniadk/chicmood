@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:02</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:10</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2377,7 +2377,7 @@
                     return `
                       <tr>
                         <td class="font-medium text-[12px]">${escapeHtml(po.poNo)}</td>
-                        <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                        <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='부분입고'?'배송준비':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                         <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                         <td class="text-warm-400 text-[12px]">${ds}</td>
                       </tr>
@@ -2489,8 +2489,8 @@
       if (poSearch) params.set('search', poSearch);
       const data = await api('/admin/purchase-orders?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
-      const statuses = ['all','발주대기','입고완료'];
-      const statusLabels = { all:'전체', 발주대기:'발주대기', 입고완료:'입고완료' };
+      const statuses = ['all','발주대기','부분입고','입고완료'];
+      const statusLabels = { all:'전체', 발주대기:'발주대기', 부분입고:'부분입고', 입고완료:'입고완료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -2531,7 +2531,7 @@
                       <td>${escapeHtml(po.vendorName||'')}</td>
                       <td class="text-[12px] text-warm-500 max-w-[200px]">${itemsHtml}</td>
                       <td class="text-[13px] font-semibold">${qtyDone ? '<span class="text-green-600">'+qtyLabel+' ✓</span>' : qtyLabel}</td>
-                      <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
+                      <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='부분입고'?'배송준비':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
@@ -2718,7 +2718,7 @@
       modal.setAttribute('data-po-no', po.poNo);
       modal.setAttribute('data-vendor-name', po.vendorName || '');
       modal.setAttribute('data-po-status', po.status);
-      const statuses = ['발주대기','입고완료'];
+      const statuses = ['발주대기','부분입고','입고완료'];
       modal.innerHTML = `
         <div class="overlay-content p-6" style="max-width:640px;" onclick="event.stopPropagation()">
           <div class="flex justify-between items-center mb-6">
@@ -2755,21 +2755,23 @@
 
   function renderPODetailItemsView(items) {
     const poStatus = document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
-    const showReceived = poStatus === '입고완료';
+    const showReceived = poStatus === '입고완료' || poStatus === '부분입고';
     return `<table>
-      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
+      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th><th>잔량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
       <tbody>
-        ${(items||[]).map((it, idx) => `
+        ${(items||[]).map((it, idx) => {
+          const remaining = (it.qty||0) - (it.receivedQty||0);
+          return `
           <tr>
             <td>${escapeHtml(it.productName)}</td>
             <td>${escapeHtml(it.colorName||'')}</td>
             <td>${escapeHtml(it.sizeName||'')}</td>
             <td>${it.qty}</td>
-            ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0" /></td>` : ''}
+            ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0;this.closest('tr').querySelector('.remaining-qty').textContent=${it.qty}-(parseInt(this.value)||0)" /></td><td class="remaining-qty ${remaining > 0 ? 'text-red-500 font-semibold' : 'text-green-600'}">${remaining}</td>` : ''}
             <td>${fmt(it.costPrice)}</td>
             <td class="font-semibold">${fmt(it.subtotal || (it.qty||0) * (it.costPrice||0))}</td>
           </tr>
-        `).join('')}
+        `}).join('')}
       </tbody>
     </table>`;
   }
@@ -2782,6 +2784,11 @@
       poEditItems.forEach(i => {
         if (!i.receivedQty || i.receivedQty === 0) i.receivedQty = i.qty || 0;
       });
+    }
+    // 부분입고 선택 시 입고수량 컬럼 표시 (자동 세팅 안함 - 수동 입력)
+    // 발주대기 선택 시 입고수량 초기화
+    if (newStatus === '발주대기') {
+      poEditItems.forEach(i => { i.receivedQty = 0; });
     }
     const area = document.getElementById('po-detail-items-area');
     if (area) {
@@ -2906,10 +2913,10 @@
         return;
       }
     }
-    // 입고 수량 전달 (입고완료 상태일 때)
-    if (status === '입고완료') {
+    // 입고 수량 전달 (입고완료 또는 부분입고 상태일 때)
+    if (status === '입고완료' || status === '부분입고') {
       const totalReceived = poEditItems.reduce((s, i) => s + (i.receivedQty || 0), 0);
-      if (totalReceived === 0) {
+      if (status === '입고완료' && totalReceived === 0) {
         if (!confirm('입고수량이 모두 0입니다. 전량 입고로 처리할까요?')) return;
         poEditItems.forEach(i => { i.receivedQty = i.qty || 0; });
       }

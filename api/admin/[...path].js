@@ -905,8 +905,8 @@ async function deductPurchaseOrderQty(orderId) {
       const vendorId = vendorMap[item.product_id];
       if (!vendorId) continue;
 
-      // 해당 거래처의 발주서 찾기 (발주대기 우선, 없으면 입고완료)
-      for (const poStatus of ['발주대기', '입고완료']) {
+      // 해당 거래처의 발주서 찾기 (발주대기 우선, 부분입고, 입고완료)
+      for (const poStatus of ['발주대기', '부분입고', '입고완료']) {
         let query = supabaseAdmin.from('purchase_orders')
           .select('id, status').eq('vendor_id', vendorId).eq('status', poStatus);
         if (order && order.broadcast_id) {
@@ -937,8 +937,8 @@ async function deductPurchaseOrderQty(orderId) {
                 .update({ qty: newQty, received_qty: Math.max(0, newReceivedQty), subtotal: newQty * poItem.cost_price }).eq('id', poItem.id);
             }
 
-            // 입고완료 PO에서 차감 시 재고도 역반영
-            if (po.status === '입고완료' && deductReceived > 0) {
+            // 입고완료/부분입고 PO에서 차감 시 재고도 역반영
+            if ((po.status === '입고완료' || po.status === '부분입고') && deductReceived > 0) {
               const { data: inv } = await supabaseAdmin.from('inventory')
                 .select('id, stock_qty')
                 .eq('product_id', item.product_id)
@@ -2093,10 +2093,6 @@ async function handlePurchaseOrderDetail(req, res, id) {
   if (req.method === 'PATCH') {
     const { status, memo, items, receivedItems } = req.body;
     const update = {};
-    if (status) {
-      update.status = status;
-      if (status === '입고완료') update.completed_at = new Date().toISOString();
-    }
     if (memo !== undefined) update.memo = memo;
     update.updated_at = new Date().toISOString();
 
@@ -2132,13 +2128,31 @@ async function handlePurchaseOrderDetail(req, res, id) {
       }
     }
 
+    // 입고 상태 자동 판별: 입고수량 vs 발주수량 비교
+    if (status === '입고완료' || status === '부분입고') {
+      const { data: currentItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('qty, received_qty').eq('purchase_order_id', id);
+      const totalQty = (currentItems || []).reduce((s, i) => s + (i.qty || 0), 0);
+      const totalReceived = (currentItems || []).reduce((s, i) => s + (i.received_qty || 0), 0);
+      if (totalReceived <= 0) {
+        update.status = '발주대기';
+      } else if (totalReceived < totalQty) {
+        update.status = '부분입고';
+      } else {
+        update.status = '입고완료';
+        update.completed_at = new Date().toISOString();
+      }
+    } else if (status) {
+      update.status = status;
+    }
+
     const { error } = await supabaseAdmin.from('purchase_orders').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
 
-    // 입고중/입고완료 상태 변경 시: 재고 반영 + 고객별 FIFO 배정 실행
+    // 입고 상태 변경 시: 재고 반영 + 고객별 FIFO 배정 실행
     let allocationResult = null;
     let inventoryResult = null;
-    if (status === '입고완료') {
+    if (update.status === '부분입고' || update.status === '입고완료') {
       // 입고 수량을 재고에 반영
       inventoryResult = await updateInventoryFromPO(parseInt(id));
       // 고객별 FIFO 배정
@@ -2151,7 +2165,7 @@ async function handlePurchaseOrderDetail(req, res, id) {
   if (req.method === 'DELETE') {
     // 입고완료 발주 삭제 시 재고 역반영
     const { data: po } = await supabaseAdmin.from('purchase_orders').select('status').eq('id', id).single();
-    if (po && po.status === '입고완료') {
+    if (po && (po.status === '입고완료' || po.status === '부분입고')) {
       const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
         .select('product_id, color_name, size_name, received_qty')
         .eq('purchase_order_id', id);
