@@ -282,7 +282,7 @@ async function handleOrderMerge(req, res) {
   // 1) target + source 주문 전체 조회
   const allIds = [targetId, ...sourceIds];
   const { data: orders, error: fetchErr } = await supabaseAdmin.from('orders')
-    .select('id, name, phone, status, broadcast_id, subtotal, total')
+    .select('id, name, phone, status, broadcast_id, user_id, subtotal, total')
     .in('id', allIds);
   if (fetchErr) return fail(res, fetchErr.message, 500);
   if (!orders || orders.length !== allIds.length) {
@@ -317,12 +317,31 @@ async function handleOrderMerge(req, res) {
     await deductPurchaseOrderQty(srcId);
   }
 
-  // 6) target subtotal/total 재계산 (items 합산 + 배송비 재계산)
+  // 6) target subtotal/total 재계산 (items 합산 + 동일방송 누적 배송비 로직)
   const { data: targetItems } = await supabaseAdmin.from('order_items')
     .select('subtotal')
     .eq('order_id', targetId);
   const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.subtotal || 0), 0);
-  const shippingFee = newSubtotal >= 100000 ? 0 : 4000;
+
+  let shippingFee = newSubtotal >= 100000 ? 0 : 4000;
+  let shippingRefund = 0;
+
+  // 동일방송 동일주문자 다른 주문이 있으면 배송비 무료
+  if (target.broadcast_id) {
+    const { data: otherOrders } = await supabaseAdmin.from('orders')
+      .select('id')
+      .eq('broadcast_id', target.broadcast_id)
+      .eq('name', target.name)
+      .eq('phone', target.phone)
+      .neq('status', '결제취소')
+      .neq('id', targetId)
+      .not('id', 'in', `(${sourceIds.join(',')})`);
+
+    if (otherOrders && otherOrders.length > 0) {
+      shippingFee = 0;
+    }
+  }
+
   const { error: updateErr } = await supabaseAdmin.from('orders')
     .update({ subtotal: newSubtotal, shipping_fee: shippingFee, shipping_refund: 0, total: newSubtotal + shippingFee })
     .eq('id', targetId);
