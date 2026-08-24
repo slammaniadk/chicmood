@@ -126,7 +126,7 @@
       <!-- 데스크톱 네비 -->
       <nav class="desktop-nav items-center gap-6 text-[12px] font-medium text-warm-500">
         <a href="#home" class="hover:text-warm-800 transition-colors tracking-wide">홈</a>
-        <a href="#cart" class="hover:text-warm-800 transition-colors tracking-wide relative">
+        <a href="#cart" onclick="location.hash='#cart';router();return false;" class="hover:text-warm-800 transition-colors tracking-wide relative">
           장바구니
           <span id="cart-badge-desktop" class="badge hidden">0</span>
         </a>
@@ -136,7 +136,7 @@
       <!-- 모바일 네비 -->
       <nav class="mobile-nav items-center gap-4 text-[11px] font-medium text-warm-500">
         <a href="#home" class="hover:text-warm-800 transition-colors">홈</a>
-        <a href="#cart" class="hover:text-warm-800 transition-colors relative">
+        <a href="#cart" onclick="location.hash='#cart';router();return false;" class="hover:text-warm-800 transition-colors relative">
           🛒<span id="cart-badge-mobile" class="badge hidden" style="top:-8px;right:-10px;">0</span>
         </a>
         <a href="#lookup" class="hover:text-warm-800 transition-colors">조회</a>
