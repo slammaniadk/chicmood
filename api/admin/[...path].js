@@ -1544,7 +1544,9 @@ async function handlePORegenerate(req, res) {
       }
 
       // 발주서 생성
-      for (const group of Object.values(groups)) {
+      const totalGroups = Object.keys(groups).length;
+      const groupErrors = [];
+      for (const [groupKey, group] of Object.entries(groups)) {
         // 기존 발주대기 발주서 확인
         let existingPO = null;
         let query = supabaseAdmin.from('purchase_orders')
@@ -1571,12 +1573,13 @@ async function handlePORegenerate(req, res) {
               await supabaseAdmin.from('purchase_order_items')
                 .update({ qty: newQty, subtotal: newQty * (match.cost_price || newItem.cost_price) }).eq('id', match.id);
             } else {
-              await supabaseAdmin.from('purchase_order_items').insert({
+              const { error: itemErr } = await supabaseAdmin.from('purchase_order_items').insert({
                 purchase_order_id: poId, product_id: newItem.product_id,
                 product_name: newItem.product_name, color_name: newItem.color_name,
                 size_name: newItem.size_name, qty: newItem.qty,
                 cost_price: newItem.cost_price, subtotal: newItem.qty * newItem.cost_price,
               });
+              if (itemErr) groupErrors.push({ groupKey, step: 'addItem', error: itemErr.message });
             }
           }
           // total_amount 재계산
@@ -1596,17 +1599,19 @@ async function handlePORegenerate(req, res) {
           const insertData = { po_no: poNo, status: '발주대기', total_amount: totalAmount, memo: group.broadcastTitle || '' };
           if (group.vendorId) insertData.vendor_id = group.vendorId;
           if (group.broadcastId) insertData.broadcast_id = group.broadcastId;
-          let newPO;
-          ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+          let newPO, insertErr;
+          ({ data: newPO, error: insertErr } = await supabaseAdmin.from('purchase_orders')
             .insert(insertData).select('id').single());
+          if (insertErr) groupErrors.push({ groupKey, step: 'createPO', error: insertErr.message, insertData: JSON.stringify(insertData) });
           if (!newPO && group.broadcastId) {
             delete insertData.broadcast_id;
-            ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+            ({ data: newPO, error: insertErr } = await supabaseAdmin.from('purchase_orders')
               .insert(insertData).select('id').single());
+            if (insertErr) groupErrors.push({ groupKey, step: 'createPO-retry', error: insertErr.message });
           }
           if (!newPO) continue;
           poId = newPO.id;
-          await supabaseAdmin.from('purchase_order_items').insert(
+          const { error: itemsErr } = await supabaseAdmin.from('purchase_order_items').insert(
             group.items.map(i => ({
               purchase_order_id: poId, product_id: i.product_id,
               product_name: i.product_name, color_name: i.color_name,
@@ -1614,6 +1619,7 @@ async function handlePORegenerate(req, res) {
               subtotal: i.qty * i.cost_price,
             }))
           );
+          if (itemsErr) groupErrors.push({ groupKey, step: 'insertItems', error: itemsErr.message });
         }
         created++;
       }
@@ -1625,7 +1631,9 @@ async function handlePORegenerate(req, res) {
       needMapDetail: Object.values(needMap).map(n => ({ pid: n.product_id, name: n.name, color: n.color, size: n.size, needed: n.totalNeeded, deficit: n.deficit })),
       deficitCount: deficitItems.length,
       skippedItems: deficitItems.length > 0 ? (skippedItems || []) : [],
+      totalGroups: deficitItems.length > 0 ? (typeof totalGroups !== 'undefined' ? totalGroups : 0) : 0,
       groupsCreated: created,
+      groupErrors: deficitItems.length > 0 ? (groupErrors || []) : [],
     };
     return ok(res, { created, resetAlloc, deficitItems: deficitItems.length, debug });
   } catch (e) {
