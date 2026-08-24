@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:21</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:36</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2498,6 +2498,7 @@
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">발주관리</h2>
             <div class="flex gap-2">
               <button class="btn-outline btn-sm" onclick="renderPurchaseOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-outline btn-sm" onclick="regeneratePOs()">미발주 자동생성</button>
               <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
             </div>
           </div>
@@ -2945,6 +2946,18 @@
       showToast('발주서가 삭제되었습니다');
       renderPurchaseOrders(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function regeneratePOs() {
+    if (!confirm('결제완료 상태인 주문 중 발주가 없는 건에 대해 자동 발주를 생성합니다.\n진행하시겠습니까?')) return;
+    try {
+      const result = await api('/admin/purchase-orders/regenerate', { method: 'POST' });
+      const msgs = [];
+      if (result.resetAlloc) msgs.push(`배정 초기화 ${result.resetAlloc}건`);
+      if (result.created) msgs.push(`발주 ${result.created}건 생성`);
+      showToast(msgs.length > 0 ? `완료: ${msgs.join(', ')}` : '미발주 주문이 없습니다');
+      renderPurchaseOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '자동 발주 생성에 실패했습니다'); }
   }
 
   // ============================================================
