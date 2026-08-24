@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 17:37</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 17:56</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2437,8 +2437,8 @@
       if (poSearch) params.set('search', poSearch);
       const data = await api('/admin/purchase-orders?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
-      const statuses = ['all','발주대기','발주완료','입고중','입고완료','취소'];
-      const statusLabels = { all:'전체', 발주대기:'발주대기', 발주완료:'발주완료', 입고중:'입고중', 입고완료:'입고완료', 취소:'취소' };
+      const statuses = ['all','발주대기','입고완료'];
+      const statusLabels = { all:'전체', 발주대기:'발주대기', 입고완료:'입고완료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -2457,16 +2457,25 @@
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>발주번호</th><th>거래처</th><th>상태</th><th>금액</th><th>메모</th><th>발주일</th><th>관리</th></tr></thead>
+              <thead><tr><th>발주번호</th><th>거래처</th><th>품목</th><th>발주/입고</th><th>상태</th><th>금액</th><th>메모</th><th>발주일</th><th>관리</th></tr></thead>
               <tbody>
-                ${(data.purchaseOrders||[]).length === 0 ? '<tr><td colspan="7" class="text-center text-warm-400 py-12">발주서가 없습니다</td></tr>' : ''}
+                ${(data.purchaseOrders||[]).length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">발주서가 없습니다</td></tr>' : ''}
                 ${(data.purchaseOrders||[]).map(po => {
                   const d = po.orderedAt ? new Date(po.orderedAt) : (po.createdAt ? new Date(po.createdAt) : null);
                   const ds = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '-';
+                  const itemsHtml = (po.itemsSummary||[]).length > 0
+                    ? (po.itemsSummary.length <= 2
+                        ? po.itemsSummary.map(s => escapeHtml(s)).join('<br>')
+                        : po.itemsSummary.slice(0,2).map(s => escapeHtml(s)).join('<br>') + `<br><span class="text-warm-400">외 ${po.itemsSummary.length - 2}건</span>`)
+                    : '-';
+                  const qtyLabel = `${po.totalQty||0} / ${po.totalReceivedQty||0}`;
+                  const qtyDone = (po.totalQty||0) > 0 && (po.totalReceivedQty||0) >= (po.totalQty||0);
                   return `
                     <tr>
                       <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openPODetailModal(${po.id})">${escapeHtml(po.poNo)}</td>
                       <td>${escapeHtml(po.vendorName||'')}</td>
+                      <td class="text-[12px] text-warm-500 max-w-[200px]">${itemsHtml}</td>
+                      <td class="text-[13px] font-semibold">${qtyDone ? '<span class="text-green-600">'+qtyLabel+' ✓</span>' : qtyLabel}</td>
                       <td><span class="status-badge status-${po.status==='입고완료'?'배송완료':po.status==='취소'?'취소':'결제완료'}">${po.status}</span></td>
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
@@ -2655,7 +2664,7 @@
       modal.setAttribute('data-po-no', po.poNo);
       modal.setAttribute('data-vendor-name', po.vendorName || '');
       modal.setAttribute('data-po-status', po.status);
-      const statuses = ['발주대기','발주완료','입고중','입고완료','취소'];
+      const statuses = ['발주대기','입고완료'];
       modal.innerHTML = `
         <div class="overlay-content p-6" style="max-width:640px;" onclick="event.stopPropagation()">
           <div class="flex justify-between items-center mb-6">
@@ -2693,7 +2702,7 @@
 
   function renderPODetailItemsView(items) {
     const poStatus = document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
-    const showReceived = ['발주완료','입고중','입고완료'].includes(poStatus);
+    const showReceived = poStatus === '입고완료';
     return `<table>
       <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
       <tbody>
@@ -2838,8 +2847,8 @@
         return;
       }
     }
-    // 입고 수량 전달 (입고중/입고완료 상태일 때)
-    if (['발주완료','입고중','입고완료'].includes(status)) {
+    // 입고 수량 전달 (입고완료 상태일 때)
+    if (status === '입고완료') {
       const receivedItems = poEditItems.filter(i => i.id).map(i => ({
         id: i.id,
         receivedQty: i.receivedQty || 0,

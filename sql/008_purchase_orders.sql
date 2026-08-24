@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   id SERIAL PRIMARY KEY,
   po_no TEXT NOT NULL UNIQUE,       -- 발주번호 (PO-20260813-001)
   vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE RESTRICT,
-  status TEXT NOT NULL DEFAULT '발주대기' CHECK (status IN ('발주대기', '발주완료', '입고중', '입고완료', '취소')),
+  status TEXT NOT NULL DEFAULT '발주대기' CHECK (status IN ('발주대기', '입고완료')),
   total_amount INTEGER DEFAULT 0,
   memo TEXT,
   ordered_at TIMESTAMPTZ,           -- 발주 확정일
