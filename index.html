@@ -340,6 +340,15 @@
   window.addEventListener('hashchange', router);
   window.addEventListener('DOMContentLoaded', router);
 
+  // 같은 해시 재클릭 시에도 라우팅 되도록
+  document.addEventListener('click', function(e) {
+    const a = e.target.closest('a[href^="#"]');
+    if (a && a.getAttribute('href') === '#' + (location.hash.slice(1) || 'home')) {
+      e.preventDefault();
+      router();
+    }
+  });
+
   // ============================================================
   //  PAGE: HOME
   // ============================================================
