@@ -2493,8 +2493,9 @@ async function handleReturns(req, res) {
     if (!orderNo) return fail(res, '주문번호를 입력해주세요');
     if (!reason) return fail(res, '사유를 입력해주세요');
 
-    const { data: order } = await supabaseAdmin.from('orders').select('id').eq('order_no', orderNo).single();
+    const { data: order } = await supabaseAdmin.from('orders').select('id, status').eq('order_no', orderNo).single();
     if (!order) return fail(res, '해당 주문번호를 찾을 수 없습니다');
+    if (order.status !== '배송완료') return fail(res, `배송완료 주문만 반품 접수 가능합니다 (현재: ${order.status})`);
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
