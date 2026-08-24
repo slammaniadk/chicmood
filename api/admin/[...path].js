@@ -432,9 +432,14 @@ async function handleOrderDetail(req, res, id) {
         .in('id', pendingIds);
     }
   }
-  // 배송완료에서 이전 상태로 되돌릴 때 재고 복원
+  // 배송완료에서 이전 상태로 되돌릴 때 재고 복원 + 품목 상태 되돌리기
   if (prevStatus === '배송완료' && status !== '배송완료' && status !== '결제취소') {
     await deductInventory(id, 'restore');
+    // 배송완료였던 품목들을 새 상태로 되돌림
+    await supabaseAdmin.from('order_items')
+      .update({ status: status, tracking_no: '', tracking_carrier: '' })
+      .eq('order_id', id)
+      .eq('status', '배송완료');
   }
   // 결제취소 시: 배송준비 이후 불가 + 전 품목 취소 + 배정 수량 초기화
   if (status === '결제취소') {
@@ -913,9 +918,15 @@ async function deductPurchaseOrderQty(orderId) {
                 .eq('size_name', item.size || '')
                 .single();
               if (inv) {
+                const newStockQty = Math.max(0, (inv.stock_qty || 0) - deductReceived);
                 await supabaseAdmin.from('inventory')
-                  .update({ stock_qty: Math.max(0, (inv.stock_qty || 0) - deductReceived) })
+                  .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
                   .eq('id', inv.id);
+                await supabaseAdmin.from('inventory_log').insert({
+                  inventory_id: inv.id, product_id: item.product_id,
+                  type: 'out', qty: -deductReceived,
+                  reason: '주문 취소/삭제 발주 재고 차감',
+                });
               }
             }
 
@@ -2126,9 +2137,15 @@ async function handlePurchaseOrderDetail(req, res, id) {
             .eq('size_name', item.size_name || '')
             .single();
           if (inv) {
+            const newStockQty = Math.max(0, (inv.stock_qty || 0) - item.received_qty);
             await supabaseAdmin.from('inventory')
-              .update({ stock_qty: Math.max(0, (inv.stock_qty || 0) - item.received_qty) })
+              .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
               .eq('id', inv.id);
+            await supabaseAdmin.from('inventory_log').insert({
+              inventory_id: inv.id, product_id: item.product_id,
+              type: 'out', qty: -item.received_qty,
+              reason: '발주 삭제 재고 차감',
+            });
           }
         }
       }
