@@ -1433,23 +1433,22 @@ async function createAutoPurchaseOrders(orderId) {
 async function handlePORegenerate(req, res) {
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
   try {
-    // 결제완료/배송준비 주문 중 발주가 부족한 건 조회
+    // 결제완료/배송준비 주문 조회
     const { data: activeOrders } = await supabaseAdmin.from('orders')
-      .select('id, status').in('status', ['결제완료', '배송준비']);
+      .select('id, status, broadcast_id').in('status', ['결제완료', '배송준비']);
     if (!activeOrders || activeOrders.length === 0) return ok(res, { created: 0, resetAlloc: 0, message: '해당 주문이 없습니다' });
 
-    // 1) 배정이 있지만 발주가 없는 품목의 배정 초기화
+    // 1) 배정이 있지만 발주 입고가 없는 품목의 배정 초기화
     let resetAlloc = 0;
     for (const order of activeOrders) {
       const { data: orderItems } = await supabaseAdmin.from('order_items')
         .select('id, product_id, color, size, qty, allocated_qty, status')
         .eq('order_id', order.id).neq('status', '결제취소');
       if (!orderItems) continue;
-
+      let orderReset = false;
       for (const oi of orderItems) {
         if (!oi.allocated_qty || oi.allocated_qty <= 0) continue;
         if (!oi.product_id) continue;
-        // 해당 상품의 발주 입고수량 합계 확인
         const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
           .select('received_qty')
           .eq('product_id', oi.product_id)
@@ -1457,43 +1456,154 @@ async function handlePORegenerate(req, res) {
           .eq('size_name', oi.size || '');
         const totalReceived = (poItems || []).reduce((s, i) => s + (i.received_qty || 0), 0);
         if (totalReceived <= 0) {
-          // 발주 입고가 없는데 배정이 있으면 초기화
           await supabaseAdmin.from('order_items')
             .update({ allocated_qty: 0, status: '결제완료' }).eq('id', oi.id);
           resetAlloc++;
+          orderReset = true;
         }
       }
-      // 주문 상태 재계산
-      if (resetAlloc > 0) await recalcOrderStatus(order.id);
+      if (orderReset) await recalcOrderStatus(order.id);
     }
 
-    // 2) 발주가 부족한 주문에 대해 자동 발주 생성
-    let created = 0;
+    // 2) 전체 주문 품목의 필요 수량 집계 (product_id, color, size 기준)
+    const needMap = {}; // key → { totalNeeded, product_id, color, size }
     for (const order of activeOrders) {
       const { data: orderItems } = await supabaseAdmin.from('order_items')
-        .select('product_id, color, size, qty')
+        .select('product_id, name, color, size, qty')
         .eq('order_id', order.id).neq('status', '결제취소');
-      if (!orderItems || orderItems.length === 0) continue;
+      if (!orderItems) continue;
+      for (const oi of orderItems) {
+        if (!oi.product_id) continue;
+        const key = `${oi.product_id}|${oi.color || ''}|${oi.size || ''}`;
+        if (!needMap[key]) needMap[key] = { product_id: oi.product_id, color: oi.color || '', size: oi.size || '', name: oi.name, totalNeeded: 0 };
+        needMap[key].totalNeeded += (oi.qty || 0);
+      }
+    }
 
-      let needsPO = false;
-      for (const item of orderItems) {
-        if (!item.product_id) { needsPO = true; break; }
-        const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
-          .select('qty')
-          .eq('product_id', item.product_id)
-          .eq('color_name', item.color || '')
-          .eq('size_name', item.size || '');
-        const totalPOQty = (poItems || []).reduce((s, i) => s + (i.qty || 0), 0);
-        if (totalPOQty < item.qty) { needsPO = true; break; }
+    // 3) 기존 발주 수량 집계
+    for (const key of Object.keys(needMap)) {
+      const n = needMap[key];
+      const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('qty')
+        .eq('product_id', n.product_id)
+        .eq('color_name', n.color)
+        .eq('size_name', n.size);
+      const totalPOQty = (poItems || []).reduce((s, i) => s + (i.qty || 0), 0);
+      n.deficit = Math.max(0, n.totalNeeded - totalPOQty);
+    }
+
+    // 4) 부족분이 있는 품목만 발주 생성 (거래처+방송 기준 그룹핑)
+    const deficitItems = Object.values(needMap).filter(n => n.deficit > 0);
+    let created = 0;
+    if (deficitItems.length > 0) {
+      // 상품 정보 조회
+      const productIds = [...new Set(deficitItems.map(d => d.product_id))];
+      const { data: products } = await supabaseAdmin.from('products')
+        .select('id, name, vendor_id, cost_price').in('id', productIds);
+      const productMap = {};
+      (products || []).forEach(p => { productMap[p.id] = p; });
+
+      // 주문의 broadcast_id 확인 (가장 최근 방송 사용)
+      const latestBroadcastId = activeOrders.find(o => o.broadcast_id)?.broadcast_id || null;
+      let broadcastTitle = '';
+      if (latestBroadcastId) {
+        const { data: bc } = await supabaseAdmin.from('broadcasts').select('title').eq('id', latestBroadcastId).single();
+        broadcastTitle = bc?.title || '';
       }
 
-      if (needsPO) {
-        await createAutoPurchaseOrders(order.id);
+      // 거래처별 그룹핑
+      const groups = {};
+      for (const d of deficitItems) {
+        const prod = productMap[d.product_id];
+        if (!prod || !prod.vendor_id) continue;
+        const groupKey = `${prod.vendor_id}_${latestBroadcastId || 0}`;
+        if (!groups[groupKey]) {
+          groups[groupKey] = { vendorId: prod.vendor_id, broadcastId: latestBroadcastId, broadcastTitle, items: [] };
+        }
+        groups[groupKey].items.push({
+          product_id: d.product_id,
+          product_name: d.name || prod.name,
+          color_name: d.color,
+          size_name: d.size,
+          qty: d.deficit,
+          cost_price: prod.cost_price || 0,
+        });
+      }
+
+      // 발주서 생성
+      for (const group of Object.values(groups)) {
+        // 기존 발주대기 발주서 확인
+        let existingPO = null;
+        let query = supabaseAdmin.from('purchase_orders')
+          .select('id').eq('vendor_id', group.vendorId).eq('status', '발주대기');
+        if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
+        const { data: candidatePOs } = await query.order('id', { ascending: false }).limit(1);
+        if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
+
+        let poId;
+        if (existingPO) {
+          poId = existingPO.id;
+          for (const newItem of group.items) {
+            const { data: existingItems } = await supabaseAdmin.from('purchase_order_items')
+              .select('id, qty, cost_price')
+              .eq('purchase_order_id', poId)
+              .eq('product_id', newItem.product_id)
+              .eq('color_name', newItem.color_name)
+              .eq('size_name', newItem.size_name);
+            const match = existingItems && existingItems.length > 0 ? existingItems[0] : null;
+            if (match) {
+              const newQty = match.qty + newItem.qty;
+              await supabaseAdmin.from('purchase_order_items')
+                .update({ qty: newQty, subtotal: newQty * (match.cost_price || newItem.cost_price) }).eq('id', match.id);
+            } else {
+              await supabaseAdmin.from('purchase_order_items').insert({
+                purchase_order_id: poId, product_id: newItem.product_id,
+                product_name: newItem.product_name, color_name: newItem.color_name,
+                size_name: newItem.size_name, qty: newItem.qty,
+                cost_price: newItem.cost_price, subtotal: newItem.qty * newItem.cost_price,
+              });
+            }
+          }
+          // total_amount 재계산
+          const { data: updatedItems } = await supabaseAdmin.from('purchase_order_items')
+            .select('subtotal').eq('purchase_order_id', poId);
+          const newTotal = (updatedItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+          await supabaseAdmin.from('purchase_orders').update({
+            total_amount: newTotal, updated_at: new Date().toISOString()
+          }).eq('id', poId);
+        } else {
+          const now = new Date();
+          const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+          const { count } = await supabaseAdmin.from('purchase_orders')
+            .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
+          const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
+          const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
+          const insertData = { po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo: group.broadcastTitle || '' };
+          if (group.broadcastId) insertData.broadcast_id = group.broadcastId;
+          let newPO;
+          ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+            .insert(insertData).select('id').single());
+          if (!newPO && group.broadcastId) {
+            delete insertData.broadcast_id;
+            ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
+              .insert(insertData).select('id').single());
+          }
+          if (!newPO) continue;
+          poId = newPO.id;
+          await supabaseAdmin.from('purchase_order_items').insert(
+            group.items.map(i => ({
+              purchase_order_id: poId, product_id: i.product_id,
+              product_name: i.product_name, color_name: i.color_name,
+              size_name: i.size_name, qty: i.qty, cost_price: i.cost_price,
+              subtotal: i.qty * i.cost_price,
+            }))
+          );
+        }
         created++;
       }
     }
 
-    return ok(res, { created, resetAlloc });
+    return ok(res, { created, resetAlloc, deficitItems: deficitItems.length });
   } catch (e) {
     return fail(res, e.message || '자동 발주 재생성 실패', 500);
   }
