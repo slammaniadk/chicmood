@@ -1922,10 +1922,17 @@ async function handleVendorDetail(req, res, id) {
 // ============================================================
 async function handlePurchaseOrders(req, res) {
   if (req.method === 'GET') {
-    const { status, search, page = '1', limit = '20' } = req.query || {};
+    const { status, search, page = '1', limit = '20', broadcastFilter } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
+
+    // 방송중 필터: live 방송의 broadcast_id 목록 조회
+    let liveBroadcastIds = null;
+    if (broadcastFilter === 'live') {
+      const { data: liveBc } = await supabaseAdmin.from('broadcasts').select('id').eq('status', 'live');
+      liveBroadcastIds = (liveBc || []).map(b => b.id);
+    }
 
     let query = supabaseAdmin
       .from('purchase_orders')
@@ -1934,6 +1941,10 @@ async function handlePurchaseOrders(req, res) {
       .range(offset, offset + limitNum - 1);
 
     if (status && status !== 'all') query = query.eq('status', status);
+    if (liveBroadcastIds !== null) {
+      if (liveBroadcastIds.length > 0) query = query.in('broadcast_id', liveBroadcastIds);
+      else query = query.eq('broadcast_id', -1); // 방송중인 것이 없으면 빈 결과
+    }
     if (search) query = query.ilike('po_no', `%${search}%`);
 
     const { data, error, count } = await query;
@@ -1943,13 +1954,15 @@ async function handlePurchaseOrders(req, res) {
     let filtered = data || [];
     if (search && filtered.length === 0) {
       // po_no 매칭 실패 시 vendor name으로 재검색
-      const retryQuery = supabaseAdmin
+      let retryQuery = supabaseAdmin
         .from('purchase_orders')
         .select('*, vendors!inner(name), purchase_order_items(product_name, color_name, size_name, qty, received_qty)', { count: 'exact' })
         .ilike('vendors.name', `%${search}%`)
         .order('id', { ascending: false })
         .range(offset, offset + limitNum - 1);
-      if (status && status !== 'all') retryQuery.eq('status', status);
+      if (status && status !== 'all') retryQuery = retryQuery.eq('status', status);
+      if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) retryQuery = retryQuery.in('broadcast_id', liveBroadcastIds);
+      else if (liveBroadcastIds !== null) retryQuery = retryQuery.eq('broadcast_id', -1);
       const retry = await retryQuery;
       if (!retry.error) { filtered = retry.data || []; }
     }

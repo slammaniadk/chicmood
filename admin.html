@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 18:43</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 18:48</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2434,12 +2434,14 @@
   let poFilter = 'all';
   let poPage = 1;
   let poSearch = '';
+  let poBroadcastFilter = 'live'; // 기본: 방송중 발주만
 
   async function renderPurchaseOrders(el) {
     showSpinner(el);
     try {
       const params = new URLSearchParams({ page: poPage, limit: 20 });
       if (poFilter !== 'all') params.set('status', poFilter);
+      if (poBroadcastFilter === 'live') params.set('broadcastFilter', 'live');
       if (poSearch) params.set('search', poSearch);
       const data = await api('/admin/purchase-orders?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
@@ -2457,6 +2459,9 @@
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex flex-wrap gap-2">
+              <button class="filter-tab ${poBroadcastFilter==='live'?'active':''}" onclick="poBroadcastFilter='live';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">방송중</button>
+              <button class="filter-tab ${poBroadcastFilter==='all'?'active':''}" onclick="poBroadcastFilter='all';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">전체</button>
+              <span class="text-warm-300 mx-1">|</span>
               ${statuses.map(s => `<button class="filter-tab ${poFilter===s?'active':''}" onclick="poFilter='${s}';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
             </div>
             <input type="text" class="input-field" style="max-width:260px;" placeholder="발주번호, 거래처명 검색..." value="${escapeHtml(poSearch)}" onkeydown="if(event.key==='Enter'){poSearch=this.value;poPage=1;renderPurchaseOrders(document.getElementById('page-content'))}" />
