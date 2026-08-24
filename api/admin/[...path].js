@@ -2616,6 +2616,14 @@ async function handleReturnDetail(req, res, id) {
     return ok(res, { id: parseInt(id) });
   }
 
+  if (req.method === 'DELETE') {
+    await supabaseAdmin.from('return_items').delete().eq('return_id', id);
+    const { error } = await supabaseAdmin.from('returns').delete().eq('id', id);
+    if (error) return fail(res, error.message, 500);
+    await writeLog(req._admin, 'DELETE', 'returns', id, {});
+    return ok(res, { deleted: true });
+  }
+
   return fail(res, 'Method not allowed', 405);
 }
 
