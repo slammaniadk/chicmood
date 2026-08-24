@@ -2630,37 +2630,46 @@ async function handleReports(req, res) {
   let summary = {};
 
   // 날짜 범위 적용된 주문 조회
-  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at').neq('status', '결제취소');
+  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at, broadcast_id').neq('status', '결제취소');
   if (from) orderQuery = orderQuery.gte('created_at', from + 'T00:00:00');
   if (to) orderQuery = orderQuery.lte('created_at', to + 'T23:59:59');
   const { data: orders } = await orderQuery;
   const orderIds = (orders || []).map(o => o.id);
 
-  // 반품 환불액 조회 (완료된 반품만, 유형이 '반품'인 것만)
+  // 반품 환불액 조회 (order별 매핑)
+  const refundByOrderId = {};
   let totalRefund = 0;
   if (orderIds.length > 0) {
     const { data: returns } = await supabaseAdmin.from('returns')
-      .select('refund_amount, type, status')
+      .select('order_id, refund_amount, type, status')
       .in('order_id', orderIds)
       .eq('status', '완료')
       .eq('type', '반품');
-    totalRefund = (returns || []).reduce((s, r) => s + (r.refund_amount || 0), 0);
+    (returns || []).forEach(r => {
+      refundByOrderId[r.order_id] = (refundByOrderId[r.order_id] || 0) + (r.refund_amount || 0);
+    });
+    totalRefund = Object.values(refundByOrderId).reduce((s, v) => s + v, 0);
   }
 
   if (type === 'sales-ranking') {
     let items = [];
     if (orderIds.length > 0) {
-      const { data: itemsData } = await supabaseAdmin.from('order_items').select('name, qty, subtotal').in('order_id', orderIds);
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('name, qty, subtotal, order_id').in('order_id', orderIds);
       items = itemsData || [];
     }
+    const orderItemsTotal = {};
+    items.forEach(i => { orderItemsTotal[i.order_id] = (orderItemsTotal[i.order_id] || 0) + i.subtotal; });
     const grouped = {};
     items.forEach(i => {
-      if (!grouped[i.name]) grouped[i.name] = { totalQty: 0, revenue: 0 };
+      if (!grouped[i.name]) grouped[i.name] = { totalQty: 0, revenue: 0, refund: 0 };
       grouped[i.name].totalQty += i.qty;
       grouped[i.name].revenue += i.subtotal;
+      const oTotal = orderItemsTotal[i.order_id] || 1;
+      const oRefund = refundByOrderId[i.order_id] || 0;
+      grouped[i.name].refund += Math.round(oRefund * i.subtotal / oTotal);
     });
     rows = Object.entries(grouped).sort((a, b) => b[1].revenue - a[1].revenue)
-      .map(([productName, v]) => ({ productName, ...v }));
+      .map(([productName, v]) => ({ productName, ...v, netRevenue: v.revenue - v.refund }));
     const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
     const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
     summary = { totalRevenue, totalRefund, netRevenue: totalRevenue - totalRefund, totalQty, productCount: rows.length, top: rows[0]?.productName || '-' };
@@ -2668,16 +2677,18 @@ async function handleReports(req, res) {
     const grouped = {};
     (orders || []).forEach(o => {
       const key = o.user_id || o.name;
-      if (!grouped[key]) grouped[key] = { name: o.name, orderCount: 0, totalSpent: 0, lastOrderAt: null };
+      if (!grouped[key]) grouped[key] = { name: o.name, orderCount: 0, totalSpent: 0, refund: 0, lastOrderAt: null };
       grouped[key].orderCount++;
       grouped[key].totalSpent += o.total;
+      grouped[key].refund += (refundByOrderId[o.id] || 0);
       if (!grouped[key].lastOrderAt || o.created_at > grouped[key].lastOrderAt) grouped[key].lastOrderAt = o.created_at;
     });
-    rows = Object.values(grouped).sort((a, b) => b.totalSpent - a.totalSpent);
+    rows = Object.values(grouped).sort((a, b) => b.totalSpent - a.totalSpent)
+      .map(r => ({ ...r, netSpent: r.totalSpent - r.refund }));
     const totalCustomers = rows.length;
     const totalSpent = rows.reduce((s, r) => s + r.totalSpent, 0);
     const avgSpent = totalCustomers > 0 ? Math.round(totalSpent / totalCustomers) : 0;
-    summary = { totalCustomers, totalSpent, avgSpent, topCustomer: rows[0]?.name || '-' };
+    summary = { totalCustomers, totalSpent, totalRefund, netSpent: totalSpent - totalRefund, avgSpent, topCustomer: rows[0]?.name || '-' };
   } else if (type === 'broadcast') {
     const { data: broadcasts } = await supabaseAdmin
       .from('broadcasts')
@@ -2689,19 +2700,29 @@ async function handleReports(req, res) {
       const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
       allItems = itemsData || [];
     }
+    // 방송별 반품액
+    const broadcastRefundMap = {};
+    (orders || []).forEach(o => {
+      if (o.broadcast_id && refundByOrderId[o.id]) {
+        broadcastRefundMap[o.broadcast_id] = (broadcastRefundMap[o.broadcast_id] || 0) + refundByOrderId[o.id];
+      }
+    });
     rows = (broadcasts || []).map(b => {
       const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
       const matched = allItems.filter(i => bProductIds.includes(i.product_id));
+      const revenue = matched.reduce((s, i) => s + i.subtotal, 0);
+      const refund = broadcastRefundMap[b.id] || 0;
       return {
         title: b.title, date: b.date_text, status: b.status,
         productCount: bProductIds.length,
         salesQty: matched.reduce((s, i) => s + i.qty, 0),
-        revenue: matched.reduce((s, i) => s + i.subtotal, 0),
+        revenue, refund, netRevenue: revenue - refund,
       };
     });
     const totalBcRevenue = rows.reduce((s, r) => s + r.revenue, 0);
+    const totalBcRefund = rows.reduce((s, r) => s + r.refund, 0);
     const topBc = rows.reduce((best, r) => r.revenue > (best?.revenue || 0) ? r : best, null);
-    summary = { totalBroadcasts: rows.length, totalBcRevenue, topBroadcast: topBc?.title || '-' };
+    summary = { totalBroadcasts: rows.length, totalBcRevenue, totalBcRefund, netBcRevenue: totalBcRevenue - totalBcRefund, topBroadcast: topBc?.title || '-' };
   }
 
   return ok(res, { rows, summary });

@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 22:25</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 22:32</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3714,17 +3714,20 @@
           </div>`;
       } else if (reportTab === 'customer') {
         summaryHtml = `
-          <div class="grid grid-cols-4 gap-3 mb-6">
+          <div class="grid grid-cols-5 gap-3 mb-6">
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 고객수</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalCustomers||0}명</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 구매액</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalSpent||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">반품 환불</p><p class="font-sans text-lg font-bold text-red-500">${s.totalRefund ? '-'+fmt(s.totalRefund) : '0'}</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">고객당 평균</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.avgSpent||0)}</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">1위 고객</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.topCustomer||'-')}</p></div>
           </div>`;
       } else if (reportTab === 'broadcast') {
         summaryHtml = `
-          <div class="grid grid-cols-3 gap-3 mb-6">
+          <div class="grid grid-cols-5 gap-3 mb-6">
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 방송수</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalBroadcasts||0}회</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 매출</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalBcRevenue||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">반품 환불</p><p class="font-sans text-lg font-bold text-red-500">${s.totalBcRefund ? '-'+fmt(s.totalBcRefund) : '0'}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">순매출</p><p class="font-sans text-lg font-bold text-green-700">${fmt(s.netBcRevenue != null ? s.netBcRevenue : (s.totalBcRevenue||0))}</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">최고 방송</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.topBroadcast||'-')}</p></div>
           </div>`;
       }
@@ -3761,27 +3764,27 @@
   function renderReportTable(type, rows, summary) {
     if (type === 'sales-ranking') {
       const total = summary.totalRevenue || 1;
-      return `<table><thead><tr><th>#</th><th>상품명</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${(r.revenue/total*100).toFixed(1)}%</td></tr>`).join('')}
+      return `<table><thead><tr><th>#</th><th>상품명</th><th>판매수량</th><th>매출</th><th>반품액</th><th>순매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map((r,i) => `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netRevenue != null ? r.netRevenue : r.revenue)}</td><td class="text-warm-500 text-[12px]">${(r.revenue/total*100).toFixed(1)}%</td></tr>`).join('')}
       </tbody></table>`;
     }
     if (type === 'customer') {
       const total = summary.totalSpent || 1;
-      return `<table><thead><tr><th>#</th><th>고객명</th><th>주문수</th><th>총 구매액</th><th>평균</th><th>비중</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="6" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+      return `<table><thead><tr><th>#</th><th>고객명</th><th>주문수</th><th>총 구매액</th><th>반품액</th><th>순구매액</th><th>평균</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="8" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
         ${rows.map((r,i) => {
           const avg = r.orderCount > 0 ? Math.round(r.totalSpent / r.orderCount) : 0;
-          return `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.name)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.totalSpent)}</td><td class="text-[12px]">${fmt(avg)}</td><td class="text-warm-500 text-[12px]">${(r.totalSpent/total*100).toFixed(1)}%</td></tr>`;
+          return `<tr><td class="font-bold text-warm-500">${i+1}</td><td class="font-semibold">${escapeHtml(r.name)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.totalSpent)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netSpent != null ? r.netSpent : r.totalSpent)}</td><td class="text-[12px]">${fmt(avg)}</td><td class="text-warm-500 text-[12px]">${(r.totalSpent/total*100).toFixed(1)}%</td></tr>`;
         }).join('')}
       </tbody></table>`;
     }
     if (type === 'broadcast') {
       const statusLabels = { live: 'LIVE', ended: '종료' };
       const totalRev = summary.totalBcRevenue || 1;
-      return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="7" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.title)}</td><td class="text-[12px]">${escapeHtml(r.date||'')}</td><td class="text-[12px]">${statusLabels[r.status]||r.status}</td><td>${r.productCount}개</td><td>${r.salesQty||0}개</td><td class="font-semibold">${fmt(r.revenue||0)}</td><td class="text-warm-500 text-[12px]">${r.revenue > 0 ? (r.revenue/totalRev*100).toFixed(1)+'%' : '-'}</td></tr>`).join('')}
+      return `<table><thead><tr><th>방송</th><th>날짜</th><th>상태</th><th>상품수</th><th>판매수량</th><th>매출</th><th>반품액</th><th>순매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="9" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${escapeHtml(r.title)}</td><td class="text-[12px]">${escapeHtml(r.date||'')}</td><td class="text-[12px]">${statusLabels[r.status]||r.status}</td><td>${r.productCount}개</td><td>${r.salesQty||0}개</td><td class="font-semibold">${fmt(r.revenue||0)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netRevenue != null ? r.netRevenue : r.revenue)}</td><td class="text-warm-500 text-[12px]">${r.revenue > 0 ? (r.revenue/totalRev*100).toFixed(1)+'%' : '-'}</td></tr>`).join('')}
       </tbody></table>`;
     }
     return '';
