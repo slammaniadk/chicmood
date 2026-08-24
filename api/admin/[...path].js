@@ -1325,15 +1325,16 @@ async function createAutoPurchaseOrders(orderId) {
       });
     }
 
-    // 4) (vendor_id, broadcast_id) 기준 그룹핑
+    // 4) (vendor_id, broadcast_id) 기준 그룹핑 (vendor_id 없으면 0)
     const groups = {};
     for (const item of validItems) {
       const prod = productMap[item.product_id];
-      if (!prod || !prod.vendor_id) continue;
+      if (!prod) continue;
       const bc = productBroadcastMap[item.product_id] || { broadcastId: 0, broadcastTitle: '' };
-      const groupKey = `${prod.vendor_id}_${bc.broadcastId}`;
+      const vendorId = prod.vendor_id || 0;
+      const groupKey = `${vendorId}_${bc.broadcastId}`;
       if (!groups[groupKey]) {
-        groups[groupKey] = { vendorId: prod.vendor_id, broadcastId: bc.broadcastId, broadcastTitle: bc.broadcastTitle, items: [] };
+        groups[groupKey] = { vendorId: vendorId, broadcastId: bc.broadcastId, broadcastTitle: bc.broadcastTitle, items: [] };
       }
       groups[groupKey].items.push({
         product_id: item.product_id,
@@ -1352,7 +1353,12 @@ async function createAutoPurchaseOrders(orderId) {
       // 기존 '발주대기' 발주서 확인 (동일 거래처 + 동일 방송)
       let existingPO = null;
       let query = supabaseAdmin.from('purchase_orders')
-        .select('id, memo').eq('vendor_id', group.vendorId).eq('status', '발주대기');
+        .select('id, memo').eq('status', '발주대기');
+      if (group.vendorId) {
+        query = query.eq('vendor_id', group.vendorId);
+      } else {
+        query = query.is('vendor_id', null);
+      }
       if (group.broadcastId) {
         query = query.eq('broadcast_id', group.broadcastId);
       }
@@ -1402,7 +1408,8 @@ async function createAutoPurchaseOrders(orderId) {
         const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
 
         const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
-        const insertData = { po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo: memoText };
+        const insertData = { po_no: poNo, status: '발주대기', total_amount: totalAmount, memo: memoText };
+        if (group.vendorId) insertData.vendor_id = group.vendorId;
         if (group.broadcastId) insertData.broadcast_id = group.broadcastId;
         let newPO;
         ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
@@ -1511,14 +1518,15 @@ async function handlePORegenerate(req, res) {
         broadcastTitle = bc?.title || '';
       }
 
-      // 거래처별 그룹핑
+      // 거래처별 그룹핑 (vendor_id 없으면 0으로 처리 → '미지정' 거래처 발주)
       const groups = {};
       for (const d of deficitItems) {
         const prod = productMap[d.product_id];
-        if (!prod || !prod.vendor_id) continue;
-        const groupKey = `${prod.vendor_id}_${latestBroadcastId || 0}`;
+        if (!prod) continue;
+        const vendorId = prod.vendor_id || 0;
+        const groupKey = `${vendorId}_${latestBroadcastId || 0}`;
         if (!groups[groupKey]) {
-          groups[groupKey] = { vendorId: prod.vendor_id, broadcastId: latestBroadcastId, broadcastTitle, items: [] };
+          groups[groupKey] = { vendorId: vendorId, broadcastId: latestBroadcastId, broadcastTitle, items: [] };
         }
         groups[groupKey].items.push({
           product_id: d.product_id,
@@ -1535,7 +1543,9 @@ async function handlePORegenerate(req, res) {
         // 기존 발주대기 발주서 확인
         let existingPO = null;
         let query = supabaseAdmin.from('purchase_orders')
-          .select('id').eq('vendor_id', group.vendorId).eq('status', '발주대기');
+          .select('id').eq('status', '발주대기');
+        if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
+        else { query = query.is('vendor_id', null); }
         if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
         const { data: candidatePOs } = await query.order('id', { ascending: false }).limit(1);
         if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
@@ -1578,7 +1588,8 @@ async function handlePORegenerate(req, res) {
             .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
           const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
           const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
-          const insertData = { po_no: poNo, vendor_id: group.vendorId, status: '발주대기', total_amount: totalAmount, memo: group.broadcastTitle || '' };
+          const insertData = { po_no: poNo, status: '발주대기', total_amount: totalAmount, memo: group.broadcastTitle || '' };
+          if (group.vendorId) insertData.vendor_id = group.vendorId;
           if (group.broadcastId) insertData.broadcast_id = group.broadcastId;
           let newPO;
           ({ data: newPO } = await supabaseAdmin.from('purchase_orders')
