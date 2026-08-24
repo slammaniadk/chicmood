@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 22:37</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 22:44</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -342,6 +342,14 @@
 
   window.addEventListener('hashchange', router);
   window.addEventListener('DOMContentLoaded', router);
+
+  // ESC 키로 최상위 모달 닫기
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      const overlays = document.querySelectorAll('.overlay');
+      if (overlays.length > 0) overlays[overlays.length - 1].remove();
+    }
+  });
 
   // ============================================================
   //  LOGIN
@@ -951,7 +959,6 @@
         `}
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -1581,8 +1588,7 @@
           </div>
         </div>
       `;
-      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) {
       showToast(e.message || '회원 정보를 불러올 수 없습니다');
     }
@@ -1628,7 +1634,6 @@
         </div>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -1684,8 +1689,7 @@
           </div>
         </div>
       `;
-      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '회원 정보를 불러올 수 없습니다'); }
   }
 
@@ -1882,7 +1886,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
     renderImagePreviews();
   }
@@ -2125,8 +2128,7 @@
           </div>` : ''}
         </div>
       `;
-      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
   }
 
@@ -2193,7 +2195,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -2315,7 +2316,6 @@
     modal.className = 'overlay';
     modal.id = 'vendor-detail-modal';
     modal.innerHTML = '<div class="overlay-content p-6" style="max-width:700px;"><div class="flex justify-center py-12"><div class="spinner"></div></div></div>';
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
 
     try {
@@ -2430,7 +2430,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -2597,7 +2596,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('mousedown', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
     renderPOItems();
   }
@@ -2751,8 +2749,7 @@
           <button class="btn-primary w-full" onclick="savePODetail(${po.id})">저장</button>
         </div>
       `;
-      modal.addEventListener('mousedown', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '발주 상세를 불러올 수 없습니다'); }
   }
 
@@ -3220,7 +3217,6 @@
     modal.className = 'overlay';
     modal.id = 'inv-history-modal';
     modal.innerHTML = '<div class="overlay-content p-6" style="max-width:560px;"><div class="flex justify-center py-12"><div class="spinner"></div></div></div>';
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
 
     try {
@@ -3311,7 +3307,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -3386,7 +3381,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -3560,7 +3554,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -3652,8 +3645,7 @@
           </div>
         </div>
       `;
-      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
   }
 
@@ -3974,7 +3966,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -4025,7 +4016,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -4141,7 +4131,6 @@
         </form>
       </div>
     `;
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
   }
 
@@ -4298,8 +4287,7 @@
         modal.innerHTML = renderDetailContent();
       };
 
-      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      document.body.appendChild(modal);
+        document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '상세를 불러올 수 없습니다'); }
   }
 
