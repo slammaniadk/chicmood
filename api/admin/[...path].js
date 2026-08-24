@@ -1502,6 +1502,7 @@ async function handlePORegenerate(req, res) {
     // 4) 부족분이 있는 품목만 발주 생성 (거래처+방송 기준 그룹핑)
     const deficitItems = Object.values(needMap).filter(n => n.deficit > 0);
     let created = 0;
+    let skippedItems = [];
     if (deficitItems.length > 0) {
       // 상품 정보 조회
       const productIds = [...new Set(deficitItems.map(d => d.product_id))];
@@ -1520,9 +1521,13 @@ async function handlePORegenerate(req, res) {
 
       // 거래처별 그룹핑 (vendor_id 없으면 0으로 처리 → '미지정' 거래처 발주)
       const groups = {};
+      skippedItems = [];
       for (const d of deficitItems) {
         const prod = productMap[d.product_id];
-        if (!prod) continue;
+        if (!prod) {
+          skippedItems.push({ product_id: d.product_id, name: d.name, color: d.color, size: d.size, reason: 'products 테이블에 없음' });
+          continue;
+        }
         const vendorId = prod.vendor_id || 0;
         const groupKey = `${vendorId}_${latestBroadcastId || 0}`;
         if (!groups[groupKey]) {
@@ -1617,8 +1622,10 @@ async function handlePORegenerate(req, res) {
     const debug = {
       activeOrders: activeOrders.length,
       needMapKeys: Object.keys(needMap).length,
-      needMapDetail: Object.values(needMap).map(n => ({ name: n.name, color: n.color, size: n.size, needed: n.totalNeeded, deficit: n.deficit })),
+      needMapDetail: Object.values(needMap).map(n => ({ pid: n.product_id, name: n.name, color: n.color, size: n.size, needed: n.totalNeeded, deficit: n.deficit })),
       deficitCount: deficitItems.length,
+      skippedItems: deficitItems.length > 0 ? (skippedItems || []) : [],
+      groupsCreated: created,
     };
     return ok(res, { created, resetAlloc, deficitItems: deficitItems.length, debug });
   } catch (e) {
