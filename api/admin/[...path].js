@@ -435,11 +435,18 @@ async function handleOrderDetail(req, res, id) {
   // 배송완료에서 이전 상태로 되돌릴 때 재고 복원 + 품목 상태 되돌리기
   if (prevStatus === '배송완료' && status !== '배송완료' && status !== '결제취소') {
     await deductInventory(id, 'restore');
-    // 배송완료였던 품목들을 새 상태로 되돌림
-    await supabaseAdmin.from('order_items')
-      .update({ status: status, tracking_no: '', tracking_carrier: '' })
+    // 배송완료였던 품목들을 새 상태로 되돌림 + 배정 수량 복원
+    const { data: shippedItems } = await supabaseAdmin.from('order_items')
+      .select('id, qty')
       .eq('order_id', id)
       .eq('status', '배송완료');
+    if (shippedItems && shippedItems.length > 0) {
+      for (const si of shippedItems) {
+        await supabaseAdmin.from('order_items')
+          .update({ status: status, tracking_no: '', tracking_carrier: '', allocated_qty: si.qty })
+          .eq('id', si.id);
+      }
+    }
   }
   // 결제취소 시: 배송준비 이후 불가 + 전 품목 취소 + 배정 수량 초기화
   if (status === '결제취소') {
