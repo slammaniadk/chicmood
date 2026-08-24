@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 19:06</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 19:09</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2742,6 +2742,12 @@
   function onPOStatusChange(newStatus) {
     const modal = document.getElementById('po-detail-modal');
     if (modal) modal.setAttribute('data-po-status', newStatus);
+    // 입고완료 선택 시 입고수량이 0인 품목은 발주수량으로 자동 세팅
+    if (newStatus === '입고완료') {
+      poEditItems.forEach(i => {
+        if (!i.receivedQty || i.receivedQty === 0) i.receivedQty = i.qty || 0;
+      });
+    }
     const area = document.getElementById('po-detail-items-area');
     if (area) {
       if (poEditMode) {
@@ -2867,6 +2873,11 @@
     }
     // 입고 수량 전달 (입고완료 상태일 때)
     if (status === '입고완료') {
+      const totalReceived = poEditItems.reduce((s, i) => s + (i.receivedQty || 0), 0);
+      if (totalReceived === 0) {
+        if (!confirm('입고수량이 모두 0입니다. 전량 입고로 처리할까요?')) return;
+        poEditItems.forEach(i => { i.receivedQty = i.qty || 0; });
+      }
       const receivedItems = poEditItems.filter(i => i.id).map(i => ({
         id: i.id,
         receivedQty: i.receivedQty || 0,

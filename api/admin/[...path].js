@@ -2108,6 +2108,29 @@ async function handlePurchaseOrderDetail(req, res, id) {
   }
 
   if (req.method === 'DELETE') {
+    // 입고완료 발주 삭제 시 재고 역반영
+    const { data: po } = await supabaseAdmin.from('purchase_orders').select('status').eq('id', id).single();
+    if (po && po.status === '입고완료') {
+      const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('product_id, color_name, size_name, received_qty')
+        .eq('purchase_order_id', id);
+      if (poItems) {
+        for (const item of poItems) {
+          if (!item.product_id || !item.received_qty) continue;
+          const { data: inv } = await supabaseAdmin.from('inventory')
+            .select('id, stock_qty')
+            .eq('product_id', item.product_id)
+            .eq('color_name', item.color_name || '')
+            .eq('size_name', item.size_name || '')
+            .single();
+          if (inv) {
+            await supabaseAdmin.from('inventory')
+              .update({ stock_qty: Math.max(0, (inv.stock_qty || 0) - item.received_qty) })
+              .eq('id', inv.id);
+          }
+        }
+      }
+    }
     const { error } = await supabaseAdmin.from('purchase_orders').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
     return ok(res, { deleted: true });
