@@ -126,7 +126,7 @@
       <!-- 데스크톱 네비 -->
       <nav class="desktop-nav items-center gap-6 text-[12px] font-medium text-warm-500">
         <a href="#home" class="hover:text-warm-800 transition-colors tracking-wide">홈</a>
-        <a href="#cart" onclick="location.hash='#cart';router();return false;" class="hover:text-warm-800 transition-colors tracking-wide relative">
+        <a href="javascript:void(0)" onclick="location.hash='cart';setTimeout(router,0);" class="hover:text-warm-800 transition-colors tracking-wide relative">
           장바구니
           <span id="cart-badge-desktop" class="badge hidden">0</span>
         </a>
@@ -136,7 +136,7 @@
       <!-- 모바일 네비 -->
       <nav class="mobile-nav items-center gap-4 text-[11px] font-medium text-warm-500">
         <a href="#home" class="hover:text-warm-800 transition-colors">홈</a>
-        <a href="#cart" onclick="location.hash='#cart';router();return false;" class="hover:text-warm-800 transition-colors relative">
+        <a href="javascript:void(0)" onclick="location.hash='cart';setTimeout(router,0);" class="hover:text-warm-800 transition-colors relative">
           🛒<span id="cart-badge-mobile" class="badge hidden" style="top:-8px;right:-10px;">0</span>
         </a>
         <a href="#lookup" class="hover:text-warm-800 transition-colors">조회</a>
@@ -409,7 +409,7 @@
             ${featuredProducts.map((p, i) => `
               <a href="#product/${p.id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
                 <div class="relative">
-                  <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+                  ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -494,7 +494,7 @@
             ${products.map((p, i) => `
               <a href="#product/${p.id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
                 <div class="relative">
-                  <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+                  ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -529,15 +529,15 @@
           <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
             <div>
               <div class="aspect-[3/4] bg-warm-100 rounded-lg overflow-hidden mb-2">
-                <img id="pd-main-img" src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" />
+                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진 미등록</span></div>`}
               </div>
-              <div class="grid grid-cols-${p.images.length} gap-2">
+              ${p.images && p.images.length > 1 ? `<div class="grid grid-cols-${p.images.length} gap-2">
                 ${p.images.map((img, i) => `
                   <div class="thumb-wrap ${i===0?'active':''} aspect-square bg-warm-100 rounded" onclick="pdSwitchImage(${id},${i},this)">
                     <img src="${img.replace('w=600&h=800','w=200&h=200')}" alt="썸네일 ${i+1}" class="w-full h-full object-cover rounded" />
                   </div>
                 `).join('')}
-              </div>
+              </div>` : ''}
             </div>
             <div class="flex flex-col">
               <p class="text-[11px] text-warm-400 tracking-[0.2em] uppercase mb-2 font-light">CHICMOOD LIVE</p>
@@ -665,8 +665,8 @@
         <div class="space-y-4 mb-8">
           ${cart.map((item, idx) => `
             <div class="flex items-center gap-4 bg-white border border-warm-200 rounded-lg p-4">
-              <a href="#product/${item.productId}" class="w-16 h-20 bg-warm-100 rounded flex-shrink-0 overflow-hidden">
-                <img src="${item.image.replace('w=600&h=800','w=100&h=130')}" alt="${item.name}" class="w-full h-full object-cover rounded" />
+              <a href="#product/${item.productId}" class="w-16 h-20 bg-warm-100 rounded flex-shrink-0 overflow-hidden flex items-center justify-center">
+                ${item.image ? `<img src="${item.image.replace('w=600&h=800','w=100&h=130')}" alt="${item.name}" class="w-full h-full object-cover rounded" />` : `<span class="text-[9px] text-warm-400 text-center">사진<br>미등록</span>`}
               </a>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-warm-800 truncate">${item.name}</p>
