@@ -357,7 +357,11 @@ async function handleOrderDetail(req, res, id) {
     // 발주가 진행된 상태면 삭제 차단
     const poBlock = await checkAdvancedPurchaseOrders(id);
     if (poBlock) return fail(res, poBlock);
-    // 발주 차감 (항상 시도) — 재고 차감/복원은 입고 배정으로 대체
+    // 배송완료 상태 삭제 시 재고 복원 (이미 차감된 stock_qty 되돌리기)
+    if (order.status === '배송완료') {
+      await deductInventory(id, 'restore');
+    }
+    // 발주 차감 (항상 시도)
     await deductPurchaseOrderQty(id);
     await supabaseAdmin.from('order_items').delete().eq('order_id', id);
     const { error } = await supabaseAdmin.from('orders').delete().eq('id', id);
@@ -488,6 +492,34 @@ async function deductInventory(orderId, action) {
       }
     }
   } catch (e) { /* 재고 차감 실패해도 주문 처리는 유지 */ }
+}
+
+// 반품 완료 시 재고 복원 헬퍼
+async function restoreInventoryForReturn(returnData) {
+  try {
+    const items = returnData.return_items || [];
+    for (const item of items) {
+      if (!item.product_id || !item.qty) continue;
+      const { data: inv } = await supabaseAdmin.from('inventory')
+        .select('id, stock_qty')
+        .eq('product_id', item.product_id)
+        .eq('color_name', item.color || '')
+        .eq('size_name', item.size || '')
+        .single();
+
+      if (inv) {
+        const newQty = inv.stock_qty + item.qty;
+        await supabaseAdmin.from('inventory')
+          .update({ stock_qty: newQty, updated_at: new Date().toISOString() })
+          .eq('id', inv.id);
+        await supabaseAdmin.from('inventory_log').insert({
+          inventory_id: inv.id, product_id: item.product_id,
+          type: 'return', qty: item.qty,
+          reason: `반품 완료 재고 복원 (${returnData.return_no})`,
+        });
+      }
+    }
+  } catch (e) { /* 재고 복원 실패해도 반품 처리는 유지 */ }
 }
 
 // 품목 1개 재고 차감 헬퍼
@@ -2403,12 +2435,26 @@ async function handleReturnDetail(req, res, id) {
 
   if (req.method === 'PATCH') {
     const { status, memo } = req.body;
+
+    // 현재 반품 정보 조회 (중복 복원 방지 + 재고 복원용)
+    const { data: currentReturn } = await supabaseAdmin.from('returns')
+      .select('status, type, return_no, return_items(product_id, color, size, qty)')
+      .eq('id', id).single();
+
     const update = { updated_at: new Date().toISOString() };
     if (status) update.status = status;
     if (memo !== undefined) update.memo = memo;
 
     const { error } = await supabaseAdmin.from('returns').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
+
+    // 반품/취소 완료 시 재고 자동 복원 (이전 상태가 완료가 아닐 때만)
+    if (status === '완료' && currentReturn && currentReturn.status !== '완료') {
+      if (['반품', '취소'].includes(currentReturn.type)) {
+        await restoreInventoryForReturn(currentReturn);
+      }
+    }
+
     return ok(res, { id: parseInt(id) });
   }
 
