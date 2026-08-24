@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:37</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:42</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3018,24 +3018,28 @@
           <div class="mb-4">
             <input type="text" class="input-field" placeholder="${salesTab==='product'?'상품명':'방송명'} 검색..." value="${escapeHtml(salesSearch)}" onkeydown="if(event.key==='Enter'){salesSearch=this.value;renderSales(document.getElementById('page-content'))}" />
           </div>` : ''}
-          <div class="grid grid-cols-4 gap-4 mb-6">
+          <div class="grid grid-cols-5 gap-3 mb-6">
             <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">총 매출</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(s.totalRevenue||0)}</p>
+              <p class="font-sans text-xl font-bold text-warm-800">${fmt(s.totalRevenue||0)}</p>
               ${salesChangeHtml(s.totalRevenue, s.prevRevenue)}
             </div>
             <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">반품액</p>
-              <p class="font-sans text-2xl font-bold text-red-500">-${fmt(s.totalRefund||0)}</p>
+              <p class="font-sans text-xl font-bold text-red-500">${s.totalRefund ? '-'+fmt(s.totalRefund) : '0'}</p>
+            </div>
+            <div class="card text-center py-3">
+              <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">순매출</p>
+              <p class="font-sans text-xl font-bold text-green-700">${fmt(s.netRevenue||s.totalRevenue||0)}</p>
             </div>
             <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">주문수</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${s.orderCount||0}건</p>
+              <p class="font-sans text-xl font-bold text-warm-800">${s.orderCount||0}건</p>
               ${salesChangeHtml(s.orderCount, s.prevOrderCount)}
             </div>
             <div class="card text-center py-3">
               <p class="text-[11px] font-semibold tracking-wider text-warm-400 uppercase mb-1">평균 주문액</p>
-              <p class="font-sans text-2xl font-bold text-warm-800">${fmt(s.avgOrder||0)}</p>
+              <p class="font-sans text-xl font-bold text-warm-800">${fmt(s.avgOrder||0)}</p>
             </div>
           </div>
           <div class="card overflow-x-auto">
@@ -3050,26 +3054,26 @@
 
   function renderSalesTable(type, rows, totalRevenue) {
     if (type === 'daily' || type === 'monthly') {
-      return `<table><thead><tr><th>기간</th><th>주문수</th><th>매출</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="3" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
-        ${rows.map(r => `<tr><td class="font-semibold">${r.period}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td></tr>`).join('')}
+      return `<table><thead><tr><th>기간</th><th>주문수</th><th>매출</th><th>반품액</th><th>순매출</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="5" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+        ${rows.map(r => `<tr><td class="font-semibold">${r.period}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netRevenue||r.revenue)}</td></tr>`).join('')}
       </tbody></table>`;
     }
     if (type === 'product') {
-      return `<table><thead><tr><th>상품명</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+      return `<table><thead><tr><th>상품명</th><th>판매수량</th><th>매출</th><th>반품액</th><th>순매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="6" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
         ${rows.map(r => {
           const pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100).toFixed(1) : '0.0';
-          return `<tr><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
+          return `<tr><td class="font-semibold">${escapeHtml(r.productName)}</td><td>${r.totalQty}개</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netRevenue||r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
         }).join('')}
       </tbody></table>`;
     }
     if (type === 'broadcast') {
-      return `<table><thead><tr><th>방송</th><th>판매수량</th><th>매출</th><th>비중</th></tr></thead><tbody>
-        ${rows.length===0?'<tr><td colspan="4" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
+      return `<table><thead><tr><th>방송</th><th>판매수량</th><th>매출</th><th>반품액</th><th>순매출</th><th>비중</th></tr></thead><tbody>
+        ${rows.length===0?'<tr><td colspan="6" class="text-center text-warm-400 py-8">데이터가 없습니다</td></tr>':''}
         ${rows.map(r => {
           const pct = totalRevenue > 0 ? (r.revenue / totalRevenue * 100).toFixed(1) : '0.0';
-          return `<tr><td class="font-semibold">${escapeHtml(r.broadcastTitle)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
+          return `<tr><td class="font-semibold">${escapeHtml(r.broadcastTitle)}</td><td>${r.orderCount}건</td><td class="font-semibold">${fmt(r.revenue)}</td><td class="text-red-500">${r.refund ? '-'+fmt(r.refund) : '-'}</td><td class="font-semibold text-green-700">${fmt(r.netRevenue||r.revenue)}</td><td class="text-warm-500 text-[12px]">${pct}%</td></tr>`;
         }).join('')}
       </tbody></table>`;
     }

@@ -2185,7 +2185,7 @@ async function handleSales(req, res) {
 
   const { type = 'daily', from, to, search } = req.query || {};
 
-  let query = supabaseAdmin.from('orders').select('id, total, status, created_at');
+  let query = supabaseAdmin.from('orders').select('id, total, status, created_at, broadcast_id');
   query = query.neq('status', '결제취소');
   if (from) query = query.gte('created_at', from + 'T00:00:00');
   if (to) query = query.lte('created_at', to + 'T23:59:59');
@@ -2215,19 +2215,24 @@ async function handleSales(req, res) {
     prevOrderCount = (prevOrders || []).length;
   }
 
-  // 반품 환불액 조회
+  // 반품 환불액 조회 (order별 매핑)
   const orderIds = orders.map(o => o.id);
+  const refundByOrderId = {};
   let totalRefund = 0;
   if (orderIds.length > 0) {
     const { data: returns } = await supabaseAdmin.from('returns')
-      .select('refund_amount, type, status')
+      .select('order_id, refund_amount, type, status')
       .in('order_id', orderIds)
       .eq('status', '완료')
       .eq('type', '반품');
-    totalRefund = (returns || []).reduce((s, r) => s + (r.refund_amount || 0), 0);
+    (returns || []).forEach(r => {
+      refundByOrderId[r.order_id] = (refundByOrderId[r.order_id] || 0) + (r.refund_amount || 0);
+    });
+    totalRefund = Object.values(refundByOrderId).reduce((s, v) => s + v, 0);
   }
+  const netRevenue = totalRevenue - totalRefund;
 
-  const summary = { totalRevenue, orderCount, avgOrder, prevRevenue, prevOrderCount, totalRefund };
+  const summary = { totalRevenue, orderCount, avgOrder, prevRevenue, prevOrderCount, totalRefund, netRevenue };
 
   let rows = [];
 
@@ -2236,35 +2241,42 @@ async function handleSales(req, res) {
     orders.forEach(o => {
       const d = new Date(o.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0 };
+      if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0, refund: 0 };
       grouped[key].orderCount++;
       grouped[key].revenue += o.total;
+      grouped[key].refund += (refundByOrderId[o.id] || 0);
     });
-    rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v }));
+    rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v, netRevenue: v.revenue - v.refund }));
   } else if (type === 'monthly') {
     const grouped = {};
     orders.forEach(o => {
       const d = new Date(o.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0 };
+      if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0, refund: 0 };
       grouped[key].orderCount++;
       grouped[key].revenue += o.total;
+      grouped[key].refund += (refundByOrderId[o.id] || 0);
     });
-    rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v }));
+    rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v, netRevenue: v.revenue - v.refund }));
   } else if (type === 'product') {
-    const orderIds = orders.map(o => o.id);
     let items = [];
     if (orderIds.length > 0) {
-      const { data: itemsData } = await supabaseAdmin.from('order_items').select('name, qty, subtotal').in('order_id', orderIds);
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('name, qty, subtotal, order_id').in('order_id', orderIds);
       items = itemsData || [];
     }
+    // 주문별 아이템 합계 (비례배분용)
+    const orderItemsTotal = {};
+    items.forEach(i => { orderItemsTotal[i.order_id] = (orderItemsTotal[i.order_id] || 0) + i.subtotal; });
     const grouped = {};
     items.forEach(i => {
-      if (!grouped[i.name]) grouped[i.name] = { totalQty: 0, revenue: 0 };
+      if (!grouped[i.name]) grouped[i.name] = { totalQty: 0, revenue: 0, refund: 0 };
       grouped[i.name].totalQty += i.qty;
       grouped[i.name].revenue += i.subtotal;
+      const oTotal = orderItemsTotal[i.order_id] || 1;
+      const oRefund = refundByOrderId[i.order_id] || 0;
+      grouped[i.name].refund += Math.round(oRefund * i.subtotal / oTotal);
     });
-    rows = Object.entries(grouped).sort((a, b) => b[1].revenue - a[1].revenue).map(([productName, v]) => ({ productName, ...v }));
+    rows = Object.entries(grouped).sort((a, b) => b[1].revenue - a[1].revenue).map(([productName, v]) => ({ productName, ...v, netRevenue: v.revenue - v.refund }));
     if (search) {
       const s = search.toLowerCase();
       rows = rows.filter(r => r.productName.toLowerCase().includes(s));
@@ -2274,21 +2286,25 @@ async function handleSales(req, res) {
       .from('broadcasts')
       .select('id, title, date_text, broadcast_products(product_id)')
       .order('id', { ascending: false });
-    // 방송별 매출 계산: broadcast_products 상품과 order_items 매칭
-    const orderIds = orders.map(o => o.id);
+    // 방송별 매출 계산
     let allItems = [];
     if (orderIds.length > 0) {
       const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
       allItems = itemsData || [];
     }
+    // 방송별 반품액: 주문의 broadcast_id 기준
+    const broadcastRefundMap = {};
+    orders.forEach(o => {
+      if (o.broadcast_id && refundByOrderId[o.id]) {
+        broadcastRefundMap[o.broadcast_id] = (broadcastRefundMap[o.broadcast_id] || 0) + refundByOrderId[o.id];
+      }
+    });
     rows = (broadcasts || []).map(b => {
       const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
       const matchedItems = allItems.filter(i => bProductIds.includes(i.product_id));
-      return {
-        broadcastTitle: b.title,
-        orderCount: matchedItems.length,
-        revenue: matchedItems.reduce((s, i) => s + i.subtotal, 0),
-      };
+      const revenue = matchedItems.reduce((s, i) => s + i.subtotal, 0);
+      const refund = broadcastRefundMap[b.id] || 0;
+      return { broadcastTitle: b.title, orderCount: matchedItems.length, revenue, refund, netRevenue: revenue - refund };
     });
     if (search) {
       const s = search.toLowerCase();
