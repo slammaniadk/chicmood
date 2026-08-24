@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:10</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 23:17</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2744,7 +2744,7 @@
             <button class="btn-outline btn-sm" id="po-edit-toggle" onclick="togglePOEdit()">수정</button>
           </div>
           <div id="po-detail-items-area" class="overflow-x-auto mb-4">
-            ${renderPODetailItemsView(po.items)}
+            ${renderPODetailItemsView(po.items, po.status)}
           </div>
           <button class="btn-primary w-full" onclick="savePODetail(${po.id})">저장</button>
         </div>
@@ -2753,8 +2753,8 @@
     } catch (e) { showToast(e.message || '발주 상세를 불러올 수 없습니다'); }
   }
 
-  function renderPODetailItemsView(items) {
-    const poStatus = document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
+  function renderPODetailItemsView(items, statusOverride) {
+    const poStatus = statusOverride || document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
     const showReceived = poStatus === '입고완료' || poStatus === '부분입고';
     return `<table>
       <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th><th>잔량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
@@ -2795,7 +2795,7 @@
       if (poEditMode) {
         renderPODetailItemsEdit();
       } else {
-        area.innerHTML = renderPODetailItemsView(poEditItems);
+        area.innerHTML = renderPODetailItemsView(poEditItems, newStatus);
       }
     }
   }
