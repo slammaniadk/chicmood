@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:27</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:30</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3476,12 +3476,13 @@
       }
       container.innerHTML = `
         <p class="text-[11px] text-warm-500 mb-2">주문자: ${escapeHtml(data.order.name)} / ${fmt(data.order.total)}</p>
-        ${_retOrderItems.map(item => `
-          <div class="flex items-center gap-2 py-1.5 px-2">
+        ${_retOrderItems.map((item, idx) => `
+          <label class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-warm-50 cursor-pointer">
+            <input type="checkbox" class="ret-item-check" data-idx="${idx}" checked onchange="recalcRetRefund()" />
             <span class="text-[13px]">${escapeHtml(item.name)}</span>
             <span class="text-[11px] text-warm-400">${item.color||''}/${item.size||''} x${item.qty}</span>
             <span class="text-[12px] font-semibold ml-auto">${fmt(item.subtotal)}</span>
-          </div>
+          </label>
         `).join('')}
       `;
       // 환불금액 자동 계산
@@ -3491,6 +3492,18 @@
       document.getElementById('ret-order-items').innerHTML = `<p class="text-red-500 text-[12px]">${e.message || '주문을 찾을 수 없습니다'}</p>`;
       _retOrderItems = [];
     }
+  }
+
+  function recalcRetRefund() {
+    let total = 0;
+    document.querySelectorAll('.ret-item-check').forEach(chk => {
+      if (chk.checked) {
+        const idx = parseInt(chk.dataset.idx);
+        if (_retOrderItems[idx]) total += _retOrderItems[idx].subtotal;
+      }
+    });
+    const el = document.getElementById('ret-refund');
+    if (el) el.value = total;
   }
 
   async function openReturnModal() {
@@ -3549,6 +3562,16 @@
     const reason = document.getElementById('ret-reason').value.trim();
     if (!reason) { showToast('사유를 입력해주세요'); return; }
 
+    const checks = document.querySelectorAll('.ret-item-check');
+    const selectedItems = [];
+    checks.forEach(chk => {
+      if (chk.checked) {
+        const idx = parseInt(chk.dataset.idx);
+        const item = _retOrderItems[idx];
+        if (item) selectedItems.push({ orderItemId: item.id, productId: item.product_id, name: item.name, color: item.color, size: item.size, qty: item.qty, price: item.price });
+      }
+    });
+
     try {
       await api('/admin/returns', {
         method: 'POST',
@@ -3558,6 +3581,7 @@
           reason,
           refundAmount: parseInt(document.getElementById('ret-refund').value) || 0,
           memo: document.getElementById('ret-memo').value.trim(),
+          items: selectedItems,
         })
       });
       showToast('접수가 완료되었습니다');
@@ -3673,10 +3697,11 @@
       let summaryHtml = '';
       if (reportTab === 'sales-ranking') {
         summaryHtml = `
-          <div class="grid grid-cols-4 gap-3 mb-6">
+          <div class="grid grid-cols-5 gap-3 mb-6">
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 매출</p><p class="font-sans text-lg font-bold text-warm-800">${fmt(s.totalRevenue||0)}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">반품 환불</p><p class="font-sans text-lg font-bold text-red-500">${s.totalRefund ? '-'+fmt(s.totalRefund) : '0'}</p></div>
+            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">순매출</p><p class="font-sans text-lg font-bold text-green-700">${fmt(s.netRevenue||s.totalRevenue||0)}</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">총 판매수량</p><p class="font-sans text-lg font-bold text-warm-800">${s.totalQty||0}개</p></div>
-            <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">상품 종류</p><p class="font-sans text-lg font-bold text-warm-800">${s.productCount||0}개</p></div>
             <div class="card text-center py-3"><p class="text-[10px] text-warm-400 uppercase font-semibold mb-1">1위 상품</p><p class="font-sans text-[13px] font-bold text-warm-800 truncate">${escapeHtml(s.top||'-')}</p></div>
           </div>`;
       } else if (reportTab === 'customer') {

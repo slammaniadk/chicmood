@@ -2608,6 +2608,17 @@ async function handleReports(req, res) {
   const { data: orders } = await orderQuery;
   const orderIds = (orders || []).map(o => o.id);
 
+  // 반품 환불액 조회 (완료된 반품만, 유형이 '반품'인 것만)
+  let totalRefund = 0;
+  if (orderIds.length > 0) {
+    const { data: returns } = await supabaseAdmin.from('returns')
+      .select('refund_amount, type, status')
+      .in('order_id', orderIds)
+      .eq('status', '완료')
+      .eq('type', '반품');
+    totalRefund = (returns || []).reduce((s, r) => s + (r.refund_amount || 0), 0);
+  }
+
   if (type === 'sales-ranking') {
     let items = [];
     if (orderIds.length > 0) {
@@ -2624,7 +2635,7 @@ async function handleReports(req, res) {
       .map(([productName, v]) => ({ productName, ...v }));
     const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
     const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
-    summary = { totalRevenue, totalQty, productCount: rows.length, top: rows[0]?.productName || '-' };
+    summary = { totalRevenue, totalRefund, netRevenue: totalRevenue - totalRefund, totalQty, productCount: rows.length, top: rows[0]?.productName || '-' };
   } else if (type === 'customer') {
     const grouped = {};
     (orders || []).forEach(o => {
