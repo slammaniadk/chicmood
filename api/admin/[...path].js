@@ -708,20 +708,42 @@ async function updateInventoryFromPO(poId) {
 
       // 재고 수량 업데이트 (차이만 적용)
       const newStockQty = Math.max(0, (inv.stock_qty || 0) + diff);
-      await supabaseAdmin.from('inventory')
-        .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
-        .eq('id', inv.id);
 
-      // 로그 업데이트 또는 생성
-      if (existingLog) {
-        await supabaseAdmin.from('inventory_log')
-          .update({ qty: receivedQty, type: 'in' })
-          .eq('id', existingLog.id);
+      if (newStockQty <= 0 && receivedQty <= 0) {
+        // 입고수량 0 + 재고 0 → 로그 삭제, 재고 레코드도 삭제
+        if (existingLog) {
+          await supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id);
+        }
+        // 이 재고에 다른 로그가 없으면 레코드도 삭제
+        const { count: otherLogs } = await supabaseAdmin.from('inventory_log')
+          .select('id', { count: 'exact', head: true }).eq('inventory_id', inv.id);
+        if (!otherLogs || otherLogs === 0) {
+          await supabaseAdmin.from('inventory').delete().eq('id', inv.id);
+        } else {
+          await supabaseAdmin.from('inventory')
+            .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
+            .eq('id', inv.id);
+        }
       } else {
-        await supabaseAdmin.from('inventory_log').insert({
-          inventory_id: inv.id, product_id: item.product_id,
-          type: 'in', qty: receivedQty, reason: poRef,
-        });
+        await supabaseAdmin.from('inventory')
+          .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
+          .eq('id', inv.id);
+
+        // 로그 업데이트 또는 생성
+        if (existingLog) {
+          if (receivedQty <= 0) {
+            await supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id);
+          } else {
+            await supabaseAdmin.from('inventory_log')
+              .update({ qty: receivedQty, type: 'in' })
+              .eq('id', existingLog.id);
+          }
+        } else if (receivedQty > 0) {
+          await supabaseAdmin.from('inventory_log').insert({
+            inventory_id: inv.id, product_id: item.product_id,
+            type: 'in', qty: receivedQty, reason: poRef,
+          });
+        }
       }
       updated++;
     }
@@ -2149,14 +2171,16 @@ async function handlePurchaseOrderDetail(req, res, id) {
     const { error } = await supabaseAdmin.from('purchase_orders').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
 
-    // 입고 상태 변경 시: 재고 반영 + 고객별 FIFO 배정 실행
+    // 입고수량 변경 시: 상태와 무관하게 항상 재고 반영 (수량 감소도 처리)
     let allocationResult = null;
     let inventoryResult = null;
-    if (update.status === '부분입고' || update.status === '입고완료') {
-      // 입고 수량을 재고에 반영
+    if (receivedItems || update.status === '부분입고' || update.status === '입고완료') {
+      // 입고 수량을 재고에 반영 (diff 기반: 증가/감소 모두 처리)
       inventoryResult = await updateInventoryFromPO(parseInt(id));
-      // 고객별 FIFO 배정
-      allocationResult = await allocateReceivedToOrders(parseInt(id));
+      // 고객별 FIFO 배정 (입고 상태일 때만)
+      if (update.status === '부분입고' || update.status === '입고완료') {
+        allocationResult = await allocateReceivedToOrders(parseInt(id));
+      }
     }
 
     return ok(res, { id: parseInt(id), allocation: allocationResult, inventory: inventoryResult });
