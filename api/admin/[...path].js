@@ -2215,7 +2215,19 @@ async function handleSales(req, res) {
     prevOrderCount = (prevOrders || []).length;
   }
 
-  const summary = { totalRevenue, orderCount, avgOrder, prevRevenue, prevOrderCount };
+  // 반품 환불액 조회
+  const orderIds = orders.map(o => o.id);
+  let totalRefund = 0;
+  if (orderIds.length > 0) {
+    const { data: returns } = await supabaseAdmin.from('returns')
+      .select('refund_amount, type, status')
+      .in('order_id', orderIds)
+      .eq('status', '완료')
+      .eq('type', '반품');
+    totalRefund = (returns || []).reduce((s, r) => s + (r.refund_amount || 0), 0);
+  }
+
+  const summary = { totalRevenue, orderCount, avgOrder, prevRevenue, prevOrderCount, totalRefund };
 
   let rows = [];
 
