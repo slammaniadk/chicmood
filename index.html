@@ -692,7 +692,7 @@
             <span class="text-warm-800 font-semibold">${shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(shippingFee)}</span>
           </div>
           ${shippingFee > 0 ? `<p class="text-[11px] text-warm-400 font-light">${fmt(100000 - subtotal)} 더 담으면 무료배송!</p>` : ''}
-          <p class="text-[10px] text-warm-300 font-light mt-1">동일방송 재주문 누적 10만원 이상 시 배송비 환급</p>
+          <p class="text-[10px] text-warm-300 font-light mt-1">동일방송 재주문 시 배송비 무료 · 누적 10만원 이상 시 기존 배송비 환급</p>
           <div class="border-t border-warm-100 pt-3 flex justify-between items-center">
             <span class="text-sm font-semibold text-warm-700">총 결제금액</span>
             <span class="text-2xl font-bold text-warm-800">${fmt(total)}</span>

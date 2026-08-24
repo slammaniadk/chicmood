@@ -244,6 +244,7 @@ async function handleOrders(req, res) {
     memo: o.memo,
     subtotal: o.subtotal,
     shippingFee: o.shipping_fee,
+    shippingRefund: o.shipping_refund || 0,
     total: o.total,
     status: o.status,
     trackingNo: o.tracking_no,

@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.21 22:22</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 17:17</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -807,6 +807,10 @@
                   const allocColor = totalAlloc >= totalQty && totalQty > 0 ? 'color:#38a169' : totalAlloc > 0 ? 'color:#d69e2e' : 'color:#e53e3e';
                   // Encode items data for modal
                   const itemsJson = btoa(unescape(encodeURIComponent(JSON.stringify(o.items))));
+                  const orderMsgData = btoa(unescape(encodeURIComponent(JSON.stringify({
+                    name: o.name, nickname: o.nickname, items: o.items.map(i => ({ name: i.name, color: i.color, size: i.size, qty: i.qty, price: i.price, subtotal: i.subtotal })),
+                    subtotal: o.subtotal, shippingFee: o.shippingFee, shippingRefund: o.shippingRefund || 0, total: o.total
+                  }))));
                   const mergeDisabled = ['배송완료','결제취소'].includes(o.status);
                   return `
                     <tr>
@@ -827,6 +831,7 @@
                       <td class="whitespace-nowrap">
                         <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}')">변경</button>
                         <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
+                        <button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyOrderMsg('${orderMsgData}')">주문문구</button>
                         ${o.trackingNo
                           ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}')">발송문구</button>`
                           : `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;opacity:0.3;cursor:default;" disabled>발송문구</button>`
@@ -1254,6 +1259,38 @@
     }
     showToast(`저장 완료: ${success}건${fail > 0 ? `, 실패: ${fail}건` : ''}`);
     renderShipping(document.getElementById('page-content'));
+  }
+
+  function copyOrderMsg(dataB64) {
+    const d = JSON.parse(decodeURIComponent(escape(atob(dataB64))));
+    const displayName = d.nickname && d.nickname !== '-' ? d.nickname : d.name;
+    let msg = '----------------------------------\n';
+    msg += `[ ${displayName}님 최종 정산서 ]\n`;
+    d.items.forEach(i => {
+      msg += `- ${i.name}(${i.color}/${i.size}) : ${fmt(i.subtotal)}원\n`;
+    });
+    msg += `\n상품가격 : ${fmt(d.subtotal)}원\n`;
+    if (d.shippingFee === 0 && d.subtotal < 100000) {
+      msg += '배송비 : 0원 (합배송 적용 - 배송비 면제)\n';
+    } else if (d.shippingFee === 0) {
+      msg += '배송비 : 0원 (무료배송)\n';
+    } else {
+      msg += `배송비 : ${fmt(d.shippingFee)}원\n`;
+    }
+    if (d.shippingRefund > 0) {
+      msg += `선구매 배송비 환급 : -${fmt(d.shippingRefund)}원\n`;
+    }
+    msg += `총 결제액: ${fmt(d.total)}원\n`;
+    msg += '----------------------------------';
+    navigator.clipboard.writeText(msg).then(() => {
+      showToast('주문문구가 복사되었습니다');
+    }).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = msg; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('주문문구가 복사되었습니다');
+    });
   }
 
   function copyShippingMsg(name, trackingNo) {

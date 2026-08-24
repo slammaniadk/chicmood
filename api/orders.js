@@ -26,13 +26,16 @@ module.exports = async function handler(req, res) {
       .neq('status', '결제취소');
 
     if (!prevErr && prevOrders && prevOrders.length > 0) {
+      // 동일방송 2차 주문부터는 무조건 배송비 무료
+      shippingFee = 0;
+
       const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
       const previousShippingFees = prevOrders.reduce((s, o) => s + o.shipping_fee, 0);
       const previousRefunds = prevOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
       cumulativeSubtotal = previousSubtotal + subtotal;
 
+      // 누적 10만원 이상이면 이전에 납부한 배송비 환급
       if (cumulativeSubtotal >= 100000) {
-        shippingFee = 0;
         shippingRefund = Math.max(0, previousShippingFees - previousRefunds);
       }
     }
@@ -111,13 +114,16 @@ module.exports = async function handler(req, res) {
       .neq('status', '결제취소');
 
     if (!prevErr && prevOrders && prevOrders.length > 0) {
+      // 동일방송 2차 주문부터는 무조건 배송비 무료
+      shippingFee = 0;
+
       const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
       const previousShippingFees = prevOrders.reduce((s, o) => s + o.shipping_fee, 0);
       const previousRefunds = prevOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
       const cumulativeSubtotal = previousSubtotal + subtotal;
 
+      // 누적 10만원 이상이면 이전에 납부한 배송비 환급
       if (cumulativeSubtotal >= 100000) {
-        shippingFee = 0;
         shippingRefund = Math.max(0, previousShippingFees - previousRefunds);
       }
     }
