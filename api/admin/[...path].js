@@ -1614,7 +1614,16 @@ async function handlePORegenerate(req, res) {
       }
     }
 
-    return ok(res, { created, resetAlloc, deficitItems: deficitItems.length });
+    const debug = {
+      activeOrders: activeOrders.length,
+      needMapKeys: Object.keys(needMap).length,
+      needMapDetail: Object.values(needMap).map(n => ({ name: n.name, color: n.color, size: n.size, needed: n.totalNeeded, deficit: n.deficit })),
+      deficitCount: deficitItems.length,
+      productIdsFound: deficitItems.length > 0 ? [...new Set(deficitItems.map(d => d.product_id))] : [],
+      productsFound: products ? products.length : 0,
+      groupsCount: Object.keys(groups || {}).length,
+    };
+    return ok(res, { created, resetAlloc, deficitItems: deficitItems.length, debug });
   } catch (e) {
     return fail(res, e.message || '자동 발주 재생성 실패', 500);
   }
