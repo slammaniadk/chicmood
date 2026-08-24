@@ -224,6 +224,17 @@ async function handleOrders(req, res) {
     items = itemsData || [];
   }
 
+  // 반품 여부 조회
+  let returnMap = {};
+  if (orderIds.length > 0) {
+    const { data: returns } = await supabaseAdmin.from('returns')
+      .select('order_id, status')
+      .in('order_id', orderIds);
+    (returns || []).forEach(r => {
+      returnMap[r.order_id] = r.status;
+    });
+  }
+
   // 거래처명 조회를 위해 product_id → vendor 매핑
   const productIds = [...new Set(items.filter(i => i.product_id).map(i => i.product_id))];
   let vendorMap = {};
@@ -251,6 +262,7 @@ async function handleOrders(req, res) {
     trackingCarrier: o.tracking_carrier,
     broadcastId: o.broadcast_id || null,
     broadcastName: o.broadcasts ? o.broadcasts.title : '',
+    returnStatus: returnMap[o.id] || null,
     createdAt: o.created_at,
     items: items.filter(i => i.order_id === o.id).map(i => ({
       id: i.id,

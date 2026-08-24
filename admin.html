@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:23</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:27</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -832,7 +832,7 @@
                           <br><span class="font-bold text-warm-800">${fmt(o.total)}</span>
                         </div>
                       </td>
-                      <td><span class="status-badge status-${o.status}">${o.status}</span></td>
+                      <td><span class="status-badge status-${o.status}">${o.status}</span>${o.returnStatus ? `<br><span class="text-[9px] font-semibold ${o.returnStatus==='완료'?'text-red-500':'text-orange-500'}">반품${o.returnStatus==='완료'?'완료':'접수'}</span>` : ''}</td>
                       <td class="text-[12px] font-semibold whitespace-nowrap" style="${allocColor}">${allocLabel}</td>
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
                       <td class="whitespace-nowrap">
@@ -3399,7 +3399,7 @@
   let retFilter = 'all';
   let retPage = 1;
   let retSearch = '';
-  let _retOrderItems = []; // 접수 등록 시 조회된 주문 상품
+  let _retOrderItems = [];
 
   async function renderReturns(el) {
     showSpinner(el);
@@ -3476,13 +3476,12 @@
       }
       container.innerHTML = `
         <p class="text-[11px] text-warm-500 mb-2">주문자: ${escapeHtml(data.order.name)} / ${fmt(data.order.total)}</p>
-        ${_retOrderItems.map((item, idx) => `
-          <label class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-warm-50 cursor-pointer">
-            <input type="checkbox" class="ret-item-check" data-idx="${idx}" checked />
+        ${_retOrderItems.map(item => `
+          <div class="flex items-center gap-2 py-1.5 px-2">
             <span class="text-[13px]">${escapeHtml(item.name)}</span>
             <span class="text-[11px] text-warm-400">${item.color||''}/${item.size||''} x${item.qty}</span>
             <span class="text-[12px] font-semibold ml-auto">${fmt(item.subtotal)}</span>
-          </label>
+          </div>
         `).join('')}
       `;
       // 환불금액 자동 계산
@@ -3550,17 +3549,6 @@
     const reason = document.getElementById('ret-reason').value.trim();
     if (!reason) { showToast('사유를 입력해주세요'); return; }
 
-    // 선택된 상품 수집
-    const checks = document.querySelectorAll('.ret-item-check');
-    const selectedItems = [];
-    checks.forEach(chk => {
-      if (chk.checked) {
-        const idx = parseInt(chk.dataset.idx);
-        const item = _retOrderItems[idx];
-        if (item) selectedItems.push({ orderItemId: item.id, productId: item.product_id, name: item.name, color: item.color, size: item.size, qty: item.qty, price: item.price });
-      }
-    });
-
     try {
       await api('/admin/returns', {
         method: 'POST',
@@ -3570,7 +3558,6 @@
           reason,
           refundAmount: parseInt(document.getElementById('ret-refund').value) || 0,
           memo: document.getElementById('ret-memo').value.trim(),
-          items: selectedItems,
         })
       });
       showToast('접수가 완료되었습니다');
@@ -3603,26 +3590,14 @@
             <div><span class="text-[11px] text-warm-400 block">환불액</span><span class="font-semibold">${fmt(r.refundAmount||0)}</span></div>
             <div><span class="text-[11px] text-warm-400 block">사유</span><span class="text-[13px]">${escapeHtml(r.reason||'')}</span></div>
           </div>
-          ${r.items && r.items.length > 0 ? `
+          ${r.orderItems && r.orderItems.length > 0 ? `
           <div class="mb-4">
-            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">반품 상품</p>
+            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">주문 상품</p>
             <div class="border border-warm-200 rounded-lg overflow-hidden">
               <table class="text-[13px]">
                 <thead><tr><th>상품명</th><th>옵션</th><th>수량</th><th>금액</th></tr></thead>
                 <tbody>
-                  ${r.items.map(i => `<tr><td>${escapeHtml(i.name)}</td><td class="text-warm-400">${i.color||''}/${i.size||''}</td><td>${i.qty}</td><td class="font-semibold">${fmt(i.price * i.qty)}</td></tr>`).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>` : ''}
-          ${r.orderItems && r.orderItems.length > 0 ? `
-          <div class="mb-4">
-            <p class="text-[11px] font-semibold tracking-wider text-warm-500 mb-2">원래 주문 상품</p>
-            <div class="border border-warm-100 rounded-lg overflow-hidden bg-warm-50/50">
-              <table class="text-[12px]">
-                <thead><tr><th>상품명</th><th>옵션</th><th>수량</th><th>금액</th></tr></thead>
-                <tbody>
-                  ${r.orderItems.map(i => `<tr><td>${escapeHtml(i.name)}</td><td class="text-warm-400">${i.color||''}/${i.size||''}</td><td>${i.qty}</td><td>${fmt(i.subtotal)}</td></tr>`).join('')}
+                  ${r.orderItems.map(i => `<tr><td>${escapeHtml(i.name)}</td><td class="text-warm-400">${i.color||''}/${i.size||''}</td><td>${i.qty}</td><td class="font-semibold">${fmt(i.subtotal)}</td></tr>`).join('')}
                 </tbody>
               </table>
             </div>
