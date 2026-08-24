@@ -1503,6 +1503,8 @@ async function handlePORegenerate(req, res) {
     const deficitItems = Object.values(needMap).filter(n => n.deficit > 0);
     let created = 0;
     let skippedItems = [];
+    let totalGroups = 0;
+    let groupErrors = [];
     if (deficitItems.length > 0) {
       // 상품 정보 조회
       const productIds = [...new Set(deficitItems.map(d => d.product_id))];
@@ -1544,8 +1546,7 @@ async function handlePORegenerate(req, res) {
       }
 
       // 발주서 생성
-      const totalGroups = Object.keys(groups).length;
-      const groupErrors = [];
+      totalGroups = Object.keys(groups).length;
       for (const [groupKey, group] of Object.entries(groups)) {
         // 기존 발주대기 발주서 확인
         let existingPO = null;
@@ -1630,10 +1631,10 @@ async function handlePORegenerate(req, res) {
       needMapKeys: Object.keys(needMap).length,
       needMapDetail: Object.values(needMap).map(n => ({ pid: n.product_id, name: n.name, color: n.color, size: n.size, needed: n.totalNeeded, deficit: n.deficit })),
       deficitCount: deficitItems.length,
-      skippedItems: deficitItems.length > 0 ? (skippedItems || []) : [],
-      totalGroups: deficitItems.length > 0 ? (typeof totalGroups !== 'undefined' ? totalGroups : 0) : 0,
+      skippedItems,
+      totalGroups,
       groupsCreated: created,
-      groupErrors: deficitItems.length > 0 ? (groupErrors || []) : [],
+      groupErrors,
     };
     return ok(res, { created, resetAlloc, deficitItems: deficitItems.length, debug });
   } catch (e) {
