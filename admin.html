@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:22</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 21:23</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3409,8 +3409,8 @@
       if (retSearch) params.set('search', retSearch);
       const data = await api('/admin/returns?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit);
-      const statuses = ['all','접수','처리중','회수중','완료','거부'];
-      const statusLabels = { all:'전체', 접수:'접수', 처리중:'처리중', 회수중:'회수중', 완료:'완료', 거부:'거부' };
+      const statuses = ['all','접수','완료'];
+      const statusLabels = { all:'전체', 접수:'접수', 완료:'완료' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -3583,7 +3583,7 @@
     try {
       const data = await api('/admin/returns/' + retId);
       const r = data.returnData;
-      const statuses = ['접수','처리중','회수중','완료','거부'];
+      const statuses = ['접수','완료'];
       const d = new Date(r.createdAt);
       const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
       const modal = document.createElement('div');
