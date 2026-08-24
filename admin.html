@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 19:17</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 19:21</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -814,7 +814,7 @@
                   const mergeDisabled = ['배송완료','결제취소'].includes(o.status);
                   return `
                     <tr>
-                      <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked)" /></td>
+                      <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked, this)" /></td>
                       <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
                       <td class="whitespace-nowrap">
                         <p class="font-semibold">${escapeHtml(o.name)}</p>
@@ -1025,18 +1025,46 @@
     }
   }
 
-  function toggleMergeCheck(id, checked) {
+  function getRowStatus(cb) {
+    const row = cb.closest('tr');
+    return row?.querySelector('.status-badge')?.textContent?.trim() || '';
+  }
+
+  function toggleMergeCheck(id, checked, cbEl) {
+    if (checked && mergeChecked.size > 0) {
+      // 이미 선택된 주문의 상태와 비교
+      const newStatus = cbEl ? getRowStatus(cbEl) : '';
+      const existingCb = document.querySelector('tbody input[type="checkbox"]:checked:not(:disabled)');
+      const existingStatus = existingCb ? getRowStatus(existingCb) : '';
+      if (newStatus && existingStatus && newStatus !== existingStatus) {
+        showToast(`상태가 다른 주문은 함께 선택할 수 없습니다 (${existingStatus} ≠ ${newStatus})`);
+        if (cbEl) cbEl.checked = false;
+        return;
+      }
+    }
     if (checked) mergeChecked.add(id); else mergeChecked.delete(id);
     const counter = document.getElementById('merge-counter');
     if (counter) counter.textContent = mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : '';
   }
 
   function toggleAllMerge(checked) {
-    document.querySelectorAll('tbody input[type="checkbox"]:not(:disabled)').forEach(cb => {
-      cb.checked = checked;
-      const id = cb.getAttribute('onchange').match(/'([^']+)'/)?.[1];
-      if (id) { if (checked) mergeChecked.add(id); else mergeChecked.delete(id); }
-    });
+    if (!checked) {
+      mergeChecked.clear();
+      document.querySelectorAll('tbody input[type="checkbox"]:not(:disabled)').forEach(cb => { cb.checked = false; });
+    } else {
+      // 첫 번째 활성 체크박스의 상태를 기준으로 같은 상태만 선택
+      const allCbs = [...document.querySelectorAll('tbody input[type="checkbox"]:not(:disabled)')];
+      const firstStatus = allCbs.length > 0 ? getRowStatus(allCbs[0]) : '';
+      let skipped = 0;
+      allCbs.forEach(cb => {
+        const status = getRowStatus(cb);
+        if (status !== firstStatus) { cb.checked = false; skipped++; return; }
+        cb.checked = true;
+        const id = cb.getAttribute('onchange').match(/'([^']+)'/)?.[1];
+        if (id) mergeChecked.add(id);
+      });
+      if (skipped > 0) showToast(`상태가 다른 ${skipped}건은 선택에서 제외되었습니다 (기준: ${firstStatus})`);
+    }
     const counter = document.getElementById('merge-counter');
     if (counter) counter.textContent = mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : '';
   }
@@ -1061,7 +1089,8 @@
       const cells = row.querySelectorAll('td');
       const name = cells[2]?.querySelector('p')?.textContent?.trim() || '';
       const phone = cells[2]?.querySelector('p:nth-child(2)')?.textContent?.trim() || '';
-      selectedInfo.push({ id: orderId, name, phone });
+      const status = cells[8]?.querySelector('.status-badge')?.textContent?.trim() || '';
+      selectedInfo.push({ id: orderId, name, phone, status });
     });
 
     // 프론트 검증: 같은 주문자인지
@@ -1070,6 +1099,15 @@
     const allSame = selectedInfo.every(s => s.name === firstName && s.phone === firstPhone);
     if (!allSame) {
       showToast('같은 주문자(이름+연락처)의 주문만 병합할 수 있습니다');
+      return;
+    }
+
+    // 프론트 검증: 같은 상태인지
+    const firstStatus = selectedInfo[0]?.status;
+    const allSameStatus = selectedInfo.every(s => s.status === firstStatus);
+    if (!allSameStatus) {
+      const statusList = selectedInfo.map(s => `${s.id.slice(-4)}: ${s.status}`).join(', ');
+      showToast(`상태가 다른 주문은 병합할 수 없습니다 (${[...new Set(selectedInfo.map(s => s.status))].join(' / ')})`);
       return;
     }
 
