@@ -1346,7 +1346,19 @@ async function createAutoPurchaseOrders(orderId) {
       });
     }
 
-    // 5) 거래처+방송별 발주서 생성 또는 기존 발주대기 발주서에 합산
+    // 5) PO 번호 중복 방지: 루프 전에 max 번호 조회
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const { data: maxPOs } = await supabaseAdmin.from('purchase_orders')
+      .select('po_no').ilike('po_no', `PO-${dateStr}%`).order('po_no', { ascending: false }).limit(1);
+    let nextPONum = 1;
+    if (maxPOs && maxPOs.length > 0) {
+      const parts = maxPOs[0].po_no.split('-');
+      const lastNum = parseInt(parts[parts.length - 1]);
+      if (!isNaN(lastNum)) nextPONum = lastNum + 1;
+    }
+
+    // 거래처+방송별 발주서 생성 또는 기존 발주대기 발주서에 합산
     for (const group of Object.values(groups)) {
       const memoText = group.broadcastTitle || '';
 
@@ -1401,11 +1413,8 @@ async function createAutoPurchaseOrders(orderId) {
         }).eq('id', poId);
       } else {
         // 새 발주서 생성
-        const now = new Date();
-        const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
-        const { count } = await supabaseAdmin.from('purchase_orders')
-          .select('id', { count: 'exact', head: true }).ilike('po_no', `PO-${dateStr}%`);
-        const poNo = `PO-${dateStr}-${String((count || 0) + 1).padStart(3, '0')}`;
+        const poNo = `PO-${dateStr}-${String(nextPONum).padStart(3, '0')}`;
+        nextPONum++;
 
         const totalAmount = group.items.reduce((s, i) => s + i.qty * i.cost_price, 0);
         const insertData = { po_no: poNo, status: '발주대기', total_amount: totalAmount, memo: memoText };
