@@ -71,13 +71,25 @@ module.exports = async function handler(req, res) {
   const productIds = items.map(i => i.productId);
   const { data: products, error: pErr } = await supabaseAdmin
     .from('products')
-    .select('id, price, wholesale_price')
+    .select('id, name, price, wholesale_price, available_qty')
     .in('id', productIds);
 
   if (pErr) return fail(res, pErr.message, 500);
 
   const priceMap = {};
-  products.forEach(p => { priceMap[p.id] = p.wholesale_price || p.price; });
+  const productMap = {};
+  products.forEach(p => { priceMap[p.id] = p.wholesale_price || p.price; productMap[p.id] = p; });
+
+  // 판매가능수량 체크 (available_qty가 지정된 상품만)
+  for (const item of items) {
+    const prod = productMap[item.productId];
+    if (!prod || prod.available_qty === null || prod.available_qty === undefined) continue;
+    const requestQty = Math.max(1, Math.min(99, parseInt(item.qty) || 1));
+    if (prod.available_qty < requestQty) {
+      const remain = prod.available_qty <= 0 ? '품절' : `잔여 ${prod.available_qty}개`;
+      return fail(res, `${prod.name} 주문 불가 (${remain})`);
+    }
+  }
 
   // 주문 항목 가격 계산
   const orderItems = items.map(item => {
@@ -201,6 +213,15 @@ module.exports = async function handler(req, res) {
     .insert(itemsToInsert);
 
   if (iErr) return fail(res, iErr.message, 500);
+
+  // 판매가능수량 차감 (available_qty가 지정된 상품만)
+  for (const item of orderItems) {
+    const prod = productMap[item.product_id];
+    if (!prod || prod.available_qty === null || prod.available_qty === undefined) continue;
+    await supabaseAdmin.from('products')
+      .update({ available_qty: Math.max(0, prod.available_qty - item.qty) })
+      .eq('id', item.product_id);
+  }
 
   return ok(res, {
     orderNo: order.order_no,

@@ -360,6 +360,8 @@ async function handleOrderDetail(req, res, id) {
     }
     // 발주 차감 (항상 시도)
     await deductPurchaseOrderQty(id);
+    // 판매가능수량 복원
+    await restoreAvailableQty(id);
     await supabaseAdmin.from('order_items').delete().eq('order_id', id);
     const { error } = await supabaseAdmin.from('orders').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);
@@ -407,6 +409,10 @@ async function handleOrderDetail(req, res, id) {
   // 결제완료에서 다른 상태로 변경 시 발주 수량 차감
   if (prevStatus === '결제완료' && status !== '결제완료') {
     await deductPurchaseOrderQty(id);
+  }
+  // 결제취소 시 판매가능수량 복원
+  if (status === '결제취소' && prevStatus !== '결제취소') {
+    await restoreAvailableQty(id);
   }
   // 배송완료 전환 시 미배송 품목만 재고 차감 + 배정 해제 + 송장번호 기록 + status 갱신
   if (status === '배송완료' && prevStatus !== '배송완료') {
@@ -932,6 +938,32 @@ async function deductPurchaseOrderQty(orderId) {
   } catch (e) { console.error('발주 차감 오류:', e.message || e); }
 }
 
+// 주문 취소/삭제 시 판매가능수량 복원
+async function restoreAvailableQty(orderId) {
+  try {
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, qty').eq('order_id', orderId);
+    if (!items || items.length === 0) return;
+
+    // 상품별 수량 합산
+    const qtyMap = {};
+    items.forEach(i => {
+      if (!i.product_id) return;
+      qtyMap[i.product_id] = (qtyMap[i.product_id] || 0) + (i.qty || 0);
+    });
+
+    for (const [productId, qty] of Object.entries(qtyMap)) {
+      const { data: prod } = await supabaseAdmin.from('products')
+        .select('id, available_qty').eq('id', productId).single();
+      // available_qty가 NULL(무제한)이면 복원 불필요
+      if (!prod || prod.available_qty === null || prod.available_qty === undefined) continue;
+      await supabaseAdmin.from('products')
+        .update({ available_qty: prod.available_qty + qty })
+        .eq('id', parseInt(productId));
+    }
+  } catch (e) { console.error('판매가능수량 복원 오류:', e.message || e); }
+}
+
 // 단일 품목 발주 추가 헬퍼 (품목별 결제완료 전환 시)
 async function addItemToPurchaseOrder(orderId, item) {
   try {
@@ -1284,6 +1316,7 @@ async function handleProducts(req, res) {
       vendorName: p.vendors ? p.vendors.name : '',
       costPrice: p.cost_price || 0,
       wholesalePrice: p.wholesale_price || 0,
+      availableQty: p.available_qty,
       size: p.size || '',
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
@@ -1293,7 +1326,7 @@ async function handleProducts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty } = req.body;
     if (!name) return fail(res, '상품명은 필수입니다');
 
     const finalPrice = price || costPrice || 0;
@@ -1301,6 +1334,7 @@ async function handleProducts(req, res) {
     if (vendorId) insertData.vendor_id = vendorId;
     if (costPrice) insertData.cost_price = costPrice;
     if (wholesalePrice !== undefined) insertData.wholesale_price = wholesalePrice;
+    if (availableQty !== undefined) insertData.available_qty = availableQty;
 
     const { data: product, error } = await supabaseAdmin
       .from('products')
@@ -1329,7 +1363,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -1342,6 +1376,7 @@ async function handleProductDetail(req, res, id) {
     if (costPrice !== undefined) update.cost_price = costPrice;
     if (wholesalePrice !== undefined) update.wholesale_price = wholesalePrice;
     if (size !== undefined) update.size = size;
+    if (availableQty !== undefined) update.available_qty = availableQty;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('products').update(update).eq('id', id);

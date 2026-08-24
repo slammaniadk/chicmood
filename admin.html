@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 17:56</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.24 18:38</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1736,7 +1736,7 @@
   let vendorListCache = null;
   async function openProductModal(product) {
     const isEdit = !!product;
-    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0, size: '' };
+    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0, size: '', availableQty: null };
     pmImageUrls = [...p.images];
 
     // 거래처 목록 로드
@@ -1759,7 +1759,7 @@
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품명 *</label>
             <input id="pm-name" class="input-field" value="${escapeHtml(p.name)}" placeholder="상품명" />
           </div>
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-4 gap-3">
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처</label>
               <select id="pm-vendor" class="input-field">
@@ -1774,6 +1774,10 @@
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">판매가</label>
               <input id="pm-wholesale" type="number" class="input-field" value="${p.wholesalePrice||''}" placeholder="판매가" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">판매가능수량</label>
+              <input id="pm-available-qty" type="number" class="input-field" value="${p.availableQty !== null && p.availableQty !== undefined ? p.availableQty : ''}" placeholder="무제한" min="0" />
             </div>
           </div>
           <div>
@@ -1908,6 +1912,8 @@
     const vendorId = document.getElementById('pm-vendor').value ? parseInt(document.getElementById('pm-vendor').value) : null;
     const costPrice = parseInt(document.getElementById('pm-cost').value) || 0;
     const wholesalePrice = parseInt(document.getElementById('pm-wholesale').value) || 0;
+    const aqVal = document.getElementById('pm-available-qty').value.trim();
+    const availableQty = aqVal === '' ? null : Math.max(0, parseInt(aqVal) || 0);
     const sizeChecked = [...document.querySelectorAll('.pm-size-cb:checked')].map(cb => cb.value);
     const size = sizeChecked.join(',');
     const price = wholesalePrice || costPrice;
@@ -1925,13 +1931,13 @@
       if (id) {
         await api('/admin/products/' + id, {
           method: 'PATCH',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty })
         });
         showToast('상품이 수정되었습니다');
       } else {
         await api('/admin/products', {
           method: 'POST',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty })
         });
         showToast('상품이 등록되었습니다');
       }
