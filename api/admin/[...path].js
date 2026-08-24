@@ -2571,12 +2571,7 @@ async function handleReturnDetail(req, res, id) {
     const { error } = await supabaseAdmin.from('returns').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
 
-    // 반품/취소 완료 시 재고 자동 복원 (이전 상태가 완료가 아닐 때만)
-    if (status === '완료' && currentReturn && currentReturn.status !== '완료') {
-      if (['반품', '취소'].includes(currentReturn.type)) {
-        await restoreInventoryForReturn(currentReturn);
-      }
-    }
+    // 반품관리는 이력 기록 용도 — 재고 복원 없음
 
     return ok(res, { id: parseInt(id) });
   }
