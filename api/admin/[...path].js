@@ -317,33 +317,18 @@ async function handleOrderMerge(req, res) {
     await deductPurchaseOrderQty(srcId);
   }
 
-  // 6) target subtotal/total 재계산 (items 합산 + 동일방송 누적 배송비 로직)
-  const { data: targetItems } = await supabaseAdmin.from('order_items')
-    .select('subtotal')
-    .eq('order_id', targetId);
-  const newSubtotal = (targetItems || []).reduce((sum, i) => sum + (i.subtotal || 0), 0);
+  // 6) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
+  const { data: allOrderDetails } = await supabaseAdmin.from('orders')
+    .select('subtotal, shipping_fee, shipping_refund, total')
+    .in('id', allIds);
 
-  let shippingFee = newSubtotal >= 100000 ? 0 : 4000;
-  let shippingRefund = 0;
-
-  // 동일방송 동일주문자 다른 주문이 있으면 배송비 무료
-  if (target.broadcast_id) {
-    const { data: otherOrders } = await supabaseAdmin.from('orders')
-      .select('id')
-      .eq('broadcast_id', target.broadcast_id)
-      .eq('name', target.name)
-      .eq('phone', target.phone)
-      .neq('status', '결제취소')
-      .neq('id', targetId)
-      .not('id', 'in', `(${sourceIds.join(',')})`);
-
-    if (otherOrders && otherOrders.length > 0) {
-      shippingFee = 0;
-    }
-  }
+  const newSubtotal = (allOrderDetails || []).reduce((s, o) => s + (o.subtotal || 0), 0);
+  const newShippingFee = (allOrderDetails || []).reduce((s, o) => s + (o.shipping_fee || 0), 0);
+  const newShippingRefund = (allOrderDetails || []).reduce((s, o) => s + (o.shipping_refund || 0), 0);
+  const newTotal = newSubtotal + newShippingFee - newShippingRefund;
 
   const { error: updateErr } = await supabaseAdmin.from('orders')
-    .update({ subtotal: newSubtotal, shipping_fee: shippingFee, shipping_refund: 0, total: newSubtotal + shippingFee })
+    .update({ subtotal: newSubtotal, shipping_fee: newShippingFee, shipping_refund: newShippingRefund, total: newTotal })
     .eq('id', targetId);
   if (updateErr) return fail(res, `금액 재계산 실패: ${updateErr.message}`, 500);
 
