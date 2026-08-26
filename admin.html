@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:52</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 11:52</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -794,11 +794,11 @@
               <thead>
                 <tr>
                   <th style="width:32px"><input type="checkbox" onchange="toggleAllMerge(this.checked)" /></th>
-                  <th>주문번호</th><th>주문자</th><th>닉네임</th><th>상품</th><th>방송</th><th>거래처</th><th>금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
+                  <th>주문번호</th><th>주문자</th><th>닉네임</th><th>상품</th><th>방송</th><th>거래처</th><th style="display:none">금액</th><th>상태</th><th>배정</th><th>일시</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="12" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="11" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -836,7 +836,7 @@
                       <td class="text-[12px] text-warm-500">${itemsSummary}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.broadcastName || '-')}</td>
                       <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(vendorNames || '-')}</td>
-                      <td class="text-[11px] whitespace-nowrap">
+                      <td class="text-[11px] whitespace-nowrap" style="display:none">
                         ${o.items.map(i => `<span class="text-warm-500">${escapeHtml(i.name)} ${fmt(i.price)}x${i.qty}=</span><span class="font-semibold">${fmt(i.subtotal)}</span>`).join('<br>')}
                         <div class="border-t border-warm-100 mt-1 pt-1">
                           ${o.shippingFee > 0 ? `<span class="text-warm-400">배송비 ${fmt(o.shippingFee)}</span>` : `<span class="text-green-600">배송비 무료</span>`}
