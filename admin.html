@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:07</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:47</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1404,15 +1404,35 @@
       const ws = wb.Sheets[wb.SheetNames[0]];
       const allRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // Row 3부터 데이터 (Row 0: 타이틀, Row 1-2: 헤더)
+      // 헤더 행에서 열 인덱스 동적 탐지 (Row 0~4 범위에서 검색)
+      let colTracking = -1, colName = -1, colPhone = -1, headerRowIdx = -1;
+      for (let h = 0; h < Math.min(allRows.length, 5); h++) {
+        const hr = (allRows[h] || []).map(c => String(c || '').replace(/\s/g, ''));
+        const ti = hr.findIndex(c => c.includes('운송장번호'));
+        if (ti !== -1) {
+          colTracking = ti;
+          // 수하인 쪽 이름/전화 찾기 (운송장번호 이후 첫 번째 매칭)
+          colName = hr.findIndex((c, idx) => idx > ti && c === '이름');
+          colPhone = hr.findIndex((c, idx) => idx > ti && c === '전화');
+          // 이름을 못 찾으면 '수하인' 그룹 아래 첫 번째 열 시도
+          if (colName === -1) colName = hr.findIndex((c, idx) => idx > ti && c.includes('수하인'));
+          headerRowIdx = h;
+          break;
+        }
+      }
+      if (colTracking === -1) { showToast('엑셀에서 "운송장번호" 열을 찾을 수 없습니다'); return; }
+      if (colName === -1) { showToast('엑셀에서 "이름" 열을 찾을 수 없습니다'); return; }
+      if (colPhone === -1) colPhone = colName + 3; // 전화 열 못 찾으면 이름+3 fallback
+
+      const dataStartRow = headerRowIdx + 1;
       const rows = [];
-      for (let i = 3; i < allRows.length; i++) {
+      for (let i = dataStartRow; i < allRows.length; i++) {
         const r = allRows[i];
         if (!r || r.length === 0) continue;
-        const trackingNo = r[3]; // D열: 운송장번호
-        const name = r[6];      // G열: 수하인 이름
-        const phone = r[9];     // J열: 수하인 전화
-        if (!trackingNo) continue; // 운송장 없으면 스킵
+        const trackingNo = r[colTracking];
+        const name = r[colName];
+        const phone = r[colPhone];
+        if (!trackingNo) continue;
         rows.push([String(trackingNo), String(name || ''), String(phone || '')]);
       }
 
