@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.25 17:23</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:07</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -827,7 +827,7 @@
                   return `
                     <tr>
                       <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked, this)" /></td>
-                      <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}</td>
+                      <td class="font-semibold text-warm-800 text-[12px] whitespace-nowrap">${o.orderNo}${o.mergeHistoryId ? ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#ede9fe;color:#7c3aed;font-weight:600;">병합</span>' : ''}</td>
                       <td class="whitespace-nowrap">
                         <p class="font-semibold">${escapeHtml(o.name)}</p>
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
@@ -855,6 +855,7 @@
                           ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}')">발송문구</button>`
                           : `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;opacity:0.3;cursor:default;" disabled>발송문구</button>`
                         }
+                        ${o.mergeHistoryId ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#7c3aed;border-color:#7c3aed;" onclick="unmergeOrder('${o.id}','${o.orderNo}')">병합해제</button>` : ''}
                       </td>
                     </tr>
                   `;
@@ -1146,6 +1147,21 @@
       showToast('주문이 삭제되었습니다');
       renderOrders(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function unmergeOrder(targetId, orderNo) {
+    if (!confirm(`주문 ${orderNo}의 병합을 해제하시겠습니까?\n병합 전 원본 주문이 새 주문번호로 복원됩니다.`)) return;
+    try {
+      const result = await api('/admin/orders/unmerge', {
+        method: 'POST',
+        body: JSON.stringify({ targetId })
+      });
+      const restored = (result.restoredOrders || []).map(r => `${r.originalOrderNo} → ${r.newOrderNo}`).join('\n');
+      showToast(`병합이 해제되었습니다\n${restored}`);
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '병합해제에 실패했습니다');
+    }
   }
 
   // ============================================================

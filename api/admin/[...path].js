@@ -67,6 +67,7 @@ module.exports = async function handler(req, res) {
     case 'stats':    return handleStats(req, res);
     case 'orders':
       if (resourceId === 'merge') return handleOrderMerge(req, res);
+      if (resourceId === 'unmerge') return handleOrderUnmerge(req, res);
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3]) {
         return handleOrderItemDetail(req, res, resourceId, pathSegments[3]);
       }
@@ -264,6 +265,7 @@ async function handleOrders(req, res) {
     trackingCarrier: o.tracking_carrier,
     broadcastId: o.broadcast_id || null,
     broadcastName: o.broadcasts ? o.broadcasts.title : '',
+    mergeHistoryId: o.merge_history_id || null,
     returnStatus: returnMap[o.id] || null,
     createdAt: o.created_at,
     items: items.filter(i => i.order_id === o.id).map(i => ({
@@ -318,7 +320,29 @@ async function handleOrderMerge(req, res) {
     return fail(res, `병합 불가 상태(${blocked.map(o => o.status).join(', ')})의 주문이 포함되어 있습니다`, 400);
   }
 
-  // 4) source의 order_items → target order_id로 UPDATE
+  // 4) 병합 이력 스냅샷 저장 (병합해제용)
+  const sourceSnapshots = [];
+  for (const srcId of sourceIds) {
+    const { data: srcOrder } = await supabaseAdmin.from('orders').select('*').eq('id', srcId).single();
+    const { data: srcItems } = await supabaseAdmin.from('order_items').select('id').eq('order_id', srcId);
+    if (srcOrder) {
+      sourceSnapshots.push({
+        ...srcOrder,
+        item_ids: (srcItems || []).map(i => i.id),
+      });
+    }
+  }
+  const { data: mergeRecord, error: mergeHistErr } = await supabaseAdmin.from('merge_history')
+    .insert({
+      target_id: targetId,
+      merged_by: req._admin.id,
+      source_orders: sourceSnapshots,
+    })
+    .select('id')
+    .single();
+  if (mergeHistErr) return fail(res, `병합 이력 저장 실패: ${mergeHistErr.message}`, 500);
+
+  // 5) source의 order_items → target order_id로 UPDATE
   for (const srcId of sourceIds) {
     const { error: moveErr } = await supabaseAdmin.from('order_items')
       .update({ order_id: targetId })
@@ -326,12 +350,12 @@ async function handleOrderMerge(req, res) {
     if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
   }
 
-  // 5) source 발주 수량 차감
+  // 6) source 발주 수량 차감
   for (const srcId of sourceIds) {
     await deductPurchaseOrderQty(srcId);
   }
 
-  // 6) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
+  // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
   const { data: allOrderDetails } = await supabaseAdmin.from('orders')
     .select('subtotal, shipping_fee, shipping_refund, total')
     .in('id', allIds);
@@ -346,13 +370,18 @@ async function handleOrderMerge(req, res) {
     .eq('id', targetId);
   if (updateErr) return fail(res, `금액 재계산 실패: ${updateErr.message}`, 500);
 
-  // 7) source 주문 DELETE (order_items는 이미 이동됨)
+  // 8) source 주문 DELETE (order_items는 이미 이동됨)
   for (const srcId of sourceIds) {
     await supabaseAdmin.from('order_items').delete().eq('order_id', srcId);
     await supabaseAdmin.from('orders').delete().eq('id', srcId);
   }
 
-  // 8) 로그 기록
+  // 9) target 주문에 merge_history_id 설정
+  await supabaseAdmin.from('orders')
+    .update({ merge_history_id: mergeRecord.id })
+    .eq('id', targetId);
+
+  // 10) 로그 기록
   await writeLog(req._admin, 'UPDATE', 'order', targetId, {
     action: '주문병합',
     mergedFrom: sourceIds,
@@ -360,6 +389,134 @@ async function handleOrderMerge(req, res) {
   });
 
   return ok(res, { merged: true, targetId, mergedCount: sourceIds.length });
+}
+
+// ============================================================
+//  ORDER UNMERGE (POST)
+// ============================================================
+async function handleOrderUnmerge(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  const { targetId } = req.body || {};
+  if (!targetId) return fail(res, 'targetId가 필요합니다', 400);
+
+  // 1) 활성 병합 이력 조회 (가장 최근 것, unmerged_at IS NULL)
+  const { data: history, error: histErr } = await supabaseAdmin.from('merge_history')
+    .select('*')
+    .eq('target_id', targetId)
+    .is('unmerged_at', null)
+    .order('merged_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (histErr || !history) return fail(res, '병합 이력을 찾을 수 없습니다', 404);
+
+  // 2) target 주문 상태 검증
+  const { data: targetOrder, error: targetErr } = await supabaseAdmin.from('orders')
+    .select('*')
+    .eq('id', targetId)
+    .single();
+  if (targetErr || !targetOrder) return fail(res, '대상 주문을 찾을 수 없습니다', 404);
+
+  const BLOCKED_STATUSES = ['배송완료', '결제취소'];
+  if (BLOCKED_STATUSES.includes(targetOrder.status)) {
+    return fail(res, `현재 상태(${targetOrder.status})에서는 병합해제할 수 없습니다`, 400);
+  }
+
+  const sourceOrders = history.source_orders || [];
+  if (sourceOrders.length === 0) return fail(res, '복원할 원본 주문 정보가 없습니다', 400);
+
+  const restoredOrders = [];
+
+  // 3) 각 source 주문 복원
+  for (const src of sourceOrders) {
+    // 새 주문번호 생성
+    const { data: seqData, error: seqErr } = await supabaseAdmin
+      .rpc('nextval', { seq_name: 'order_seq' });
+    let orderSeq;
+    if (seqErr) {
+      orderSeq = Date.now() % 100000;
+    } else {
+      orderSeq = seqData;
+    }
+    const now = new Date();
+    const ds = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const newOrderNo = `CM-${ds}-${String(orderSeq).padStart(4, '0')}`;
+
+    // 주문 INSERT (원본 금액/주소/메모 복원, 상태는 target 현재 상태 상속)
+    const { data: newOrder, error: insertErr } = await supabaseAdmin.from('orders')
+      .insert({
+        order_no: newOrderNo,
+        user_id: src.user_id || null,
+        name: src.name,
+        phone: src.phone,
+        social: src.social || null,
+        address: src.address,
+        memo: src.memo || null,
+        subtotal: src.subtotal || 0,
+        shipping_fee: src.shipping_fee || 0,
+        shipping_refund: src.shipping_refund || 0,
+        total: src.total || 0,
+        status: targetOrder.status,
+        broadcast_id: src.broadcast_id || null,
+      })
+      .select('id, order_no')
+      .single();
+    if (insertErr) return fail(res, `주문 복원 실패: ${insertErr.message}`, 500);
+
+    // 아이템을 복원된 주문으로 이동
+    if (src.item_ids && src.item_ids.length > 0) {
+      const { error: moveErr } = await supabaseAdmin.from('order_items')
+        .update({ order_id: newOrder.id })
+        .in('id', src.item_ids);
+      if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
+    }
+
+    // 복원된 주문에 대해 자동 발주 생성
+    await createAutoPurchaseOrders(newOrder.id);
+
+    restoredOrders.push({
+      originalOrderNo: src.order_no,
+      newOrderNo: newOrder.order_no,
+      newOrderId: newOrder.id,
+    });
+  }
+
+  // 4) target 주문 금액 재계산 (남은 아이템 기준)
+  const { data: remainingItems } = await supabaseAdmin.from('order_items')
+    .select('subtotal')
+    .eq('order_id', targetId);
+  const remainSubtotal = (remainingItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+
+  // source 주문들의 배송비/차감 합산 (target에서 차감)
+  const srcShippingFee = sourceOrders.reduce((s, o) => s + (o.shipping_fee || 0), 0);
+  const srcShippingRefund = sourceOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
+  const remainShippingFee = (targetOrder.shipping_fee || 0) - srcShippingFee;
+  const remainShippingRefund = (targetOrder.shipping_refund || 0) - srcShippingRefund;
+  const remainTotal = remainSubtotal + remainShippingFee - remainShippingRefund;
+
+  await supabaseAdmin.from('orders')
+    .update({
+      subtotal: remainSubtotal,
+      shipping_fee: remainShippingFee,
+      shipping_refund: remainShippingRefund,
+      total: remainTotal,
+      merge_history_id: null,
+    })
+    .eq('id', targetId);
+
+  // 5) merge_history에 병합해제 시각 기록
+  await supabaseAdmin.from('merge_history')
+    .update({ unmerged_at: new Date().toISOString(), unmerged_by: req._admin.id })
+    .eq('id', history.id);
+
+  // 6) 로그 기록
+  await writeLog(req._admin, 'UPDATE', 'order', targetId, {
+    action: '병합해제',
+    restoredOrders: restoredOrders.map(r => r.newOrderNo),
+    name: targetOrder.name,
+  });
+
+  return ok(res, { unmerged: true, targetId, restoredOrders });
 }
 
 // ============================================================
