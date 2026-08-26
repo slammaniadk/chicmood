@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:50</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 10:52</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1225,11 +1225,11 @@
               <button class="btn-outline btn-sm" onclick="renderShipping(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                로젠택배 엑셀 다운로드
+                로젠 발송요청 다운로드
               </button>
               <button class="btn-outline flex items-center gap-2" onclick="document.getElementById('tracking-file-input').click()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                운송장 엑셀 업로드
+                운송장 일괄 업로드
               </button>
               <input type="file" id="tracking-file-input" accept=".xlsx,.xls" style="display:none" onchange="uploadTrackingExcel(this)" />
               <button class="btn-primary flex items-center gap-2" style="background:#16a765;" onclick="saveAllTrackingNo()">전체 저장</button>
