@@ -554,20 +554,21 @@ async function handleOrderSplit(req, res) {
     return fail(res, '품목이 2개 이상인 주문만 분리할 수 있습니다', 400);
   }
 
-  // 4) itemIds 검증: 모두 해당 주문의 아이템인지
-  const allItemIds = allItems.map(i => i.id);
-  const invalidIds = itemIds.filter(id => !allItemIds.includes(id));
+  // 4) itemIds 검증: 모두 해당 주문의 아이템인지 (문자열로 통일 비교)
+  const itemIdStrs = itemIds.map(id => String(id));
+  const allItemIdStrs = allItems.map(i => String(i.id));
+  const invalidIds = itemIdStrs.filter(id => !allItemIdStrs.includes(id));
   if (invalidIds.length > 0) {
     return fail(res, '선택한 품목이 해당 주문에 속하지 않습니다', 400);
   }
 
   // 최소 1개는 원본에 남아야 함
-  const remainItems = allItems.filter(i => !itemIds.includes(i.id));
+  const remainItems = allItems.filter(i => !itemIdStrs.includes(String(i.id)));
   if (remainItems.length === 0) {
     return fail(res, '최소 1개 품목은 원본 주문에 남아야 합니다', 400);
   }
 
-  const splitItems = allItems.filter(i => itemIds.includes(i.id));
+  const splitItems = allItems.filter(i => itemIdStrs.includes(String(i.id)));
 
   // 5) 금액 계산
   const remainSubtotal = remainItems.reduce((s, i) => s + (i.subtotal || 0), 0);
