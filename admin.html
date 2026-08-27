@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 09:21</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 09:56</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -857,6 +857,7 @@
                           : `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;opacity:0.3;cursor:default;" disabled>발송문구</button>`
                         }
                         ${o.mergeHistoryId ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#7c3aed;border-color:#7c3aed;" onclick="unmergeOrder('${o.id}','${o.orderNo}')">병합해제</button>` : ''}
+                        ${o.items.length >= 2 && !['배송완료','결제취소'].includes(o.status) ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#d97706;border-color:#d97706;" onclick="openSplitModal('${o.id}','${o.orderNo}','${itemsJson}',${o.shippingFee},${o.shippingRefund||0},${o.total})">분리</button>` : ''}
                       </td>
                     </tr>
                   `;
@@ -1162,6 +1163,154 @@
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '병합해제에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  ORDER SPLIT (주문 분리)
+  // ============================================================
+  let _splitOrderId = '';
+  let _splitOrderNo = '';
+  let _splitItems = [];
+  let _splitShippingFee = 0;
+  let _splitShippingRefund = 0;
+  let _splitOriginalTotal = 0;
+
+  function openSplitModal(orderId, orderNo, itemsB64, shippingFee, shippingRefund, originalTotal) {
+    let items = [];
+    try { items = JSON.parse(decodeURIComponent(escape(atob(itemsB64 || '')))); } catch(e) {}
+    if (items.length < 2) { showToast('품목이 2개 이상인 주문만 분리할 수 있습니다'); return; }
+
+    _splitOrderId = orderId;
+    _splitOrderNo = orderNo;
+    _splitItems = items;
+    _splitShippingFee = shippingFee || 0;
+    _splitShippingRefund = shippingRefund || 0;
+    _splitOriginalTotal = originalTotal || 0;
+
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'split-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6" style="max-width:600px;">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문 분리</h3>
+          <button onclick="document.getElementById('split-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-[12px] text-warm-500 mb-4">주문번호: <span class="font-semibold text-warm-800">${orderNo}</span> &nbsp; 분리할 품목을 선택하세요.</p>
+
+        <div class="border border-warm-200 rounded-lg overflow-hidden mb-4">
+          <table style="font-size:12px;width:100%;">
+            <thead>
+              <tr style="background:#fdf8f4;">
+                <th style="padding:8px;width:32px;"></th>
+                <th style="padding:8px;text-align:left;">상품</th>
+                <th style="padding:8px;text-align:right;">수량</th>
+                <th style="padding:8px;text-align:right;">소계</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item, idx) => `
+                <tr>
+                  <td style="padding:8px;"><input type="checkbox" class="split-item-chk" data-idx="${idx}" data-id="${item.id}" onchange="updateSplitPreview()" /></td>
+                  <td style="padding:8px;" class="whitespace-nowrap">${escapeHtml(item.name)} <span class="text-warm-400">(${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')})</span></td>
+                  <td style="padding:8px;text-align:right;">${item.qty}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600;">${fmt(item.subtotal)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div id="split-preview" class="card p-4 mb-4" style="background:#fffbeb;border-color:#fbbf24;display:none;">
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button class="btn-outline btn-sm" onclick="document.getElementById('split-modal').remove()">취소</button>
+          <button id="split-execute-btn" class="btn-primary btn-sm" style="background:#d97706;border-color:#d97706;" onclick="executeSplitOrder()" disabled>분리 실행</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  function updateSplitPreview() {
+    const checked = [...document.querySelectorAll('.split-item-chk:checked')];
+    const preview = document.getElementById('split-preview');
+    const btn = document.getElementById('split-execute-btn');
+
+    if (checked.length === 0) {
+      preview.style.display = 'none';
+      btn.disabled = true;
+      return;
+    }
+
+    // 전체 선택 방지
+    if (checked.length >= _splitItems.length) {
+      showToast('최소 1개 품목은 원본 주문에 남아야 합니다');
+      checked[checked.length - 1].checked = false;
+      updateSplitPreview();
+      return;
+    }
+
+    const checkedIdxs = checked.map(cb => parseInt(cb.dataset.idx));
+    const splitSubtotal = checkedIdxs.reduce((s, idx) => s + (_splitItems[idx].subtotal || 0), 0);
+    const remainSubtotal = _splitItems.reduce((s, item, idx) => s + (checkedIdxs.includes(idx) ? 0 : (item.subtotal || 0)), 0);
+
+    // 배송비 배정: 큰 subtotal 쪽에 (동일하면 원본)
+    let remainFee, remainRefund, splitFee, splitRefund;
+    if (remainSubtotal >= splitSubtotal) {
+      remainFee = _splitShippingFee;
+      remainRefund = _splitShippingRefund;
+      splitFee = 0;
+      splitRefund = 0;
+    } else {
+      remainFee = 0;
+      remainRefund = 0;
+      splitFee = _splitShippingFee;
+      splitRefund = _splitShippingRefund;
+    }
+
+    const remainTotal = remainSubtotal + remainFee - remainRefund;
+    const splitTotal = splitSubtotal + splitFee - splitRefund;
+    const sumTotal = remainTotal + splitTotal;
+
+    preview.style.display = 'block';
+    preview.innerHTML = `
+      <div class="text-[12px] space-y-1">
+        <div class="flex justify-between"><span class="text-warm-600">원본 주문:</span><span class="font-semibold">${fmt(remainSubtotal)}${remainFee > 0 ? ` + 배송비 ${fmt(remainFee)}` : ''}${remainRefund > 0 ? ` - 차감 ${fmt(remainRefund)}` : ''} = <span class="text-warm-800">${fmt(remainTotal)}</span></span></div>
+        <div class="flex justify-between"><span class="text-warm-600">새 주문:</span><span class="font-semibold">${fmt(splitSubtotal)}${splitFee > 0 ? ` + 배송비 ${fmt(splitFee)}` : ''}${splitRefund > 0 ? ` - 차감 ${fmt(splitRefund)}` : ''} = <span class="text-warm-800">${fmt(splitTotal)}</span></span></div>
+        <div class="border-t border-warm-200 pt-1 mt-1 flex justify-between"><span class="text-warm-600 font-semibold">합계:</span><span class="font-bold ${sumTotal === _splitOriginalTotal ? 'text-green-600' : 'text-red-500'}">${fmt(sumTotal)} ${sumTotal === _splitOriginalTotal ? '✓' : '✗ 불일치!'}</span></div>
+      </div>
+    `;
+    btn.disabled = false;
+  }
+
+  async function executeSplitOrder() {
+    const checked = [...document.querySelectorAll('.split-item-chk:checked')];
+    if (checked.length === 0) { showToast('분리할 품목을 선택해주세요'); return; }
+    if (checked.length >= _splitItems.length) { showToast('최소 1개 품목은 원본 주문에 남아야 합니다'); return; }
+
+    const itemIds = checked.map(cb => cb.dataset.id);
+    const itemNames = checked.map(cb => {
+      const idx = parseInt(cb.dataset.idx);
+      const item = _splitItems[idx];
+      return `${item.name}(${item.color||''}/${item.size||''})x${item.qty}`;
+    }).join(', ');
+
+    if (!confirm(`선택한 품목을 새 주문으로 분리하시겠습니까?\n\n분리 품목: ${itemNames}`)) return;
+
+    try {
+      const result = await api('/admin/orders/split', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: _splitOrderId, itemIds })
+      });
+      const msg = `주문이 분리되었습니다\n원본: ${result.originalOrder.orderNo} (${fmt(result.originalOrder.total)})\n새 주문: ${result.newOrder.orderNo} (${fmt(result.newOrder.total)})`;
+      showToast(msg);
+      document.getElementById('split-modal').remove();
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '주문 분리에 실패했습니다');
     }
   }
 

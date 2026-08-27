@@ -68,6 +68,7 @@ module.exports = async function handler(req, res) {
     case 'orders':
       if (resourceId === 'merge') return handleOrderMerge(req, res);
       if (resourceId === 'unmerge') return handleOrderUnmerge(req, res);
+      if (resourceId === 'split') return handleOrderSplit(req, res);
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3]) {
         return handleOrderItemDetail(req, res, resourceId, pathSegments[3]);
       }
@@ -517,6 +518,163 @@ async function handleOrderUnmerge(req, res) {
   });
 
   return ok(res, { unmerged: true, targetId, restoredOrders });
+}
+
+// ============================================================
+//  ORDER SPLIT (POST) — 주문 분리(쪼개기)
+// ============================================================
+async function handleOrderSplit(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  const { orderId, itemIds } = req.body || {};
+  if (!orderId) return fail(res, 'orderId가 필요합니다', 400);
+  if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+    return fail(res, '분리할 품목(itemIds)을 선택해주세요', 400);
+  }
+
+  // 1) 원본 주문 조회
+  const { data: order, error: orderErr } = await supabaseAdmin.from('orders')
+    .select('*')
+    .eq('id', orderId)
+    .single();
+  if (orderErr || !order) return fail(res, '주문을 찾을 수 없습니다', 404);
+
+  // 2) 상태 검증
+  const BLOCKED_STATUSES = ['배송완료', '결제취소'];
+  if (BLOCKED_STATUSES.includes(order.status)) {
+    return fail(res, `현재 상태(${order.status})에서는 주문을 분리할 수 없습니다`, 400);
+  }
+
+  // 3) 해당 주문의 전체 아이템 조회
+  const { data: allItems, error: itemsErr } = await supabaseAdmin.from('order_items')
+    .select('*')
+    .eq('order_id', orderId);
+  if (itemsErr) return fail(res, `품목 조회 실패: ${itemsErr.message}`, 500);
+  if (!allItems || allItems.length < 2) {
+    return fail(res, '품목이 2개 이상인 주문만 분리할 수 있습니다', 400);
+  }
+
+  // 4) itemIds 검증: 모두 해당 주문의 아이템인지
+  const allItemIds = allItems.map(i => i.id);
+  const invalidIds = itemIds.filter(id => !allItemIds.includes(id));
+  if (invalidIds.length > 0) {
+    return fail(res, '선택한 품목이 해당 주문에 속하지 않습니다', 400);
+  }
+
+  // 최소 1개는 원본에 남아야 함
+  const remainItems = allItems.filter(i => !itemIds.includes(i.id));
+  if (remainItems.length === 0) {
+    return fail(res, '최소 1개 품목은 원본 주문에 남아야 합니다', 400);
+  }
+
+  const splitItems = allItems.filter(i => itemIds.includes(i.id));
+
+  // 5) 금액 계산
+  const remainSubtotal = remainItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+  const splitSubtotal = splitItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+
+  const origShippingFee = order.shipping_fee || 0;
+  const origShippingRefund = order.shipping_refund || 0;
+
+  // 배송비는 큰 subtotal 쪽에 배정 (동일하면 원본에 배정)
+  let remainShippingFee, remainShippingRefund, splitShippingFee, splitShippingRefund;
+  if (remainSubtotal >= splitSubtotal) {
+    remainShippingFee = origShippingFee;
+    remainShippingRefund = origShippingRefund;
+    splitShippingFee = 0;
+    splitShippingRefund = 0;
+  } else {
+    remainShippingFee = 0;
+    remainShippingRefund = 0;
+    splitShippingFee = origShippingFee;
+    splitShippingRefund = origShippingRefund;
+  }
+
+  const remainTotal = remainSubtotal + remainShippingFee - remainShippingRefund;
+  const splitTotal = splitSubtotal + splitShippingFee - splitShippingRefund;
+
+  // 6) 새 주문번호 생성
+  const { data: seqData, error: seqErr } = await supabaseAdmin
+    .rpc('nextval', { seq_name: 'order_seq' });
+  let orderSeq;
+  if (seqErr) {
+    orderSeq = Date.now() % 100000;
+  } else {
+    orderSeq = seqData;
+  }
+  const now = new Date();
+  const ds = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const newOrderNo = `CM-${ds}-${String(orderSeq).padStart(4, '0')}`;
+
+  // 7) 새 주문 INSERT (buyer 정보 원본 복사, status 상속)
+  const { data: newOrder, error: insertErr } = await supabaseAdmin.from('orders')
+    .insert({
+      order_no: newOrderNo,
+      user_id: order.user_id || null,
+      name: order.name,
+      phone: order.phone,
+      social: order.social || null,
+      address: order.address,
+      memo: order.memo || null,
+      subtotal: splitSubtotal,
+      shipping_fee: splitShippingFee,
+      shipping_refund: splitShippingRefund,
+      total: splitTotal,
+      status: order.status,
+      broadcast_id: order.broadcast_id || null,
+    })
+    .select('id, order_no')
+    .single();
+  if (insertErr) return fail(res, `새 주문 생성 실패: ${insertErr.message}`, 500);
+
+  // 8) 분리 품목의 order_id를 새 주문으로 이동
+  const { error: moveErr } = await supabaseAdmin.from('order_items')
+    .update({ order_id: newOrder.id })
+    .in('id', itemIds);
+  if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
+
+  // 9) 원본 주문 금액 UPDATE
+  const { error: updateErr } = await supabaseAdmin.from('orders')
+    .update({
+      subtotal: remainSubtotal,
+      shipping_fee: remainShippingFee,
+      shipping_refund: remainShippingRefund,
+      total: remainTotal,
+    })
+    .eq('id', orderId);
+  if (updateErr) return fail(res, `원본 주문 업데이트 실패: ${updateErr.message}`, 500);
+
+  // 10) 새 주문에 대해 자동 발주 생성
+  await createAutoPurchaseOrders(newOrder.id);
+
+  // 11) 로그 기록
+  await writeLog(req._admin, 'UPDATE', 'order', orderId, {
+    action: '주문분리',
+    newOrderNo: newOrder.order_no,
+    newOrderId: newOrder.id,
+    splitItems: splitItems.map(i => `${i.name}(${i.color}/${i.size})x${i.qty}`),
+    name: order.name,
+  });
+
+  return ok(res, {
+    split: true,
+    originalOrder: {
+      id: orderId,
+      orderNo: order.order_no,
+      subtotal: remainSubtotal,
+      shippingFee: remainShippingFee,
+      shippingRefund: remainShippingRefund,
+      total: remainTotal,
+    },
+    newOrder: {
+      id: newOrder.id,
+      orderNo: newOrder.order_no,
+      subtotal: splitSubtotal,
+      shippingFee: splitShippingFee,
+      shippingRefund: splitShippingRefund,
+      total: splitTotal,
+    },
+  });
 }
 
 // ============================================================
