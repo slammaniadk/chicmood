@@ -81,6 +81,7 @@ module.exports = async function handler(req, res) {
     case 'vendors':  return resourceId ? handleVendorDetail(req, res, resourceId) : handleVendors(req, res);
     case 'purchase-orders':
       if (resourceId === 'regenerate') return handlePORegenerate(req, res);
+      if (resourceId === 'vendor-text') return handlePOVendorText(req, res);
       return resourceId ? handlePurchaseOrderDetail(req, res, resourceId) : handlePurchaseOrders(req, res);
     case 'sales':    return handleSales(req, res);
     case 'inventory': return resourceId ? handleInventoryDetail(req, res, resourceId) : handleInventory(req, res);
@@ -1817,6 +1818,46 @@ async function createAutoPurchaseOrders(orderId) {
       }
     }
   } catch (e) { console.error('자동 발주 생성 오류:', e.message || e); }
+}
+
+// 거래처별 발주문구 생성
+async function handlePOVendorText(req, res) {
+  if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
+  try {
+    const vendorId = req.query.vendorId;
+    if (!vendorId) return fail(res, '거래처 ID가 필요합니다');
+
+    // 거래처명 조회
+    const { data: vendor } = await supabaseAdmin.from('vendors').select('name').eq('id', vendorId).single();
+    if (!vendor) return fail(res, '거래처를 찾을 수 없습니다', 404);
+
+    // 발주대기/부분입고 PO의 품목 조회
+    const { data: pos } = await supabaseAdmin
+      .from('purchase_orders')
+      .select('id, purchase_order_items(product_name, color_name, size_name, qty, received_qty)')
+      .eq('vendor_id', vendorId)
+      .in('status', ['발주대기', '부분입고']);
+
+    // 미입고 잔량 그룹핑
+    const groupMap = {};
+    for (const po of (pos || [])) {
+      for (const item of (po.purchase_order_items || [])) {
+        const remaining = (item.qty || 0) - (item.received_qty || 0);
+        if (remaining <= 0) continue;
+        const key = `${item.product_name}|${item.color_name}|${item.size_name}`;
+        if (!groupMap[key]) {
+          groupMap[key] = { productName: item.product_name, colorName: item.color_name, sizeName: item.size_name, qty: 0 };
+        }
+        groupMap[key].qty += remaining;
+      }
+    }
+
+    const items = Object.values(groupMap);
+    const totalQty = items.reduce((s, i) => s + i.qty, 0);
+    return ok(res, { vendorName: vendor.name, items, totalQty });
+  } catch (e) {
+    return fail(res, e.message || '발주문구 생성 오류', 500);
+  }
 }
 
 // 미발주 주문 자동 발주 재생성
