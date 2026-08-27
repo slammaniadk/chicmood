@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.26 11:52</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 09:21</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -772,6 +772,7 @@
             <div class="flex items-center gap-2">
               <span id="merge-counter" class="text-[12px] text-warm-500">${mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : ''}</span>
               <button class="btn-outline btn-sm" style="color:#6366f1;border-color:#6366f1" onclick="mergeOrders()">주문 병합</button>
+              <button onclick="downloadPageExcel('주문관리','주문관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="mergeChecked.clear();renderOrders(document.getElementById('page-content'))">🔄 새로고침</button>
             </div>
           </div>
@@ -1222,6 +1223,7 @@
           <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('배송관리','배송관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderShipping(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -1520,7 +1522,10 @@
         <div class="fade-in">
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">회원관리</h2>
-            <button class="btn-outline btn-sm" onclick="renderMembers(document.getElementById('page-content'))">🔄 새로고침</button>
+            <div class="flex gap-2">
+              <button onclick="downloadPageExcel('회원관리','회원관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
+              <button class="btn-outline btn-sm" onclick="renderMembers(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
           </div>
           <div class="mb-4 flex gap-3 items-center flex-wrap">
             <input type="text" class="input-field flex-1" style="max-width:400px;" placeholder="이름, 전화번호 검색..." value="${escapeHtml(memberSearch)}" onkeydown="if(event.key==='Enter'){memberSearch=this.value;memberPage=1;renderMembers(document.getElementById('page-content'))}" />
@@ -1774,6 +1779,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">상품관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('상품관리','상품관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderProducts(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openProductModal()">+ 상품 등록</button>
             </div>
@@ -2074,6 +2080,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">방송관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('방송관리','방송관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderBroadcasts(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openBroadcastModal()">+ 방송 등록</button>
             </div>
@@ -2302,6 +2309,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">거래처관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('거래처관리','거래처관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderVendors(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openVendorModal()">+ 거래처 등록</button>
             </div>
@@ -2537,6 +2545,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">발주관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('발주관리','발주관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderPurchaseOrders(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-outline btn-sm" onclick="regeneratePOs()">미발주 자동생성</button>
               <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
@@ -3021,23 +3030,50 @@
     return '<span class="text-[10px] text-warm-400 ml-1">0%</span>';
   }
 
-  function downloadSalesCsv() {
+  function downloadPageExcel(sheetName, fileName) {
     const table = document.querySelector('#page-content table');
-    if (!table) return;
-    const csvRows = [];
+    if (!table) { showToast('다운로드할 데이터가 없습니다'); return; }
+    const headerRow = table.querySelector('thead tr');
+    const skipCols = new Set();
+    if (headerRow) {
+      headerRow.querySelectorAll('th').forEach((th, idx) => {
+        if (th.style.display === 'none') skipCols.add(idx);
+        if (th.querySelector('input[type="checkbox"]') && !th.innerText.trim()) skipCols.add(idx);
+        const txt = th.innerText.trim();
+        if (txt === '관리') skipCols.add(idx);
+      });
+    }
+    const rows = [];
     table.querySelectorAll('tr').forEach(tr => {
       const cells = [];
-      tr.querySelectorAll('th, td').forEach(td => cells.push('"' + td.innerText.replace(/"/g, '""') + '"'));
-      csvRows.push(cells.join(','));
+      tr.querySelectorAll('th, td').forEach((td, idx) => {
+        if (skipCols.has(idx)) return;
+        if (td.style.display === 'none') return;
+        cells.push(td.innerText.trim());
+      });
+      if (cells.some(c => c)) rows.push(cells);
     });
-    const csv = '\uFEFF' + csvRows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
+    if (rows.length <= 1) { showToast('다운로드할 데이터가 없습니다'); return; }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const colWidths = [];
+    rows.forEach(row => { row.forEach((cell, i) => { const len = (cell||'').toString().length; colWidths[i] = Math.max(colWidths[i]||8, Math.min(len+2, 50)); }); });
+    ws['!cols'] = colWidths.map(w => ({wch:w}));
+    const today = new Date();
+    const dateStr = today.getFullYear()+String(today.getMonth()+1).padStart(2,'0')+String(today.getDate()).padStart(2,'0');
+    const fname = `${fileName}_${dateStr}.xlsx`;
+    const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+    const blob = new Blob([wbout], {type:'application/octet-stream'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fname; a.click();
+    URL.revokeObjectURL(url);
+    showToast('엑셀 다운로드 완료');
+  }
+
+  function downloadSalesCsv() {
     const tabLabels = { daily:'일별', monthly:'월별', product:'상품별', broadcast:'방송별' };
-    link.download = `매출_${tabLabels[salesTab]}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadPageExcel('매출_'+tabLabels[salesTab], '매출_'+tabLabels[salesTab]);
   }
 
   async function renderSales(el) {
@@ -3070,7 +3106,7 @@
             <input type="date" class="input-field" style="width:auto;" value="${salesTo}" onchange="salesTo=this.value;renderSales(document.getElementById('page-content'))" />
             <button onclick="downloadSalesCsv()" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              CSV
+              엑셀
             </button>
           </div>
           ${showSearch ? `
@@ -3168,6 +3204,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('재고관리','재고관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderInventory(document.getElementById('page-content'))">🔄 새로고침</button>
               ${zeroCount > 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllZeroInventory()" style="font-size:12px;">재고0 전체삭제 (${zeroCount}건)</button>` : ''}
               <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
@@ -3236,6 +3273,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('재고관리','재고관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderInventory(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
             </div>
@@ -3481,6 +3519,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">반품/교환/취소</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('반품관리','반품관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderReturns(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openReturnModal()">+ 접수 등록</button>
             </div>
@@ -3740,22 +3779,8 @@
   let rptTo = '';
 
   function downloadReportCsv() {
-    const table = document.querySelector('#page-content table');
-    if (!table) return;
-    const csvRows = [];
-    table.querySelectorAll('tr').forEach(tr => {
-      const cells = [];
-      tr.querySelectorAll('th, td').forEach(td => cells.push('"' + td.innerText.replace(/"/g, '""') + '"'));
-      csvRows.push(cells.join(','));
-    });
-    const csv = '\uFEFF' + csvRows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
     const tabLabels = { 'sales-ranking':'판매랭킹', customer:'고객분석', broadcast:'방송분석' };
-    link.download = `통계_${tabLabels[reportTab]}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadPageExcel('통계_'+tabLabels[reportTab], '통계_'+tabLabels[reportTab]);
   }
 
   async function renderReports(el) {
@@ -3812,9 +3837,9 @@
             <input type="date" class="input-field" style="width:auto;" value="${rptFrom}" onchange="rptFrom=this.value;renderReports(document.getElementById('page-content'))" />
             <span class="text-warm-400">~</span>
             <input type="date" class="input-field" style="width:auto;" value="${rptTo}" onchange="rptTo=this.value;renderReports(document.getElementById('page-content'))" />
-            <button onclick="downloadReportCsv()" class="btn-outline btn-sm flex items-center gap-1">
+            <button onclick="downloadReportCsv()" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              CSV
+              엑셀
             </button>
           </div>
           ${summaryHtml}
@@ -4116,6 +4141,7 @@
           <div class="flex justify-between items-center mb-6">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">A/S 관리</h2>
             <div class="flex gap-2">
+              <button onclick="downloadPageExcel('AS관리','AS관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderAfterService(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary" onclick="openAsModal()">+ 요청 등록</button>
             </div>
