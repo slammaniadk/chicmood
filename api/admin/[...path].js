@@ -966,10 +966,10 @@ async function recalcOrderStatus(orderId) {
     const activeStatuses = statuses.filter(s => s !== '결제취소');
     if (activeStatuses.length === 0) return;
 
-    const priority = { '결제완료': 1, '배송준비': 2, '배송완료': 3 };
-    const minPriority = Math.min(...activeStatuses.map(s => priority[s] || 1));
+    const priority = { '입금확인': 0, '결제완료': 1, '배송준비': 2, '배송완료': 3 };
+    const minPriority = Math.min(...activeStatuses.map(s => priority[s] ?? 0));
 
-    const statusMap = { 1: '결제완료', 2: '배송준비', 3: '배송완료' };
+    const statusMap = { 0: '입금확인', 1: '결제완료', 2: '배송준비', 3: '배송완료' };
     const newStatus = statusMap[minPriority] || '결제완료';
 
     await supabaseAdmin.from('orders').update({ status: newStatus }).eq('id', orderId);
