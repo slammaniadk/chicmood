@@ -3625,6 +3625,10 @@ async function handleLogs(req, res) {
 
 // ============================================================
 //  BACKUP (DB 백업/복원)
+//  ※ 테이블 추가 시 아래 3개 배열(BACKUP_TABLES, DELETE_ORDER, INSERT_ORDER)을 모두 수정할 것
+//     - BACKUP_TABLES : 백업 대상 목록
+//     - DELETE_ORDER  : 자식→부모 순서 (FK 역순)
+//     - INSERT_ORDER  : 부모→자식 순서 (FK 순서)
 // ============================================================
 const BACKUP_TABLES = [
   'system_settings', 'vendors', 'users', 'broadcasts',
