@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 11:41</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 11:53</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4240,6 +4240,35 @@
                 <div id="restore-status" class="mt-3 text-[13px] text-warm-500"></div>
               </div>
             </div>
+            <div class="card mt-6 border-red-200">
+              <h3 class="font-semibold text-warm-800 mb-3">운영 데이터 초기화</h3>
+              <div class="grid md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p class="text-[12px] font-semibold text-red-500 mb-1">초기화 대상 (12개 테이블)</p>
+                  <div class="text-[12px] text-warm-500 space-y-0.5">
+                    <p>주문 (orders, order_items, merge_history)</p>
+                    <p>발주 (purchase_orders, purchase_order_items)</p>
+                    <p>재고 (inventory, inventory_log)</p>
+                    <p>반품 (returns, return_items)</p>
+                    <p>A/S (after_services, after_service_images)</p>
+                    <p>채팅 (chat_messages)</p>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-[12px] font-semibold text-green-600 mb-1">유지되는 데이터 (8개 테이블)</p>
+                  <div class="text-[12px] text-warm-500 space-y-0.5">
+                    <p>시스템 설정 (system_settings)</p>
+                    <p>거래처 (vendors)</p>
+                    <p>회원 (users)</p>
+                    <p>방송 (broadcasts, broadcast_products)</p>
+                    <p>상품 (products, product_images, product_colors)</p>
+                  </div>
+                </div>
+              </div>
+              <p class="text-[12px] text-red-500 font-semibold mb-4">⚠ 이 작업은 되돌릴 수 없습니다. 반드시 백업을 먼저 수행한 후 실행하세요.</p>
+              <button class="btn-primary w-full bg-red-500 hover:bg-red-600" onclick="resetOperationData()">운영 데이터 초기화 실행</button>
+              <div id="reset-status" class="mt-3 text-[13px] text-warm-500"></div>
+            </div>
           </div>
         `;
       }
@@ -4340,6 +4369,30 @@
       status.innerHTML = '<span class="text-red-500">복원 실패: ' + escapeHtml(e.message) + '</span>';
     } finally {
       btn.disabled = true; btn.textContent = '복원 실행';
+    }
+  }
+
+  async function resetOperationData() {
+    if (!confirm('운영 데이터 초기화를 실행하시겠습니까?\n\n주문·발주·재고·배송·반품·A/S·채팅 데이터가 모두 삭제됩니다.\n(거래처·상품·방송·회원·시스템설정은 유지됩니다)')) return;
+    if (!confirm('최종 확인: 이 작업은 되돌릴 수 없습니다.\n백업을 먼저 수행하셨습니까?\n\n정말 진행하시겠습니까?')) return;
+    const typed = prompt('초기화를 진행하려면 "초기화"를 직접 입력해주세요.');
+    if (typed !== '초기화') {
+      showToast('초기화가 취소되었습니다');
+      return;
+    }
+
+    const status = document.getElementById('reset-status');
+    status.textContent = '운영 데이터 초기화 중...';
+    try {
+      const result = await api('/admin/backup', { method: 'DELETE' });
+      let detail = '';
+      if (result.deletedCounts) {
+        detail = Object.entries(result.deletedCounts).filter(([,v]) => v > 0).map(([k,v]) => k + ': ' + v + '건').join(', ');
+      }
+      status.innerHTML = '<span class="text-green-600">초기화 완료! ' + escapeHtml(result.message || '') + '</span>' + (detail ? '<br><span class="text-[12px] text-warm-400">' + escapeHtml(detail) + '</span>' : '');
+      showToast('운영 데이터 초기화가 완료되었습니다');
+    } catch (e) {
+      status.innerHTML = '<span class="text-red-500">초기화 실패: ' + escapeHtml(e.message) + '</span>';
     }
   }
 

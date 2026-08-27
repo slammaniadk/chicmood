@@ -3660,6 +3660,14 @@ const INSERT_ORDER = [
   'return_items', 'inventory_log', 'after_service_images',
 ];
 
+// 운영 데이터 초기화 대상 (자식→부모 FK 역순, 마스터 데이터 제외)
+const RESET_DELETE_ORDER = [
+  'after_service_images', 'inventory_log', 'return_items',
+  'chat_messages', 'after_services', 'returns', 'inventory',
+  'purchase_order_items', 'order_items',
+  'merge_history', 'orders', 'purchase_orders',
+];
+
 async function handleBackup(req, res) {
   // GET — 백업 (Export)
   if (req.method === 'GET') {
@@ -3753,6 +3761,51 @@ async function handleBackup(req, res) {
       });
     } catch (e) {
       return fail(res, `복원 실패: ${e.message}`, 500);
+    }
+  }
+
+  // DELETE — 운영 데이터 초기화
+  if (req.method === 'DELETE') {
+    try {
+      const deletedCounts = {};
+
+      // 자식→부모 FK 역순으로 운영 테이블만 삭제
+      for (const table of RESET_DELETE_ORDER) {
+        let q;
+        if (table === 'orders') {
+          q = supabaseAdmin.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } else {
+          q = supabaseAdmin.from(table).delete().neq('id', -999);
+        }
+        const { data, error, count } = await q.select('*');
+        if (error) {
+          return fail(res, `삭제 실패 (${table}): ${error.message}`, 500);
+        }
+        deletedCounts[table] = data ? data.length : 0;
+      }
+
+      // 시퀀스 리셋
+      try {
+        await supabaseAdmin.rpc('reset_all_sequences');
+      } catch (seqErr) {
+        console.error('시퀀스 리셋 오류 (무시):', seqErr.message);
+      }
+
+      // 활동 로그 기록
+      const admin = req._admin;
+      const totalDeleted = Object.values(deletedCounts).reduce((a, b) => a + b, 0);
+      await writeLog(admin, 'DELETE', 'settings', '운영데이터초기화', {
+        name: `운영 데이터 초기화 (${RESET_DELETE_ORDER.length}개 테이블, ${totalDeleted}건 삭제)`,
+        deletedCounts,
+      });
+
+      return ok(res, {
+        success: true,
+        message: `초기화 완료: ${RESET_DELETE_ORDER.length}개 테이블, 총 ${totalDeleted}건 삭제`,
+        deletedCounts,
+      });
+    } catch (e) {
+      return fail(res, `초기화 실패: ${e.message}`, 500);
     }
   }
 
