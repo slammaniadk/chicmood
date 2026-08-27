@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 10:20</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.7.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1918,10 +1918,13 @@
   // ============================================================
   //  PRODUCTS
   // ============================================================
+  let productActiveFilter = 'true';
+
   async function renderProducts(el) {
     showSpinner(el);
     try {
-      const products = await api('/admin/products');
+      const qp = productActiveFilter ? `?isActive=${productActiveFilter}` : '';
+      const products = await api('/admin/products' + qp);
 
       el.innerHTML = `
         <div class="fade-in">
@@ -1934,15 +1937,30 @@
             </div>
           </div>
 
+          <div class="flex gap-2 mb-4">
+            <label class="flex items-center gap-1 text-[13px] cursor-pointer">
+              <input type="radio" name="productActiveFilter" value="true" ${productActiveFilter==='true'?'checked':''} onchange="productActiveFilter=this.value;renderProducts(document.getElementById('page-content'))" />
+              사용
+            </label>
+            <label class="flex items-center gap-1 text-[13px] cursor-pointer">
+              <input type="radio" name="productActiveFilter" value="false" ${productActiveFilter==='false'?'checked':''} onchange="productActiveFilter=this.value;renderProducts(document.getElementById('page-content'))" />
+              미사용
+            </label>
+            <label class="flex items-center gap-1 text-[13px] cursor-pointer">
+              <input type="radio" name="productActiveFilter" value="" ${productActiveFilter===''?'checked':''} onchange="productActiveFilter=this.value;renderProducts(document.getElementById('page-content'))" />
+              전체
+            </label>
+          </div>
+
           <div class="card overflow-x-auto">
             <table>
               <thead>
                 <tr>
-                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>매입가</th><th>판매가</th><th>색상</th><th>관리</th>
+                  <th>ID</th><th>이미지</th><th>상품명</th><th>거래처</th><th>매입가</th><th>판매가</th><th>색상</th><th>상태</th><th>관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${products.length === 0 ? '<tr><td colspan="8" class="text-center text-warm-400 py-12">등록된 상품이 없습니다</td></tr>' : ''}
+                ${products.length === 0 ? '<tr><td colspan="9" class="text-center text-warm-400 py-12">등록된 상품이 없습니다</td></tr>' : ''}
                 ${products.map(p => `
                   <tr>
                     <td class="text-warm-400">${p.id}</td>
@@ -1958,8 +1976,12 @@
                         ${p.colors.map(c => `<div class="flex flex-col items-center gap-0.5"><span class="w-5 h-5 rounded-full border border-warm-200 inline-block" style="background:${c.hex}"></span><span class="text-[9px] text-warm-500">${c.name}</span></div>`).join('')}
                       </div>
                     </td>
+                    <td>
+                      <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}">${p.isActive ? '사용' : '미사용'}</span>
+                    </td>
                     <td class="whitespace-nowrap">
                       <button class="btn-primary btn-sm" onclick='openProductModal(${JSON.stringify(p).replace(/'/g,"&#39;")})'>수정</button>
+                      <button class="btn-outline btn-sm" onclick="toggleProductActive(${p.id}, ${!p.isActive})">${p.isActive ? '미사용' : '사용'}</button>
                       <button class="btn-danger" onclick="deleteProduct(${p.id})">삭제</button>
                     </td>
                   </tr>
@@ -1971,6 +1993,16 @@
       `;
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">상품 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function toggleProductActive(productId, newActive) {
+    try {
+      await api('/admin/products/' + productId, { method: 'PATCH', body: JSON.stringify({ isActive: newActive }) });
+      showToast(newActive ? '사용으로 변경되었습니다' : '미사용으로 변경되었습니다');
+      renderProducts(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '상태 변경에 실패했습니다');
     }
   }
 
@@ -2343,8 +2375,8 @@
   async function openBroadcastModal(broadcast) {
     const isEdit = !!broadcast;
     const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'live', description: '', productIds: [] };
-    // 항상 최신 상품 목록 로드
-    try { allProducts = await api('/admin/products'); } catch(e) { /* keep cached */ }
+    // 항상 최신 사용중 상품 목록 로드
+    try { allProducts = await api('/admin/products?isActive=true'); } catch(e) { /* keep cached */ }
     const products = allProducts || [];
 
     const modal = document.createElement('div');

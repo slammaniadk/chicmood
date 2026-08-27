@@ -2038,10 +2038,18 @@ async function handlePORegenerate(req, res) {
 // ============================================================
 async function handleProducts(req, res) {
   if (req.method === 'GET') {
-    const { data: products, error } = await supabaseAdmin
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const isActiveParam = url.searchParams.get('isActive');
+
+    let query = supabaseAdmin
       .from('products')
       .select('*, product_images(*), product_colors(*), vendors(name)')
       .order('id', { ascending: false });
+
+    if (isActiveParam === 'true') query = query.eq('is_active', true);
+    else if (isActiveParam === 'false') query = query.eq('is_active', false);
+
+    const { data: products, error } = await query;
 
     if (error) return fail(res, error.message, 500);
 
@@ -2059,6 +2067,7 @@ async function handleProducts(req, res) {
       wholesalePrice: p.wholesale_price || 0,
       availableQty: p.available_qty,
       size: p.size || '',
+      isActive: p.is_active !== false,
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
     }));
@@ -2104,7 +2113,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, isActive } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -2118,6 +2127,7 @@ async function handleProductDetail(req, res, id) {
     if (wholesalePrice !== undefined) update.wholesale_price = wholesalePrice;
     if (size !== undefined) update.size = size;
     if (availableQty !== undefined) update.available_qty = availableQty;
+    if (isActive !== undefined) update.is_active = isActive;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('products').update(update).eq('id', id);
