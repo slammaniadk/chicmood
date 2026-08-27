@@ -93,6 +93,7 @@ module.exports = async function handler(req, res) {
     case 'settings': return handleSettings(req, res);
     case 'admin-users': return handleAdminUsers(req, res);
     case 'logs':     return handleLogs(req, res);
+    case 'backup':   return handleBackup(req, res);
     default: return fail(res, 'Not found', 404);
   }
 };
@@ -3620,6 +3621,138 @@ async function handleLogs(req, res) {
     detail: l.detail, createdAt: l.created_at,
   }));
   return ok(res, { logs, total: count || 0, page: pageNum, limit: limitNum });
+}
+
+// ============================================================
+//  BACKUP (DB 백업/복원)
+// ============================================================
+const BACKUP_TABLES = [
+  'system_settings', 'vendors', 'users', 'broadcasts',
+  'products',
+  'product_images', 'product_colors', 'broadcast_products',
+  'orders', 'purchase_orders', 'merge_history',
+  'order_items', 'purchase_order_items', 'inventory',
+  'returns', 'after_services', 'chat_messages',
+  'return_items', 'inventory_log',
+  'after_service_images',
+];
+
+const DELETE_ORDER = [
+  'after_service_images', 'inventory_log', 'return_items',
+  'chat_messages', 'after_services', 'returns', 'inventory',
+  'purchase_order_items', 'order_items',
+  'merge_history', 'orders', 'purchase_orders',
+  'broadcast_products', 'product_colors', 'product_images',
+  'products', 'broadcasts', 'vendors', 'users', 'system_settings',
+];
+
+const INSERT_ORDER = [
+  'system_settings', 'vendors', 'users', 'broadcasts',
+  'products',
+  'product_images', 'product_colors', 'broadcast_products',
+  'purchase_orders', 'merge_history', 'orders',
+  'order_items', 'purchase_order_items', 'inventory',
+  'returns', 'after_services', 'chat_messages',
+  'return_items', 'inventory_log', 'after_service_images',
+];
+
+async function handleBackup(req, res) {
+  // GET — 백업 (Export)
+  if (req.method === 'GET') {
+    try {
+      const results = await Promise.all(
+        BACKUP_TABLES.map(t => supabaseAdmin.from(t).select('*'))
+      );
+      const tables = {};
+      const rowCounts = {};
+      for (let i = 0; i < BACKUP_TABLES.length; i++) {
+        const name = BACKUP_TABLES[i];
+        if (results[i].error) {
+          return fail(res, `테이블 ${name} 조회 오류: ${results[i].error.message}`, 500);
+        }
+        tables[name] = results[i].data || [];
+        rowCounts[name] = tables[name].length;
+      }
+      const admin = req._admin;
+      return ok(res, {
+        version: 1,
+        createdAt: new Date().toISOString(),
+        createdBy: admin.name || admin.id,
+        tables,
+        rowCounts,
+      });
+    } catch (e) {
+      return fail(res, e.message, 500);
+    }
+  }
+
+  // POST — 복원 (Restore)
+  if (req.method === 'POST') {
+    const { snapshot } = req.body || {};
+    if (!snapshot || !snapshot.version || !snapshot.tables) {
+      return fail(res, '유효하지 않은 백업 파일입니다');
+    }
+
+    try {
+      // Phase 1: 자식→부모 순서로 전체 삭제
+      for (const table of DELETE_ORDER) {
+        let q;
+        if (table === 'system_settings') {
+          q = supabaseAdmin.from(table).delete().neq('key', '');
+        } else if (table === 'broadcast_products') {
+          q = supabaseAdmin.from(table).delete().gte('broadcast_id', 0);
+        } else if (table === 'users' || table === 'orders') {
+          // UUID PK
+          q = supabaseAdmin.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } else {
+          // SERIAL PK
+          q = supabaseAdmin.from(table).delete().neq('id', -999);
+        }
+        const { error } = await q;
+        if (error) {
+          return fail(res, `삭제 실패 (${table}): ${error.message}`, 500);
+        }
+      }
+
+      // Phase 2: 부모→자식 순서로 insert (500건 배치)
+      for (const table of INSERT_ORDER) {
+        const rows = snapshot.tables[table];
+        if (!rows || rows.length === 0) continue;
+        for (let i = 0; i < rows.length; i += 500) {
+          const batch = rows.slice(i, i + 500);
+          const { error } = await supabaseAdmin.from(table).insert(batch);
+          if (error) {
+            return fail(res, `삽입 실패 (${table}, batch ${Math.floor(i/500)+1}): ${error.message}`, 500);
+          }
+        }
+      }
+
+      // Phase 3: 시퀀스 리셋
+      try {
+        await supabaseAdmin.rpc('reset_all_sequences');
+      } catch (seqErr) {
+        console.error('시퀀스 리셋 오류 (무시):', seqErr.message);
+      }
+
+      // 활동 로그 기록
+      const admin = req._admin;
+      const totalRows = Object.values(snapshot.rowCounts || {}).reduce((a, b) => a + b, 0);
+      await writeLog(admin, 'UPDATE', 'settings', 'DB복원', {
+        name: `DB 복원 (${Object.keys(snapshot.tables).length}개 테이블, ${totalRows}건)`,
+        backupDate: snapshot.createdAt,
+        backupBy: snapshot.createdBy,
+      });
+
+      return ok(res, {
+        success: true,
+        message: `복원 완료: ${Object.keys(snapshot.tables).length}개 테이블`,
+      });
+    } catch (e) {
+      return fail(res, `복원 실패: ${e.message}`, 500);
+    }
+  }
+
+  return fail(res, 'Method not allowed', 405);
 }
 
 // ============================================================

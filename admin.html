@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 10:54</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 11:33</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4096,8 +4096,8 @@
 
   async function renderSystem(el) {
     showSpinner(el);
-    const tabs = ['settings','admin-users','logs'];
-    const tabLabels = { settings:'택배/계좌 설정', 'admin-users':'관리자 계정', logs:'활동 로그' };
+    const tabs = ['settings','admin-users','logs','backup'];
+    const tabLabels = { settings:'택배/계좌 설정', 'admin-users':'관리자 계정', logs:'활동 로그', backup:'데이터 백업' };
     try {
       if (sysTab === 'settings') {
         const data = await api('/admin/settings');
@@ -4206,9 +4206,130 @@
             </div>
           </div>
         `;
+      } else if (sysTab === 'backup') {
+        el.innerHTML = `
+          <div class="fade-in">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">새로고침</button>
+            </div>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div class="card">
+                <h3 class="font-semibold text-warm-800 mb-4">백업 (Export)</h3>
+                <p class="text-[13px] text-warm-500 mb-4">현재 데이터베이스의 모든 데이터를 JSON 파일로 다운로드합니다.<br><span class="text-warm-400">(admin_logs 제외, 20개 테이블)</span></p>
+                <button class="btn-primary w-full" id="btn-export-backup" onclick="exportBackup()">백업 파일 다운로드</button>
+                <div id="backup-status" class="mt-3 text-[13px] text-warm-500"></div>
+              </div>
+              <div class="card">
+                <h3 class="font-semibold text-warm-800 mb-4">복원 (Restore)</h3>
+                <p class="text-[13px] text-warm-500 mb-4">백업 JSON 파일을 업로드하여 데이터를 복원합니다.<br><span class="text-red-400 font-semibold">기존 데이터가 모두 삭제됩니다.</span></p>
+                <input type="file" id="restore-file" accept=".json" class="input-field text-[13px] mb-3" onchange="handleRestoreFile(this)" />
+                <div id="restore-info" class="mb-3 text-[13px]"></div>
+                <button class="btn-primary w-full bg-red-500 hover:bg-red-600" id="btn-execute-restore" onclick="executeRestore()" disabled style="opacity:0.5">복원 실행</button>
+                <div id="restore-status" class="mt-3 text-[13px] text-warm-500"></div>
+              </div>
+            </div>
+          </div>
+        `;
       }
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">시스템 설정을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  // ---- 백업/복원 JS 함수 ----
+  let pendingSnapshot = null;
+
+  async function exportBackup() {
+    const btn = document.getElementById('btn-export-backup');
+    const status = document.getElementById('backup-status');
+    btn.disabled = true; btn.textContent = '백업 중...';
+    status.textContent = '데이터를 가져오는 중...';
+    try {
+      const data = await api('/admin/backup');
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const fname = 'chicmood_backup_' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + '.json';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      const totalRows = Object.values(data.rowCounts||{}).reduce((a,b)=>a+b,0);
+      status.innerHTML = '<span class="text-green-600">백업 완료!</span> ' + Object.keys(data.tables||{}).length + '개 테이블, 총 ' + totalRows + '건 (' + fname + ')';
+    } catch (e) {
+      status.innerHTML = '<span class="text-red-500">백업 실패: ' + escapeHtml(e.message) + '</span>';
+    } finally {
+      btn.disabled = false; btn.textContent = '백업 파일 다운로드';
+    }
+  }
+
+  function handleRestoreFile(input) {
+    const info = document.getElementById('restore-info');
+    const btn = document.getElementById('btn-execute-restore');
+    const status = document.getElementById('restore-status');
+    pendingSnapshot = null;
+    btn.disabled = true; btn.style.opacity = '0.5';
+    status.textContent = '';
+    if (!input.files || !input.files[0]) { info.textContent = ''; return; }
+    const file = input.files[0];
+    if (file.size > 4.5 * 1024 * 1024) {
+      info.innerHTML = '<span class="text-red-500">파일 크기가 4.5MB를 초과합니다. Vercel 제한으로 복원할 수 없습니다.</span>';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.version || !data.tables) {
+          info.innerHTML = '<span class="text-red-500">유효하지 않은 백업 파일입니다. (version/tables 누락)</span>';
+          return;
+        }
+        const tableCount = Object.keys(data.tables).length;
+        const totalRows = Object.values(data.rowCounts||{}).reduce((a,b)=>a+b,0);
+        const dt = data.createdAt ? new Date(data.createdAt) : null;
+        const dateStr = dt ? dt.getFullYear()+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+String(dt.getDate()).padStart(2,'0')+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0') : '알 수 없음';
+        info.innerHTML = '<div class="p-3 bg-warm-50 rounded-lg border border-warm-200">'
+          + '<div class="mb-1"><span class="font-semibold text-warm-700">백업 일시:</span> ' + dateStr + '</div>'
+          + '<div class="mb-1"><span class="font-semibold text-warm-700">생성자:</span> ' + escapeHtml(data.createdBy||'알 수 없음') + '</div>'
+          + '<div class="mb-1"><span class="font-semibold text-warm-700">테이블:</span> ' + tableCount + '개</div>'
+          + '<div><span class="font-semibold text-warm-700">총 건수:</span> ' + totalRows.toLocaleString() + '건</div>'
+          + '</div>';
+        pendingSnapshot = data;
+        btn.disabled = false; btn.style.opacity = '1';
+      } catch (err) {
+        info.innerHTML = '<span class="text-red-500">JSON 파싱 오류: ' + escapeHtml(err.message) + '</span>';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function executeRestore() {
+    if (!pendingSnapshot) { showToast('백업 파일을 먼저 선택해주세요'); return; }
+    if (!confirm('정말로 복원하시겠습니까?\n\n기존 데이터가 모두 삭제되고 백업 데이터로 교체됩니다.')) return;
+    if (!confirm('최종 확인: 이 작업은 되돌릴 수 없습니다.\n정말 진행하시겠습니까?')) return;
+
+    const btn = document.getElementById('btn-execute-restore');
+    const status = document.getElementById('restore-status');
+    btn.disabled = true; btn.textContent = '복원 중...';
+    status.textContent = '데이터 복원 중... (완료까지 시간이 걸릴 수 있습니다)';
+    try {
+      const result = await api('/admin/backup', {
+        method: 'POST',
+        body: JSON.stringify({ snapshot: pendingSnapshot }),
+      });
+      status.innerHTML = '<span class="text-green-600">복원 완료! ' + escapeHtml(result.message||'') + '</span>';
+      showToast('데이터 복원이 완료되었습니다');
+      pendingSnapshot = null;
+      document.getElementById('restore-file').value = '';
+      document.getElementById('restore-info').textContent = '';
+      btn.style.opacity = '0.5';
+    } catch (e) {
+      status.innerHTML = '<span class="text-red-500">복원 실패: ' + escapeHtml(e.message) + '</span>';
+    } finally {
+      btn.disabled = true; btn.textContent = '복원 실행';
     }
   }
 
