@@ -3662,8 +3662,8 @@ const INSERT_ORDER = [
 
 // 운영 데이터 초기화 대상 (자식→부모 FK 역순, 마스터 데이터 제외)
 const RESET_DELETE_ORDER = [
-  'after_service_images', 'inventory_log', 'return_items',
-  'chat_messages', 'after_services', 'returns', 'inventory',
+  'inventory_log', 'return_items',
+  'returns', 'inventory',
   'purchase_order_items', 'order_items',
   'merge_history', 'orders', 'purchase_orders',
 ];
