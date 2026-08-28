@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 21:02</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 22:53</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2538,17 +2538,17 @@
     modal.className = 'overlay';
     modal.id = 'broadcast-modal';
     modal.innerHTML = `
-      <div class="overlay-content p-6">
-        <div class="flex justify-between items-center mb-6">
+      <div class="overlay-content p-6" style="max-height:90vh;display:flex;flex-direction:column;">
+        <div class="flex justify-between items-center mb-6 flex-shrink-0">
           <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${isEdit ? '방송 수정' : '방송 등록'}</h3>
           <button onclick="document.getElementById('broadcast-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
         </div>
-        <form onsubmit="return false;" class="space-y-4">
-          <div>
+        <form onsubmit="return false;" class="space-y-4 flex flex-col flex-1 min-h-0">
+          <div class="flex-shrink-0">
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">방송 제목 *</label>
             <input id="bm-title" class="input-field" value="${escapeHtml(b.title)}" placeholder="8/15(금) 가을 신상 LIVE" />
           </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-2 gap-3 flex-shrink-0">
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">날짜 텍스트</label>
               <input id="bm-date" class="input-field" value="${escapeHtml(b.date)}" placeholder="8월 15일 (금) 오후 8시" />
@@ -2561,10 +2561,10 @@
               </select>
             </div>
           </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품 선택</label>
-            <input type="text" class="input-field mb-2" placeholder="상품번호 또는 상품명 검색" oninput="filterBMProducts(this.value)" />
-            <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
+          <div class="flex flex-col flex-1 min-h-0">
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1 flex-shrink-0">상품 선택</label>
+            <input type="text" class="input-field mb-2 flex-shrink-0" placeholder="상품번호 또는 상품명 검색" oninput="filterBMProducts(this.value)" />
+            <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 overflow-y-auto space-y-2 flex-1 min-h-0">
               ${products.map(p => `
                 <label class="flex items-center gap-3 cursor-pointer text-[13px] bm-product-row" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}">
                   <input type="checkbox" class="bm-product" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
@@ -2577,7 +2577,7 @@
               ${products.length === 0 ? '<p class="text-warm-400 text-[12px]">등록된 상품이 없습니다</p>' : ''}
             </div>
           </div>
-          <button class="btn-primary w-full" onclick="saveBroadcast(${isEdit ? b.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
+          <button class="btn-primary w-full flex-shrink-0 mt-4" onclick="saveBroadcast(${isEdit ? b.id : 'null'})">${isEdit ? '수정' : '등록'}</button>
         </form>
       </div>
     `;
