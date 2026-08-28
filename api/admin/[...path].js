@@ -2082,6 +2082,7 @@ async function handleProducts(req, res) {
   if (req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const isActiveParam = url.searchParams.get('isActive');
+    const searchParam = (url.searchParams.get('search') || '').trim();
     const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
     const pageSize = Math.min(200, Math.max(1, parseInt(url.searchParams.get('pageSize')) || 50));
     const from = (page - 1) * pageSize;
@@ -2101,6 +2102,16 @@ async function handleProducts(req, res) {
     } else if (isActiveParam === 'false') {
       countQuery = countQuery.eq('is_active', false);
       dataQuery = dataQuery.eq('is_active', false);
+    }
+
+    if (searchParam) {
+      if (/^\d+$/.test(searchParam)) {
+        countQuery = countQuery.eq('id', parseInt(searchParam));
+        dataQuery = dataQuery.eq('id', parseInt(searchParam));
+      } else {
+        countQuery = countQuery.ilike('name', `%${searchParam}%`);
+        dataQuery = dataQuery.ilike('name', `%${searchParam}%`);
+      }
     }
 
     const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);

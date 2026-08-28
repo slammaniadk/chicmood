@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 16:05</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 19:04</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1943,6 +1943,7 @@
   //  PRODUCTS
   // ============================================================
   let productActiveFilter = 'true';
+  let productSearch = '';
   let productPage = 1;
   const productPageSize = 50;
 
@@ -1960,6 +1961,7 @@
     try {
       const params = new URLSearchParams();
       if (productActiveFilter) params.set('isActive', productActiveFilter);
+      if (productSearch) params.set('search', productSearch);
       params.set('page', productPage);
       params.set('pageSize', productPageSize);
       const { items: products, total, page: curPage, pageSize } = await api('/admin/products?' + params.toString());
@@ -1989,6 +1991,8 @@
               <input type="radio" name="productActiveFilter" value="" ${productActiveFilter===''?'checked':''} onchange="productActiveFilter=this.value;renderProducts(document.getElementById('page-content'),1)" />
               전체
             </label>
+            <input type="text" class="input-field" style="width:200px;margin-left:12px;" placeholder="상품명 또는 상품번호" value="${escapeHtml(productSearch)}" onkeydown="if(event.key==='Enter'){productSearch=this.value.trim();renderProducts(document.getElementById('page-content'),1)}" />
+            ${productSearch ? `<button class="btn-outline btn-sm" onclick="productSearch='';renderProducts(document.getElementById('page-content'),1)">초기화</button>` : ''}
             <span class="ml-auto text-[12px] text-warm-400">총 ${total}개</span>
           </div>
 
