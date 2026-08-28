@@ -2136,14 +2136,15 @@ async function handleProducts(req, res) {
 
     if (error) return fail(res, error.message, 500);
 
+    const postTasks = [];
     if (images && images.length > 0) {
-      await supabaseAdmin.from('product_images').insert(images.map((url, i) => ({ product_id: product.id, image_url: url, sort_order: i })));
+      postTasks.push(supabaseAdmin.from('product_images').insert(images.map((url, i) => ({ product_id: product.id, image_url: url, sort_order: i }))));
     }
     if (colors && colors.length > 0) {
-      await supabaseAdmin.from('product_colors').insert(colors.map((c, i) => ({ product_id: product.id, name: c.name, hex_code: c.hex, sort_order: i })));
+      postTasks.push(supabaseAdmin.from('product_colors').insert(colors.map((c, i) => ({ product_id: product.id, name: c.name, hex_code: c.hex, sort_order: i }))));
     }
-
-    await writeLog(req._admin, 'CREATE', 'product', product.id, { name });
+    postTasks.push(writeLog(req._admin, 'CREATE', 'product', product.id, { name }));
+    await Promise.all(postTasks);
     return ok(res, { id: product.id }, 201);
   }
 
@@ -2176,21 +2177,23 @@ async function handleProductDetail(req, res, id) {
       if (error) return fail(res, error.message, 500);
     }
 
+    const patchTasks = [];
     if (images) {
-      await supabaseAdmin.from('product_images').delete().eq('product_id', id);
-      if (images.length > 0) {
-        await supabaseAdmin.from('product_images').insert(images.map((url, i) => ({ product_id: parseInt(id), image_url: url, sort_order: i })));
-      }
+      patchTasks.push(
+        supabaseAdmin.from('product_images').delete().eq('product_id', id).then(() =>
+          images.length > 0 ? supabaseAdmin.from('product_images').insert(images.map((url, i) => ({ product_id: parseInt(id), image_url: url, sort_order: i }))) : null
+        )
+      );
     }
-
     if (colors) {
-      await supabaseAdmin.from('product_colors').delete().eq('product_id', id);
-      if (colors.length > 0) {
-        await supabaseAdmin.from('product_colors').insert(colors.map((c, i) => ({ product_id: parseInt(id), name: c.name, hex_code: c.hex, sort_order: i })));
-      }
+      patchTasks.push(
+        supabaseAdmin.from('product_colors').delete().eq('product_id', id).then(() =>
+          colors.length > 0 ? supabaseAdmin.from('product_colors').insert(colors.map((c, i) => ({ product_id: parseInt(id), name: c.name, hex_code: c.hex, sort_order: i }))) : null
+        )
+      );
     }
-
-    await writeLog(req._admin, 'UPDATE', 'product', id, { name: name || undefined });
+    patchTasks.push(writeLog(req._admin, 'UPDATE', 'product', id, { name: name || undefined }));
+    await Promise.all(patchTasks);
     return ok(res, { id: parseInt(id) });
   }
 

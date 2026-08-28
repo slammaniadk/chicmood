@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.27 11:57</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.8.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 14:42</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2173,35 +2173,47 @@
     if (!files || files.length === 0) return;
     const statusEl = document.getElementById('pm-upload-status');
     statusEl.classList.remove('hidden');
+    statusEl.textContent = `업로드 중... (0/${files.length})`;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      statusEl.textContent = `업로드 중... (${i+1}/${files.length}) ${file.name}`;
+    let completed = 0;
+    let failed = 0;
+    const CONCURRENT = 4; // 동시 업로드 수 제한
 
-      try {
-        // 1. 서명 URL 받기
-        const { signedUrl, token, publicUrl } = await api('/images/upload-url', {
-          method: 'POST',
-          body: JSON.stringify({ filename: file.name, contentType: file.type })
-        });
-
-        // 2. 파일 업로드
-        const uploadRes = await fetch(signedUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file
-        });
-
-        if (!uploadRes.ok) throw new Error('업로드 실패');
-
-        // 3. 목록에 추가
-        pmImageUrls.push(publicUrl);
-        renderImagePreviews();
-      } catch (e) {
-        showToast(`${file.name} 업로드 실패: ${e.message}`);
+    // 동시 업로드 워커
+    async function uploadWorker(queue) {
+      while (queue.length > 0) {
+        const file = queue.shift();
+        try {
+          const { signedUrl, token, publicUrl } = await api('/images/upload-url', {
+            method: 'POST',
+            body: JSON.stringify({ filename: file.name, contentType: file.type })
+          });
+          const uploadRes = await fetch(signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          });
+          if (!uploadRes.ok) throw new Error('업로드 실패');
+          pmImageUrls.push(publicUrl);
+        } catch (e) {
+          failed++;
+          showToast(`${file.name} 업로드 실패: ${e.message}`);
+        }
+        completed++;
+        statusEl.textContent = `업로드 중... (${completed}/${files.length})`;
       }
     }
-    statusEl.textContent = `${files.length}장 업로드 완료`;
+
+    const queue = [...files];
+    const workers = [];
+    for (let i = 0; i < Math.min(CONCURRENT, files.length); i++) {
+      workers.push(uploadWorker(queue));
+    }
+    await Promise.all(workers);
+
+    renderImagePreviews();
+    const msg = failed > 0 ? `${files.length - failed}장 업로드 완료 (${failed}장 실패)` : `${files.length}장 업로드 완료`;
+    statusEl.textContent = msg;
     setTimeout(() => statusEl.classList.add('hidden'), 2000);
   }
 
