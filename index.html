@@ -248,7 +248,7 @@
   let cachedProductDetail = {};
 
   // Product detail page state
-  let pdState = { selectedColor: 0, selectedSize: 0, qty: 1, imageIndex: 0 };
+  let pdState = { selectedColor: 0, selectedSize: 0, selectedLength: '', qty: 1, imageIndex: 0 };
 
   // ============================================================
   //  API HELPER
@@ -519,7 +519,7 @@
       cachedProductDetail[id] = await api('/products/' + id);
       const p = cachedProductDetail[id];
 
-      pdState = { selectedColor: 0, selectedSize: 0, qty: 1, imageIndex: 0 };
+      pdState = { selectedColor: 0, selectedSize: 0, selectedLength: '', qty: 1, imageIndex: 0 };
 
       el.innerHTML = `
         <section class="py-10 fade-in">
@@ -556,6 +556,7 @@
                     `).join('')}
                   </div>
                 </div>
+                ${(p.category === '가방' || p.category === '악세사리') && !p.size ? '' : `
                 <div>
                   <div class="flex items-center justify-between mb-3">
                     <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">사이즈</span>
@@ -566,6 +567,20 @@
                     `).join('')}
                   </div>
                 </div>
+                `}
+                ${p.lengthOptions ? `
+                <div>
+                  <div class="flex items-center justify-between mb-3">
+                    <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500">기장</span>
+                  </div>
+                  <div class="flex flex-wrap gap-2" id="pd-lengths">
+                    <button class="chip active" onclick="pdSelectLength('',this)">선택 안함</button>
+                    ${p.lengthOptions.split(',').map(lo => lo.trim()).filter(Boolean).map(lo => `
+                      <button class="chip" onclick="pdSelectLength('${lo}',this)">${lo}</button>
+                    `).join('')}
+                  </div>
+                </div>
+                ` : ''}
                 <div>
                   <span class="text-[11px] font-semibold tracking-wider uppercase text-warm-500 block mb-3">수량</span>
                   <div class="flex items-center">
@@ -614,6 +629,12 @@
     btn.classList.add('active');
   }
 
+  function pdSelectLength(val, btn) {
+    pdState.selectedLength = val;
+    document.querySelectorAll('#pd-lengths .chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
   function pdChangeQty(delta) {
     pdState.qty = Math.max(1, Math.min(99, pdState.qty + delta));
     document.getElementById('pd-qty').textContent = pdState.qty;
@@ -622,9 +643,17 @@
   function pdAddToCart(productId) {
     const p = cachedProductDetail[productId];
     if (!p) return;
-    const color = p.colors[pdState.selectedColor].name;
-    const sizes = (p.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean);
-    const size = sizes[pdState.selectedSize] || sizes[0] || 'FREE';
+    const color = p.colors[pdState.selectedColor]?.name || '';
+    const sizes = (p.size || '').split(',').map(s => s.trim()).filter(Boolean);
+    let size;
+    if (p.category === '가방' || p.category === '악세사리') {
+      size = sizes[pdState.selectedSize] || 'FREE';
+    } else {
+      size = sizes[pdState.selectedSize] || sizes[0] || 'FREE';
+    }
+    if (pdState.selectedLength) {
+      size = size + ' / ' + pdState.selectedLength;
+    }
 
     const existing = cart.find(item => item.productId === productId && item.color === color && item.size === size);
     if (existing) { existing.qty += pdState.qty; }

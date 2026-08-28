@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 15:27</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 15:56</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2075,7 +2075,7 @@
   let vendorListCache = null;
   async function openProductModal(product) {
     const isEdit = !!product;
-    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0, size: '', availableQty: null };
+    const p = product || { name: '', price: '', originalPrice: '', discount: 0, description: '', material: '', images: [], colors: [], vendorId: '', costPrice: 0, size: '', availableQty: null, category: '', lengthOptions: '' };
     pmImageUrls = [...p.images];
 
     // 거래처 목록 로드
@@ -2087,6 +2087,8 @@
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'product-modal';
+    modal.dataset.origSize = p.size || '';
+    modal.dataset.origLength = p.lengthOptions || '';
     modal.innerHTML = `
       <div class="overlay-content p-6">
         <div class="flex justify-between items-center mb-6">
@@ -2120,14 +2122,20 @@
             </div>
           </div>
           <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
-            <div class="flex flex-wrap gap-3 mt-1">
-              ${['FREE','S','M','L','XL','2XL'].map(sz => {
-                const sizes = (p.size||'').split(',').map(s=>s.trim());
-                const checked = sizes.includes(sz) ? 'checked' : '';
-                return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-size-cb" value="${sz}" ${checked} /> ${sz}</label>`;
-              }).join('')}
-            </div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">카테고리</label>
+            <select id="pm-category" class="input-field" onchange="onPMCategoryChange()">
+              <option value="" ${!p.category?'selected':''}>선택안함</option>
+              <option value="상의" ${p.category==='상의'?'selected':''}>상의</option>
+              <option value="바지" ${p.category==='바지'?'selected':''}>바지</option>
+              <option value="치마" ${p.category==='치마'?'selected':''}>치마</option>
+              <option value="신발" ${p.category==='신발'?'selected':''}>신발</option>
+              <option value="가방" ${p.category==='가방'?'selected':''}>가방</option>
+              <option value="악세사리" ${p.category==='악세사리'?'selected':''}>악세사리</option>
+            </select>
+          </div>
+          <div id="pm-size-area">
+          </div>
+          <div id="pm-length-area" style="display:none;">
           </div>
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">소재</label>
@@ -2178,6 +2186,60 @@
     `;
     document.body.appendChild(modal);
     renderImagePreviews();
+    onPMCategoryChange();
+  }
+
+  const PM_CATEGORY_SIZES = {
+    '상의': ['FREE','S(55)','M(66)','L(77)'],
+    '바지': ['FREE','S','M','L','XL','2XL'],
+    '치마': ['FREE','S','M','L','XL','2XL'],
+    '신발': ['225','230','235','240','245','250'],
+    '가방': [],
+    '악세사리': [],
+  };
+  const PM_DEFAULT_SIZES = ['FREE','S','M','L','XL','2XL'];
+
+  function onPMCategoryChange() {
+    const category = document.getElementById('pm-category')?.value || '';
+    const sizeArea = document.getElementById('pm-size-area');
+    const lengthArea = document.getElementById('pm-length-area');
+    if (!sizeArea) return;
+
+    const sizeOptions = PM_CATEGORY_SIZES[category] || PM_DEFAULT_SIZES;
+    const modal = document.getElementById('product-modal');
+    const existingSizes = (modal?.dataset.origSize || '').split(',').map(s => s.trim());
+    const existingLengths = (modal?.dataset.origLength || '').split(',').map(s => s.trim());
+
+    if (sizeOptions.length === 0) {
+      sizeArea.innerHTML = '<p class="text-[11px] text-warm-400 mt-1">이 카테고리는 사이즈 옵션이 없습니다</p>';
+    } else {
+      sizeArea.innerHTML = `
+        <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사이즈</label>
+        <div class="flex flex-wrap gap-3 mt-1">
+          ${sizeOptions.map(sz => {
+            const checked = existingSizes.includes(sz) ? 'checked' : '';
+            return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-size-cb" value="${sz}" ${checked} /> ${sz}</label>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    if (category === '바지') {
+      lengthArea.style.display = '';
+      lengthArea.innerHTML = `
+        <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">기장 옵션</label>
+        <div class="flex flex-wrap gap-3 mt-1">
+          ${['Short','Long'].map(lo => {
+            const checked = existingLengths.includes(lo) ? 'checked' : '';
+            return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-length-cb" value="${lo}" ${checked} /> ${lo}</label>`;
+          }).join('')}
+        </div>
+        <p class="text-[10px] text-warm-400 mt-1">선택 안 하면 기장 구분 없이 판매됩니다</p>
+      `;
+    } else {
+      lengthArea.style.display = 'none';
+      lengthArea.innerHTML = '';
+    }
   }
 
   function renderImagePreviews() {
@@ -2266,6 +2328,9 @@
     const availableQty = aqVal === '' ? null : Math.max(0, parseInt(aqVal) || 0);
     const sizeChecked = [...document.querySelectorAll('.pm-size-cb:checked')].map(cb => cb.value);
     const size = sizeChecked.join(',');
+    const category = document.getElementById('pm-category').value;
+    const lengthChecked = [...document.querySelectorAll('.pm-length-cb:checked')].map(cb => cb.value);
+    const lengthOptions = lengthChecked.join(',');
     const price = wholesalePrice || costPrice;
     const originalPrice = wholesalePrice || costPrice;
     const discount = 0;
@@ -2281,13 +2346,13 @@
       if (id) {
         await api('/admin/products/' + id, {
           method: 'PATCH',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, category, lengthOptions })
         });
         showToast('상품이 수정되었습니다');
       } else {
         await api('/admin/products', {
           method: 'POST',
-          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty })
+          body: JSON.stringify({ name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, category, lengthOptions })
         });
         showToast('상품이 등록되었습니다');
       }
@@ -2322,11 +2387,11 @@
       const params = new URLSearchParams();
       if (bcSearch) params.set('search', bcSearch);
       if (bcFilter !== 'all') params.set('status', bcFilter);
-      const [broadcasts, products] = await Promise.all([
+      const [broadcasts, rawProducts] = await Promise.all([
         api('/admin/broadcasts?' + params.toString()),
-        allProducts || api('/admin/products'),
+        allProducts || api('/admin/products?pageSize=200').then(r => r.items || r),
       ]);
-      allProducts = products;
+      allProducts = rawProducts;
 
       const statuses = ['all','live','ended'];
       const statusTabLabels = { all:'전체', live:'LIVE', ended:'종료' };
@@ -2451,7 +2516,7 @@
     const isEdit = !!broadcast;
     const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'live', description: '', productIds: [] };
     // 항상 최신 사용중 상품 목록 로드
-    try { allProducts = await api('/admin/products?isActive=true'); } catch(e) { /* keep cached */ }
+    try { const r = await api('/admin/products?isActive=true&pageSize=200'); allProducts = r.items || r; } catch(e) { /* keep cached */ }
     const products = allProducts || [];
 
     const modal = document.createElement('div');
@@ -2870,7 +2935,7 @@
     poItems = [{ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
     let vendors = [];
     try { vendors = await api('/admin/vendors'); } catch(e) {}
-    try { poAllProducts = await api('/admin/products'); } catch(e) { poAllProducts = []; }
+    try { const r = await api('/admin/products?pageSize=200'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'po-modal';
@@ -2935,6 +3000,20 @@
 
   function addPOItem() { poItems.push({ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }); renderPOItems(); }
   function removePOItem(i) { poItems.splice(i,1); renderPOItems(); }
+  function getPOSizesWithLength(prod) {
+    const sizeStr = prod ? (prod.size || '') : '';
+    const baseSizes = sizeStr ? sizeStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const lengthStr = prod ? (prod.lengthOptions || '') : '';
+    const lengths = lengthStr ? lengthStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (lengths.length === 0) return baseSizes;
+    const combined = [];
+    baseSizes.forEach(sz => {
+      combined.push(sz);
+      lengths.forEach(lo => combined.push(sz + ' / ' + lo));
+    });
+    return combined;
+  }
+
   function renderPOItems() {
     const list = document.getElementById('po-items-list');
     if (!list) return;
@@ -2942,8 +3021,7 @@
     list.innerHTML = poItems.map((item,i) => {
       const selectedProd = poAllProducts.find(p => p.id === item.productId);
       const colors = selectedProd ? (selectedProd.colors || []) : [];
-      const sizeStr = selectedProd ? (selectedProd.size || '') : '';
-      const sizes = sizeStr ? sizeStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const sizes = getPOSizesWithLength(selectedProd);
       return `
       <div class="border border-warm-200 rounded p-3 mb-2 relative" onclick="event.stopPropagation()">
         ${poItems.length > 1 ? `<button type="button" onclick="removePOItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
@@ -3017,7 +3095,7 @@
         receivedQty: it.receivedQty || 0,
       }));
       // 편집용 상품 목록 로드
-      try { poAllProducts = await api('/admin/products'); } catch(e) { poAllProducts = []; }
+      try { const r = await api('/admin/products?pageSize=200'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
       const modal = document.createElement('div');
       modal.className = 'overlay';
       modal.id = 'po-detail-modal';
@@ -3144,8 +3222,7 @@
         ${poEditItems.map((item,i) => {
           const selectedProd = poAllProducts.find(p => p.id === item.productId);
           const colors = selectedProd ? (selectedProd.colors || []) : [];
-          const sizeStr = selectedProd ? (selectedProd.size || '') : '';
-          const sizes = sizeStr ? sizeStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+          const sizes = getPOSizesWithLength(selectedProd);
           return `
           <div class="border border-warm-200 rounded p-3 mb-2 relative">
             ${poEditItems.length > 1 ? `<button type="button" onclick="removePOEditItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
@@ -3615,7 +3692,7 @@
 
   async function openInventoryModal() {
     let products = [];
-    try { products = await api('/admin/products'); } catch(e) {}
+    try { const r = await api('/admin/products?pageSize=200'); products = r.items || r; } catch(e) {}
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'inv-modal';

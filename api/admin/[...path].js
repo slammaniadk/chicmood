@@ -2124,6 +2124,8 @@ async function handleProducts(req, res) {
       wholesalePrice: p.wholesale_price || 0,
       availableQty: p.available_qty,
       size: p.size || '',
+      category: p.category || '',
+      lengthOptions: p.length_options || '',
       isActive: p.is_active !== false,
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
@@ -2133,11 +2135,11 @@ async function handleProducts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, category, lengthOptions } = req.body;
     if (!name) return fail(res, '상품명은 필수입니다');
 
     const finalPrice = price || costPrice || 0;
-    const insertData = { name, price: finalPrice, original_price: originalPrice || finalPrice, discount: discount || 0, description: description || '', material: material || '', size: size || '' };
+    const insertData = { name, price: finalPrice, original_price: originalPrice || finalPrice, discount: discount || 0, description: description || '', material: material || '', size: size || '', category: category || '', length_options: lengthOptions || '' };
     if (vendorId) insertData.vendor_id = vendorId;
     if (costPrice) insertData.cost_price = costPrice;
     if (wholesalePrice !== undefined) insertData.wholesale_price = wholesalePrice;
@@ -2171,7 +2173,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, isActive } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, isActive, category, lengthOptions } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -2186,6 +2188,8 @@ async function handleProductDetail(req, res, id) {
     if (size !== undefined) update.size = size;
     if (availableQty !== undefined) update.available_qty = availableQty;
     if (isActive !== undefined) update.is_active = isActive;
+    if (category !== undefined) update.category = category;
+    if (lengthOptions !== undefined) update.length_options = lengthOptions;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('products').update(update).eq('id', id);
