@@ -2082,18 +2082,33 @@ async function handleProducts(req, res) {
   if (req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const isActiveParam = url.searchParams.get('isActive');
+    const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(url.searchParams.get('pageSize')) || 50));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    let query = supabaseAdmin
+    // 총 개수 쿼리와 데이터 쿼리 병렬 실행
+    let countQuery = supabaseAdmin.from('products').select('id', { count: 'exact', head: true });
+    let dataQuery = supabaseAdmin
       .from('products')
       .select('*, product_images(*), product_colors(*), vendors(name)')
-      .order('id', { ascending: false });
+      .order('id', { ascending: false })
+      .range(from, to);
 
-    if (isActiveParam === 'true') query = query.eq('is_active', true);
-    else if (isActiveParam === 'false') query = query.eq('is_active', false);
+    if (isActiveParam === 'true') {
+      countQuery = countQuery.eq('is_active', true);
+      dataQuery = dataQuery.eq('is_active', true);
+    } else if (isActiveParam === 'false') {
+      countQuery = countQuery.eq('is_active', false);
+      dataQuery = dataQuery.eq('is_active', false);
+    }
 
-    const { data: products, error } = await query;
+    const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);
 
-    if (error) return fail(res, error.message, 500);
+    if (dataResult.error) return fail(res, dataResult.error.message, 500);
+
+    const total = countResult.count || 0;
+    const products = dataResult.data;
 
     const result = products.map(p => ({
       id: p.id,
@@ -2114,7 +2129,7 @@ async function handleProducts(req, res) {
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
     }));
 
-    return ok(res, result);
+    return ok(res, { items: result, total, page, pageSize });
   }
 
   if (req.method === 'POST') {
