@@ -2104,13 +2104,9 @@ async function handleProducts(req, res) {
     }
 
     if (searchParam) {
-      if (/^\d+$/.test(searchParam)) {
-        countQuery = countQuery.eq('id', parseInt(searchParam));
-        dataQuery = dataQuery.eq('id', parseInt(searchParam));
-      } else {
-        countQuery = countQuery.ilike('name', `%${searchParam}%`);
-        dataQuery = dataQuery.ilike('name', `%${searchParam}%`);
-      }
+      const filter = `name.ilike.%${searchParam}%,id::text.ilike.%${searchParam}%`;
+      countQuery = countQuery.or(filter);
+      dataQuery = dataQuery.or(filter);
     }
 
     const [countResult, dataResult] = await Promise.all([countQuery, dataQuery]);
