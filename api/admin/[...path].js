@@ -2080,11 +2080,10 @@ async function handlePORegenerate(req, res) {
 // ============================================================
 async function handleProducts(req, res) {
   if (req.method === 'GET') {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const isActiveParam = url.searchParams.get('isActive');
-    const searchParam = (url.searchParams.get('search') || '').trim();
-    const page = Math.max(1, parseInt(url.searchParams.get('page')) || 1);
-    const pageSize = Math.min(200, Math.max(1, parseInt(url.searchParams.get('pageSize')) || 50));
+    const isActiveParam = req.query.isActive || null;
+    const searchParam = (req.query.search || '').trim();
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize) || 50));
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
