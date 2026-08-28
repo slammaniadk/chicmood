@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 21:01</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 21:02</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2564,7 +2564,7 @@
           <div>
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">상품 선택</label>
             <input type="text" class="input-field mb-2" placeholder="상품번호 또는 상품명 검색" oninput="filterBMProducts(this.value)" />
-            <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+            <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto space-y-2">
               ${products.map(p => `
                 <label class="flex items-center gap-3 cursor-pointer text-[13px] bm-product-row" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}">
                   <input type="checkbox" class="bm-product" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
