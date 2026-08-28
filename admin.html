@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 19:14</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 20:44</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2255,12 +2255,21 @@
     counter.textContent = pmImageUrls.length + '장';
     container.innerHTML = pmImageUrls.map((url, i) => `
       <div class="relative group">
-        <img src="${thumbUrl(url, 80, 100)}" loading="lazy" decoding="async" class="w-16 h-20 object-cover rounded border border-warm-200" />
-        <button type="button" onclick="removeProductImage(${i})"
+        <img src="${thumbUrl(url, 80, 100)}" loading="lazy" decoding="async" class="w-16 h-20 object-cover rounded border border-warm-200 cursor-pointer" onclick="previewImage('${url.replace(/'/g,"\\'")}')" />
+        <button type="button" onclick="event.stopPropagation();removeProductImage(${i})"
           class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center cursor-pointer border-none opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
-        <span class="absolute bottom-0 left-0 bg-warm-800/70 text-white text-[9px] w-full text-center">${i+1}</span>
+        <span class="absolute bottom-0 left-0 bg-warm-800/70 text-white text-[9px] w-full text-center pointer-events-none">${i+1}</span>
       </div>
     `).join('');
+  }
+
+  function previewImage(url) {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;z-index:9999;cursor:pointer;';
+    overlay.onclick = () => overlay.remove();
+    overlay.innerHTML = `<img src="${url}" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;" />`;
+    document.body.appendChild(overlay);
   }
 
   function removeProductImage(idx) {
