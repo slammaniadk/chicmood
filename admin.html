@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 20:47</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 1.9.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.28 20:55</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2568,6 +2568,7 @@
               ${products.map(p => `
                 <label class="flex items-center gap-3 cursor-pointer text-[13px] bm-product-row" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}">
                   <input type="checkbox" class="bm-product" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 40, 50)}" class="w-6 h-8 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-6 h-8 bg-warm-100 rounded flex-shrink-0"></div>'}
                   <span class="text-warm-400 text-[11px]">[${p.id}]</span>
                   <span class="text-warm-700">${escapeHtml(p.name)}</span>
                   <span class="text-warm-400 text-[11px]">${fmt(p.price)}</span>
