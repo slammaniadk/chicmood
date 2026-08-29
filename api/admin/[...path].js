@@ -763,13 +763,13 @@ async function handleOrderDetail(req, res, id) {
 
   if (req.method !== 'PATCH') return fail(res, 'Method not allowed', 405);
 
-  const { status, trackingNo, trackingCarrier } = req.body;
+  const { status, trackingNo, trackingCarrier, shippingFee } = req.body;
   const validStatuses = ['입금확인', '결제완료', '결제취소', '배송준비', '배송완료'];
   if (status && !validStatuses.includes(status)) return fail(res, `유효하지 않은 상태입니다: ${status}`);
 
   // 기존 상태 확인 (중복 차감 방지 + 발주 진행 체크)
   let prevStatus = null;
-  const { data: prev } = await supabaseAdmin.from('orders').select('status').eq('id', id).single();
+  const { data: prev } = await supabaseAdmin.from('orders').select('status, subtotal, shipping_fee, total').eq('id', id).single();
   if (prev) prevStatus = prev.status;
 
   // (발주 상태 무관하게 취소/되돌리기 허용 - 발주 수량은 자동 차감)
@@ -778,6 +778,13 @@ async function handleOrderDetail(req, res, id) {
   if (status) update.status = status;
   if (trackingNo !== undefined) update.tracking_no = trackingNo;
   if (trackingCarrier !== undefined) update.tracking_carrier = trackingCarrier;
+
+  // 배송비 수정 → total 재계산
+  if (shippingFee !== undefined && prev) {
+    const newFee = parseInt(shippingFee) || 0;
+    update.shipping_fee = newFee;
+    update.total = (prev.subtotal || 0) + newFee;
+  }
 
   if (Object.keys(update).length === 0) return fail(res, '변경할 내용이 없습니다');
 
