@@ -1181,6 +1181,32 @@
       return;
     }
 
+    // 중복 구매 확인
+    try {
+      const dupRes = await api('/orders/check-duplicates', {
+        method: 'POST',
+        body: JSON.stringify({
+          broadcastId,
+          items: cart.map(i => ({ productId: i.productId, color: i.color, size: i.size }))
+        })
+      });
+
+      if (dupRes.duplicates && dupRes.duplicates.length > 0) {
+        const dupList = dupRes.duplicates.map(d => `- ${d.name} (${d.color}/${d.size})`).join('\n');
+        showConfirmModal('중복 주문 확인',
+          `이미 주문한 상품이 포함되어 있습니다:\n\n${dupList}\n\n그래도 주문하시겠습니까?`,
+          async () => { await placeOrder(name, phone, social, address, memo, broadcastId); }
+        );
+        return;
+      }
+    } catch (e) {
+      // 중복 확인 실패 시 주문 진행 차단하지 않음
+    }
+
+    await placeOrder(name, phone, social, address, memo, broadcastId);
+  }
+
+  async function placeOrder(name, phone, social, address, memo, broadcastId) {
     document.getElementById('overlay-loading').classList.remove('hidden');
 
     try {

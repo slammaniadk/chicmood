@@ -2807,7 +2807,7 @@ async function handlePurchaseOrders(req, res) {
     }
 
     const result = filtered.map(po => {
-      const items = po.purchase_order_items || [];
+      const items = (po.purchase_order_items || []).sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '') || (a.color_name || '').localeCompare(b.color_name || '') || (a.size_name || '').localeCompare(b.size_name || ''));
       const totalQty = items.reduce((s, i) => s + (i.qty || 0), 0);
       const totalReceivedQty = items.reduce((s, i) => s + (i.received_qty || 0), 0);
       const itemsSummary = items.map(i => {
@@ -2878,7 +2878,9 @@ async function handlePurchaseOrderDetail(req, res, id) {
         vendorName: po.vendors ? po.vendors.name : '', status: po.status,
         totalAmount: po.total_amount, memo: po.memo,
         orderedAt: po.ordered_at, createdAt: po.created_at,
-        items: (po.purchase_order_items || []).map(i => ({
+        items: (po.purchase_order_items || [])
+          .sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '') || (a.color_name || '').localeCompare(b.color_name || '') || (a.size_name || '').localeCompare(b.size_name || ''))
+          .map(i => ({
           id: i.id, productId: i.product_id, productName: i.product_name, colorName: i.color_name,
           sizeName: i.size_name, qty: i.qty, costPrice: i.cost_price,
           subtotal: i.subtotal || (i.qty || 0) * (i.cost_price || 0),
