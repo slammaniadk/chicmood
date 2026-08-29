@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:12</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:14</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -795,7 +795,7 @@
               <thead>
                 <tr>
                   <th style="width:32px"><input type="checkbox" onchange="toggleAllMerge(this.checked)" /></th>
-                  <th style="white-space:nowrap">주문번호</th><th style="white-space:nowrap">주문자</th><th style="min-width:200px">상품(금액)</th><th style="max-width:80px">방송</th><th style="max-width:80px;white-space:nowrap">거래처</th><th style="white-space:nowrap">상태</th><th style="white-space:nowrap">배정</th><th style="white-space:nowrap">일시</th><th style="white-space:nowrap">관리</th>
+                  <th style="white-space:nowrap">주문번호</th><th style="white-space:nowrap">주문자</th><th style="min-width:200px">상품(금액)</th><th style="max-width:80px">방송</th><th style="max-width:80px">거래처</th><th style="white-space:nowrap">상태</th><th style="white-space:nowrap">배정</th><th style="white-space:nowrap">일시</th><th style="white-space:nowrap">관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -824,7 +824,7 @@
                         <p class="font-semibold">${escapeHtml(o.name)}${o.nickname ? `<span class="text-warm-400 font-normal text-[11px]">(${escapeHtml(o.nickname)})</span>` : ''}</p>
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
-                      <td class="text-[11px]">
+                      <td class="text-[12px]">
                         ${o.items.map(i => {
                           let line = `${escapeHtml(i.name)}(${escapeHtml(i.color)}/${escapeHtml(i.size)})x${i.qty} <span class="font-semibold">${fmt(i.subtotal)}</span>`;
                           if (i.allocatedQty >= i.qty && i.qty > 0) line += '<span style="display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600;background:#d1fae5;color:#065f46;">완료</span>';
@@ -842,7 +842,7 @@
                         </div>
                       </td>
                       <td class="text-[12px] text-warm-500" style="max-width:80px;">${escapeHtml(o.broadcastName || '-')}</td>
-                      <td class="text-[12px] text-warm-500" style="max-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(vendorList.join(', '))}">${escapeHtml(vendorNames)}</td>
+                      <td class="text-[12px] text-warm-500" style="max-width:80px;" title="${escapeHtml(vendorList.join(', '))}">${escapeHtml(vendorNames)}</td>
                       <td><span class="status-badge status-${o.status}">${o.status}</span>${o.returnStatus ? `<br><span class="text-[9px] font-semibold ${o.returnStatus==='완료'?'text-red-500':'text-orange-500'}">반품${o.returnStatus==='완료'?'완료':'접수'}</span>` : ''}</td>
                       <td class="text-[12px] font-semibold whitespace-nowrap" style="${allocColor}">${allocLabel}</td>
                       <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
