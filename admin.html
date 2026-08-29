@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:38</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:46</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -242,6 +242,15 @@
   function escapeHtml(str) {
     if (!str) return '';
     const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+  }
+
+  function markCopied(key) {
+    const set = JSON.parse(localStorage.getItem('chicmood_copied_msgs') || '[]');
+    if (!set.includes(key)) { set.push(key); localStorage.setItem('chicmood_copied_msgs', JSON.stringify(set)); }
+  }
+  function isCopied(key) {
+    const set = JSON.parse(localStorage.getItem('chicmood_copied_msgs') || '[]');
+    return set.includes(key);
   }
 
   function showSpinner(el) {
@@ -849,9 +858,9 @@
                       <td class="whitespace-nowrap">
                         <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}',${o.shippingFee||0},${o.subtotal||0},'${o.broadcastId||''}')">변경</button>
                         <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
-                        <button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyOrderMsg('${orderMsgData}')">주문문구</button>
+                        <button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyOrderMsg('${orderMsgData}','${o.id}',event)">${isCopied('order:'+o.id)?'<span style="color:#e53e3e">●</span> ':''}주문문구</button>
                         ${o.trackingNo
-                          ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}')">발송문구</button>`
+                          ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}','${o.id}',event)">${isCopied('ship:'+o.id)?'<span style="color:#e53e3e">●</span> ':''}발송문구</button>`
                           : `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;opacity:0.3;cursor:default;" disabled>발송문구</button>`
                         }
                         ${o.mergeHistoryId ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#7c3aed;border-color:#7c3aed;" onclick="unmergeOrder('${o.id}','${o.orderNo}')">병합해제</button>` : ''}
@@ -1587,7 +1596,7 @@
           ? `<div class="flex items-center gap-1"><span class="text-[12px]">${escapeHtml(o.trackingNo||'')}</span><button class="btn-outline" style="padding:2px 6px;font-size:10px;color:#b91c1c;" onclick="revertShipping('${key}','${escapeHtml(o.orderNo)}')">취소</button></div>`
           : `<div class="flex items-center gap-1"><input type="text" class="input-field" style="width:120px;padding:4px 6px;font-size:12px;" placeholder="송장번호" id="track-${key}" onkeydown="if(event.key==='Enter'){event.preventDefault();saveTrackingNo('${key}')}" /><button class="btn-primary" style="padding:4px 8px;font-size:11px;white-space:nowrap;" onclick="saveTrackingNo('${key}')">저장</button></div>`;
         const shipMsgBtn = o.trackingNo
-          ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}')">발송문구</button>`
+          ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#16a765;border-color:#16a765;" onclick="copyShippingMsg('${escapeHtml(o.name)}','${escapeHtml(o.trackingNo)}','${o.id}',event)">${isCopied('ship:'+o.id)?'<span style="color:#e53e3e">●</span> ':''}발송문구</button>`
           : '';
         orderRows += `
           <tr>
@@ -1719,7 +1728,8 @@
     renderShipping(document.getElementById('page-content'));
   }
 
-  function copyOrderMsg(dataB64) {
+  function copyOrderMsg(dataB64, orderId, evt) {
+    const btn = evt && evt.target ? evt.target.closest('button') : null;
     const d = JSON.parse(decodeURIComponent(escape(atob(dataB64))));
     const displayName = d.nickname && d.nickname !== '-' ? d.nickname : d.name;
     let msg = '----------------------------------\n';
@@ -1740,18 +1750,25 @@
     }
     msg += `총 결제액: ${fmt(d.total)}원\n`;
     msg += '----------------------------------';
+    const onCopied = () => {
+      markCopied('order:' + orderId);
+      if (btn) { btn.innerHTML = '<span style="color:#e53e3e">●</span> 주문문구'; }
+    };
     navigator.clipboard.writeText(msg).then(() => {
       showToast('주문문구가 복사되었습니다');
+      onCopied();
     }).catch(() => {
       const ta = document.createElement('textarea');
       ta.value = msg; document.body.appendChild(ta);
       ta.select(); document.execCommand('copy');
       document.body.removeChild(ta);
       showToast('주문문구가 복사되었습니다');
+      onCopied();
     });
   }
 
-  async function copyVendorPOText(vendorId) {
+  async function copyVendorPOText(vendorId, evt) {
+    const btn = evt && evt.target ? evt.target.closest('button') : null;
     try {
       const d = await api('/admin/purchase-orders/vendor-text?vendorId=' + vendorId);
       if (!d.items || d.items.length === 0) { showToast('미입고 품목이 없습니다'); return; }
@@ -1761,24 +1778,36 @@
         msg += ` * ${i.productName}${spec ? ' (' + spec + ')' : ''} - ${i.qty}개\n`;
       });
       msg += `\n총 수량: ${d.totalQty}개\n\n확인 부탁드립니다. 감사합니다.`;
+      const onCopied = () => {
+        markCopied('po:' + vendorId);
+        if (btn) { btn.innerHTML = '<span style="color:#e53e3e">●</span> 발주문구'; }
+      };
       navigator.clipboard.writeText(msg).then(() => {
         showToast('발주문구가 복사되었습니다');
+        onCopied();
       }).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = msg; document.body.appendChild(ta);
         ta.select(); document.execCommand('copy');
         document.body.removeChild(ta);
         showToast('발주문구가 복사되었습니다');
+        onCopied();
       });
     } catch (e) {
       showToast('발주문구 생성 중 오류 발생');
     }
   }
 
-  function copyShippingMsg(name, trackingNo) {
+  function copyShippingMsg(name, trackingNo, orderId, evt) {
+    const btn = evt && evt.target ? evt.target.closest('button') : null;
     const msg = `[시크무드]\n${name}님, 주문하신 상품이 오늘\n로젠택배로 발송되었습니다.\n\n송장번호: ${trackingNo}\n(조회는 늦은 오후나 내일 오전부터 가능할 수 있습니다.)\n\n시크무드를 이용해주셔서\n감사합니다.`;
+    const onCopied = () => {
+      markCopied('ship:' + orderId);
+      if (btn) { btn.innerHTML = '<span style="color:#e53e3e">●</span> 발송문구'; }
+    };
     navigator.clipboard.writeText(msg).then(() => {
       showToast('발송문구가 복사되었습니다');
+      onCopied();
     }).catch(() => {
       // fallback
       const ta = document.createElement('textarea');
@@ -1786,6 +1815,7 @@
       ta.select(); document.execCommand('copy');
       document.body.removeChild(ta);
       showToast('발송문구가 복사되었습니다');
+      onCopied();
     });
   }
 
@@ -3168,7 +3198,7 @@
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
-                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId})">발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
+                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId}, event)">${isCopied('po:'+po.vendorId)?'<span style="color:#e53e3e">●</span> ':''}발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
                     </tr>
                   `;
                 }).join('')}
