@@ -795,11 +795,11 @@
               <thead>
                 <tr>
                   <th style="width:32px"><input type="checkbox" onchange="toggleAllMerge(this.checked)" /></th>
-                  <th style="max-width:90px">주문번호</th><th style="white-space:nowrap">주문자</th><th style="white-space:nowrap">닉네임</th><th style="white-space:nowrap">금액</th><th style="min-width:180px">상품</th><th style="max-width:80px">방송</th><th style="max-width:80px;white-space:nowrap">거래처</th><th style="white-space:nowrap">상태</th><th style="white-space:nowrap">배정</th><th style="white-space:nowrap">일시</th><th style="white-space:nowrap">관리</th>
+                  <th style="white-space:nowrap">주문번호</th><th style="white-space:nowrap">주문자</th><th style="white-space:nowrap">금액</th><th style="min-width:180px">상품</th><th style="max-width:80px">방송</th><th style="max-width:80px;white-space:nowrap">거래처</th><th style="white-space:nowrap">상태</th><th style="white-space:nowrap">배정</th><th style="white-space:nowrap">일시</th><th style="white-space:nowrap">관리</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.orders.length === 0 ? '<tr><td colspan="12" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
+                ${data.orders.length === 0 ? '<tr><td colspan="11" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -829,12 +829,11 @@
                   return `
                     <tr>
                       <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked, this)" /></td>
-                      <td class="font-semibold text-warm-800 text-[12px]" style="max-width:90px;word-break:break-all;">${o.orderNo}${o.mergeHistoryId ? ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#ede9fe;color:#7c3aed;font-weight:600;">병합</span>' : ''}</td>
+                      <td class="font-semibold text-warm-800" style="font-size:9px;max-width:100px;word-break:break-all;">${o.orderNo}${o.mergeHistoryId ? ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#ede9fe;color:#7c3aed;font-weight:600;">병합</span>' : ''}</td>
                       <td class="whitespace-nowrap">
-                        <p class="font-semibold">${escapeHtml(o.name)}</p>
+                        <p class="font-semibold">${escapeHtml(o.name)}${o.nickname ? `<span class="text-warm-400 font-normal text-[11px]">(${escapeHtml(o.nickname)})</span>` : ''}</p>
                         <p class="text-[11px] text-warm-400">${escapeHtml(o.phone)}</p>
                       </td>
-                      <td class="text-[12px] text-warm-500 whitespace-nowrap">${escapeHtml(o.nickname || '-')}</td>
                       <td class="text-[11px] whitespace-nowrap">
                         ${o.items.map(i => `<span class="text-warm-500">${escapeHtml(i.name)} ${fmt(i.price)}x${i.qty}=</span><span class="font-semibold">${fmt(i.subtotal)}</span>`).join('<br>')}
                         <div class="border-t border-warm-100 mt-1 pt-1">
