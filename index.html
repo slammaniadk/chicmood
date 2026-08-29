@@ -92,6 +92,17 @@
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
     .status-배송완료 { background: #d1fae5; color: #065f46; }
     .status-결제취소 { background: #fee2e2; color: #991b1b; }
+    .status-배송준비 { background: #dbeafe; color: #1e40af; }
+
+    .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
+    .confirm-overlay.show { opacity: 1; }
+    .confirm-box { background: #fff; border-radius: 12px; padding: 28px 24px 20px; max-width: 360px; width: 90%; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+    .confirm-box h3 { font-size: 16px; font-weight: 700; color: #44210b; margin-bottom: 10px; }
+    .confirm-box p { font-size: 13px; color: #7c6a56; line-height: 1.6; margin-bottom: 20px; white-space: pre-line; }
+    .confirm-box .btn-row { display: flex; gap: 8px; }
+    .confirm-box .btn-row button { flex: 1; padding: 10px 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    .confirm-box .btn-cancel { background: #f3ebe0; color: #7c6a56; }
+    .confirm-box .btn-confirm { background: #6b4220; color: #fff; }
 
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -110,6 +121,18 @@
 <body>
 
   <div id="toast" class="toast"></div>
+
+  <!-- 확인 모달 -->
+  <div id="confirm-modal" class="confirm-overlay hidden" onclick="if(event.target===this)closeConfirmModal()">
+    <div class="confirm-box">
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-message"></p>
+      <div class="btn-row">
+        <button class="btn-cancel" onclick="closeConfirmModal()">취소</button>
+        <button class="btn-confirm" id="confirm-ok-btn">확인</button>
+      </div>
+    </div>
+  </div>
 
   <!-- 상단 안내 배너 -->
   <div class="bg-warm-800 text-warm-100 text-center py-2 text-[11px] tracking-wider font-light">
@@ -274,6 +297,74 @@
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  // ============================================================
+  //  확인 모달
+  // ============================================================
+  let _confirmCallback = null;
+  function showConfirmModal(title, message, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-message').textContent = message;
+    _confirmCallback = onConfirm;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    const newBtn = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newBtn, okBtn);
+    newBtn.id = 'confirm-ok-btn';
+    newBtn.addEventListener('click', async () => {
+      closeConfirmModal();
+      if (_confirmCallback) await _confirmCallback();
+    });
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => modal.classList.add('show'));
+  }
+  function closeConfirmModal() {
+    const modal = document.getElementById('confirm-modal');
+    modal.classList.remove('show');
+    setTimeout(() => modal.classList.add('hidden'), 200);
+    _confirmCallback = null;
+  }
+
+  // ============================================================
+  //  주문 취소 / 수정
+  // ============================================================
+  async function cancelOrder(orderNo) {
+    showConfirmModal('주문 취소', '정말 주문을 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.', async () => {
+      try {
+        await api('/orders/' + orderNo, { method: 'PATCH', body: JSON.stringify({ action: 'cancel' }) });
+        showToast('주문이 취소되었습니다');
+        renderMypage(document.getElementById('page-content'));
+      } catch (e) {
+        showToast(e.message || '취소 처리 중 오류가 발생했습니다');
+      }
+    });
+  }
+
+  async function modifyOrder(orderNo) {
+    const order = window._mypageOrders && window._mypageOrders[orderNo];
+    if (!order) { showToast('주문 정보를 찾을 수 없습니다'); return; }
+    showConfirmModal('주문 수정', '주문을 취소하고 장바구니에 상품을 다시 담습니다.\n수정 후 재주문해주세요.', async () => {
+      try {
+        await api('/orders/' + orderNo, { method: 'PATCH', body: JSON.stringify({ action: 'cancel' }) });
+        cart = order.items.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
+          color: item.color,
+          size: item.size,
+          qty: item.qty,
+          image: item.image || null,
+          broadcastId: order.broadcastId || null
+        }));
+        saveCart();
+        updateCartBadge();
+        showToast('장바구니에 상품을 담았습니다. 수정 후 재주문해주세요.');
+        location.hash = '#cart';
+      } catch (e) {
+        showToast(e.message || '수정 처리 중 오류가 발생했습니다');
+      }
+    });
   }
 
   function showPageSpinner(el) {
@@ -1270,10 +1361,12 @@
                 <p class="text-warm-400 text-sm">주문 내역이 없습니다.</p>
                 <a href="#home" class="text-[13px] text-warm-600 underline underline-offset-4 mt-2 inline-block">쇼핑하러 가기</a>
               </div>
-            ` : orders.map(order => {
+            ` : (() => { window._mypageOrders = {}; return orders; })().map(order => {
+              window._mypageOrders[order.orderNo] = order;
               const d = new Date(order.createdAt);
               const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
               const statusClass = 'status-' + order.status;
+              const canCancel = ['입금확인', '결제완료'].includes(order.status);
               return `
                 <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4">
                   <div class="flex justify-between items-start mb-3">
@@ -1295,6 +1388,12 @@
                     <span class="text-[11px] text-warm-400">총 결제금액</span>
                     <span class="text-base font-bold text-warm-800">${fmt(order.total)}</span>
                   </div>
+                  ${canCancel ? `
+                  <div class="border-t border-warm-100 mt-3 pt-3 flex gap-2">
+                    <button class="flex-1 py-2 rounded-lg text-[12px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors" onclick="cancelOrder('${order.orderNo}')">주문 취소</button>
+                    <button class="flex-1 py-2 rounded-lg text-[12px] font-semibold bg-warm-800 text-white hover:bg-warm-900 transition-colors" onclick="modifyOrder('${order.orderNo}')">주문 수정</button>
+                  </div>
+                  ` : ''}
                 </div>
               `;
             }).join('')}

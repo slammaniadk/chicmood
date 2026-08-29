@@ -19,14 +19,30 @@ module.exports = async function handler(req, res) {
     .from('orders')
     .select(`
       id, order_no, name, phone, social, address, memo,
-      subtotal, shipping_fee, total, status, created_at,
-      order_items ( name, color, size, qty, price, subtotal )
+      subtotal, shipping_fee, total, status, created_at, broadcast_id,
+      order_items ( id, product_id, name, color, size, qty, price, subtotal )
     `)
     .eq('name', name)
     .like('phone', `%${phoneLast4}`)
     .order('created_at', { ascending: false });
 
   if (error) return fail(res, error.message, 500);
+
+  // 모든 product_id 수집 → 대표 이미지 조회
+  const productIds = [...new Set(
+    orders.flatMap(o => (o.order_items || []).map(i => i.product_id).filter(Boolean))
+  )];
+  const imageMap = {};
+  if (productIds.length > 0) {
+    const { data: images } = await supabaseAdmin
+      .from('product_images')
+      .select('product_id, image_url')
+      .in('product_id', productIds)
+      .order('sort_order', { ascending: true });
+    (images || []).forEach(img => {
+      if (!imageMap[img.product_id]) imageMap[img.product_id] = img.image_url;
+    });
+  }
 
   const result = orders.map(o => ({
     orderNo: o.order_no,
@@ -39,13 +55,16 @@ module.exports = async function handler(req, res) {
     total: o.total,
     status: o.status,
     createdAt: o.created_at,
+    broadcastId: o.broadcast_id,
     items: (o.order_items || []).map(i => ({
+      productId: i.product_id,
       name: i.name,
       color: i.color,
       size: i.size,
       qty: i.qty,
       price: i.price,
       subtotal: i.subtotal,
+      image: (i.product_id && imageMap[i.product_id]) || null,
     })),
   }));
 
