@@ -342,24 +342,38 @@
   }
 
   // ============================================================
-  //  주문 수정 (인라인)
+  //  주문 수정 (인라인 — 수량/색상/사이즈 변경 + 상품 추가/삭제)
   // ============================================================
   let _modifyState = null;
 
-  function openModifyModal(orderNo) {
+  async function openModifyModal(orderNo) {
     const order = window._mypageOrders && window._mypageOrders[orderNo];
     if (!order) { showToast('주문 정보를 찾을 수 없습니다'); return; }
     _modifyState = {
       orderNo,
       broadcastId: order.broadcastId,
-      items: order.items.map(item => ({ ...item }))
+      items: order.items.map(item => ({ ...item })),
+      catalog: []
     };
+    // 방송 상품 카탈로그 로드 (색상/사이즈 정보)
+    if (order.broadcastId) {
+      try {
+        const bc = await api('/broadcasts/' + order.broadcastId);
+        _modifyState.catalog = bc.products || [];
+      } catch (_) {}
+    }
     renderModifyModal();
+  }
+
+  function _getCatalogProduct(productId) {
+    if (!_modifyState) return null;
+    return _modifyState.catalog.find(p => p.id === productId) || null;
   }
 
   function renderModifyModal() {
     if (!_modifyState) return;
     const subtotal = _modifyState.items.reduce((s, i) => s + (i.price * i.qty), 0);
+    const catalog = _modifyState.catalog;
 
     let modal = document.getElementById('modify-order-modal');
     if (modal) modal.remove();
@@ -368,25 +382,62 @@
     modal.id = 'modify-order-modal';
     modal.className = 'confirm-overlay';
     modal.onclick = (e) => { if (e.target === modal) closeModifyModal(); };
+
+    // 각 아이템 행
+    const itemsHtml = _modifyState.items.map((item, idx) => {
+      const cp = _getCatalogProduct(item.productId);
+      const colors = cp ? cp.colors : [];
+      const sizes = cp ? (cp.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean) : [];
+      return `
+        <div style="padding:10px 0;${idx > 0 ? 'border-top:1px solid #f3ebe0;' : ''}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <p style="flex:1;font-size:13px;font-weight:600;color:#44210b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.name)}</p>
+            <button onclick="removeModifyItem(${idx})" style="width:24px;height:24px;border:none;border-radius:6px;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:12px;line-height:1;flex-shrink:0;">✕</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
+            ${colors.length > 0 ? `
+              <select onchange="modifyItemOption(${idx},'color',this.value)" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                ${colors.map(c => `<option value="${escapeHtml(c.name)}" ${c.name === item.color ? 'selected' : ''}>${c.name}</option>`).join('')}
+              </select>
+            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.color)}</span>`}
+            ${sizes.length > 0 ? `
+              <select onchange="modifyItemOption(${idx},'size',this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === item.size ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.size)}</span>`}
+            <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+              <button onclick="modifyItemQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">−</button>
+              <span style="width:22px;text-align:center;font-size:13px;font-weight:600;">${item.qty}</span>
+              <button onclick="modifyItemQty(${idx},1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">+</button>
+            </div>
+          </div>
+          <p style="font-size:11px;color:#7c6a56;font-weight:600;margin-top:4px;text-align:right;">${fmt(item.price)} x ${item.qty} = ${fmt(item.price * item.qty)}</p>
+        </div>`;
+    }).join('');
+
+    // 상품 추가 섹션
+    const addProductHtml = catalog.length > 0 ? `
+      <div style="border-top:2px solid #e4c5a5;margin-top:8px;padding-top:10px;">
+        <p style="font-size:11px;font-weight:600;color:#7c6a56;margin-bottom:6px;">상품 추가</p>
+        <select id="mod-add-product" onchange="onModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;">
+          <option value="">상품을 선택하세요</option>
+          ${catalog.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
+        </select>
+        <div id="mod-add-options" style="display:none;margin-top:6px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <select id="mod-add-color" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;"></select>
+            <select id="mod-add-size" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;"></select>
+            <button onclick="addProductToModify()" style="padding:5px 12px;border:none;border-radius:6px;background:#6b4220;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">추가</button>
+          </div>
+        </div>
+      </div>` : '';
+
     modal.innerHTML = `
-      <div class="confirm-box" style="max-width:440px;text-align:left;">
+      <div class="confirm-box" style="max-width:460px;text-align:left;">
         <h3 style="text-align:center;margin-bottom:16px;">주문 수정</h3>
         <div style="max-height:50vh;overflow-y:auto;">
-          ${_modifyState.items.map((item, idx) => `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;${idx > 0 ? 'border-top:1px solid #f3ebe0;' : ''}gap:8px;">
-              <div style="flex:1;min-width:0;">
-                <p style="font-size:13px;font-weight:600;color:#44210b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.name)}</p>
-                <p style="font-size:11px;color:#a89580;">${escapeHtml(item.color)} / ${escapeHtml(item.size)}</p>
-                <p style="font-size:12px;color:#7c6a56;font-weight:600;">${fmt(item.price)} x ${item.qty} = ${fmt(item.price * item.qty)}</p>
-              </div>
-              <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
-                <button onclick="modifyItemQty(${idx},-1)" style="width:28px;height:28px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:16px;line-height:1;">−</button>
-                <span style="width:24px;text-align:center;font-size:14px;font-weight:600;">${item.qty}</span>
-                <button onclick="modifyItemQty(${idx},1)" style="width:28px;height:28px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:16px;line-height:1;">+</button>
-                <button onclick="removeModifyItem(${idx})" style="width:28px;height:28px;border:none;border-radius:6px;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:13px;line-height:1;margin-left:4px;">✕</button>
-              </div>
-            </div>
-          `).join('')}
+          ${itemsHtml}
+          ${addProductHtml}
         </div>
         <div style="border-top:1px solid #e4c5a5;margin-top:12px;padding-top:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -405,6 +456,11 @@
     requestAnimationFrame(() => modal.classList.add('show'));
   }
 
+  function modifyItemOption(index, field, value) {
+    if (!_modifyState) return;
+    _modifyState.items[index][field] = value;
+  }
+
   function modifyItemQty(index, delta) {
     if (!_modifyState) return;
     const newQty = _modifyState.items[index].qty + delta;
@@ -417,6 +473,42 @@
     if (!_modifyState) return;
     if (_modifyState.items.length <= 1) { showToast('최소 1개 상품이 필요합니다'); return; }
     _modifyState.items.splice(index, 1);
+    renderModifyModal();
+  }
+
+  function onModifyAddProductChange() {
+    const sel = document.getElementById('mod-add-product');
+    const optDiv = document.getElementById('mod-add-options');
+    const pid = parseInt(sel.value);
+    if (!pid) { optDiv.style.display = 'none'; return; }
+    const cp = _getCatalogProduct(pid);
+    if (!cp) return;
+    optDiv.style.display = 'block';
+    const colorSel = document.getElementById('mod-add-color');
+    const sizeSel = document.getElementById('mod-add-size');
+    colorSel.innerHTML = cp.colors.length > 0
+      ? cp.colors.map(c => `<option value="${escapeHtml(c.name)}">${c.name}</option>`).join('')
+      : '<option value="">-</option>';
+    const sizes = (cp.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean);
+    sizeSel.innerHTML = sizes.map(s => `<option value="${escapeHtml(s)}">${s}</option>`).join('');
+  }
+
+  function addProductToModify() {
+    if (!_modifyState) return;
+    const pid = parseInt(document.getElementById('mod-add-product').value);
+    const cp = _getCatalogProduct(pid);
+    if (!cp) { showToast('상품을 선택해주세요'); return; }
+    const color = document.getElementById('mod-add-color').value || '';
+    const size = document.getElementById('mod-add-size').value || 'FREE';
+    _modifyState.items.push({
+      productId: cp.id,
+      name: cp.name,
+      price: cp.price,
+      color,
+      size,
+      qty: 1,
+      image: cp.images && cp.images[0] || null,
+    });
     renderModifyModal();
   }
 
