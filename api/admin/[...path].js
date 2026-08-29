@@ -104,7 +104,8 @@ module.exports = async function handler(req, res) {
 async function handleStats(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const now = new Date();
+  // KST 기준 현재 시각
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const thisYear = now.getFullYear(), thisMonth = now.getMonth(), thisDate = now.getDate();
 
   const [ordersRes, itemsRes, membersRes] = await Promise.all([
@@ -134,12 +135,17 @@ async function handleStats(req, res) {
   }
   const yearlySales = {};
 
-  // Single pass
+  // Single pass — 결제취소 주문은 상태 집계만 하고 매출에서 제외
   allOrders.forEach(o => {
     statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
     statusTotals[o.status] = (statusTotals[o.status] || 0) + o.total;
+
+    // 결제취소 주문은 매출 집계에서 제외
+    if (o.status === '결제취소') return;
+
     totalRevenue += o.total;
-    const d = new Date(o.created_at);
+    // KST 기준으로 날짜 변환
+    const d = new Date(new Date(o.created_at).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const y = d.getFullYear(), m = d.getMonth(), dt = d.getDate();
     if (y === thisYear) { yearOrders++; yearRevenue += o.total; if (m === thisMonth) { monthOrders++; monthRevenue += o.total; if (dt === thisDate) { todayOrders++; todayRevenue += o.total; } } }
     const dayKey = `${String(m+1).padStart(2,'0')}/${String(dt).padStart(2,'0')}`;
