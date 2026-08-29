@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:14</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.29 22:16</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -802,7 +802,7 @@
                 ${data.orders.length === 0 ? '<tr><td colspan="10" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
                 ${data.orders.map(o => {
                   const d = new Date(o.createdAt);
-                  const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                  const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}<br>${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                   const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
                   const totalAlloc = o.items.reduce((s,i) => s + (i.allocatedQty || 0), 0);
                   const vendorList = [...new Set(o.items.map(i => i.vendorName).filter(Boolean))];
@@ -845,7 +845,7 @@
                       <td class="text-[12px] text-warm-500" style="max-width:80px;" title="${escapeHtml(vendorList.join(', '))}">${escapeHtml(vendorNames)}</td>
                       <td><span class="status-badge status-${o.status}">${o.status}</span>${o.returnStatus ? `<br><span class="text-[9px] font-semibold ${o.returnStatus==='완료'?'text-red-500':'text-orange-500'}">반품${o.returnStatus==='완료'?'완료':'접수'}</span>` : ''}</td>
                       <td class="text-[12px] font-semibold whitespace-nowrap" style="${allocColor}">${allocLabel}</td>
-                      <td class="text-warm-400 text-[12px] whitespace-nowrap">${dateStr}</td>
+                      <td class="text-warm-400 text-[12px] text-center">${dateStr}</td>
                       <td class="whitespace-nowrap">
                         <button class="btn-primary btn-sm" onclick="openOrderModal('${o.id}','${o.orderNo}','${o.status}','${itemsJson}',${o.shippingFee||0},${o.subtotal||0})">변경</button>
                         <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="deleteOrder('${o.id}','${o.orderNo}')">삭제</button>
