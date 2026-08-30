@@ -212,7 +212,22 @@ async function handleOrders(req, res) {
     .range(offset, offset + limitNum - 1);
 
   if (status && status !== 'all') query = query.eq('status', status);
-  if (search) query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%`);
+
+  // 검색어가 있으면 이름, 주문번호, 전화번호, 닉네임 + 상품명 검색
+  if (search) {
+    // 상품명으로 order_items 검색하여 해당 order_id 목록 조회
+    const { data: matchedItems } = await supabaseAdmin
+      .from('order_items')
+      .select('order_id')
+      .ilike('name', `%${search}%`);
+    const matchedOrderIds = [...new Set((matchedItems || []).map(i => i.order_id))];
+
+    if (matchedOrderIds.length > 0) {
+      query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%,id.in.(${matchedOrderIds.join(',')})`);
+    } else {
+      query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%`);
+    }
+  }
 
   let { data: orders, error, count } = await query;
 
@@ -224,7 +239,18 @@ async function handleOrders(req, res) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limitNum - 1);
     if (status && status !== 'all') query = query.eq('status', status);
-    if (search) query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (search) {
+      const { data: matchedItems2 } = await supabaseAdmin
+        .from('order_items')
+        .select('order_id')
+        .ilike('name', `%${search}%`);
+      const matchedOrderIds2 = [...new Set((matchedItems2 || []).map(i => i.order_id))];
+      if (matchedOrderIds2.length > 0) {
+        query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%,id.in.(${matchedOrderIds2.join(',')})`);
+      } else {
+        query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%`);
+      }
+    }
     ({ data: orders, error, count } = await query);
   }
 
