@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.31</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.31</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3160,6 +3160,7 @@
             <div class="flex gap-2">
               <button onclick="downloadPageExcel('발주관리','발주관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderPurchaseOrders(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-outline btn-sm" style="color:#d69e2e;border-color:#d69e2e" onclick="openQtyCompareModal()">수량 대조</button>
               <button class="btn-outline btn-sm" onclick="regeneratePOs()">미발주 자동생성</button>
               <button class="btn-primary" onclick="openPOModal()">+ 발주서 작성</button>
             </div>
@@ -3634,6 +3635,131 @@
       showToast(msgs.length > 0 ? `완료: ${msgs.join(', ')}` : '미발주 주문이 없습니다');
       renderPurchaseOrders(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '자동 발주 생성에 실패했습니다'); }
+  }
+
+  // ============================================================
+  //  QTY COMPARE (주문/발주 수량 대조)
+  // ============================================================
+  async function openQtyCompareModal(broadcastId) {
+    try {
+      let url = '/admin/purchase-orders/qty-compare';
+      if (broadcastId) url += '?broadcastId=' + broadcastId;
+      const data = await api(url);
+      const { comparison, broadcasts, summary } = data;
+
+      const existing = document.getElementById('qty-compare-modal');
+      if (existing) existing.remove();
+
+      const modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'qty-compare-modal';
+      modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+      const bcOptions = (broadcasts || []).map(b =>
+        `<option value="${b.id}" ${broadcastId && parseInt(broadcastId)===b.id?'selected':''}>${escapeHtml(b.title||('방송 #'+b.id))}</option>`
+      ).join('');
+
+      let tableRows = '';
+      (comparison || []).forEach((item, idx) => {
+        const hasDiff = item.diff !== 0;
+        const rowBg = hasDiff ? 'background:#fef2f2;' : '';
+        const diffColor = item.diff > 0 ? 'color:#dc2626;font-weight:700;' : item.diff < 0 ? 'color:#2563eb;font-weight:700;' : 'color:#6b7280;';
+        const custJson = encodeURIComponent(JSON.stringify(item.customers || []));
+        tableRows += `
+          <tr style="${rowBg}cursor:pointer;" onclick="toggleQtyCompareDetail(this,${idx},'${custJson}')">
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;">${escapeHtml(item.productName||'')}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;">${escapeHtml(item.color||'-')}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;">${escapeHtml(item.size||'-')}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.orderQty}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.poQty}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;${diffColor}">${item.diff > 0 ? '+' : ''}${item.diff}</td>
+          </tr>`;
+      });
+
+      modal.innerHTML = `
+        <div class="overlay-content p-6" style="max-width:860px;">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문/발주 수량 대조</h3>
+            <button onclick="document.getElementById('qty-compare-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="flex items-center gap-3 mb-4">
+            <label class="text-[11px] font-semibold text-warm-500">방송 선택</label>
+            <select class="input-field" style="max-width:240px;font-size:12px;" onchange="openQtyCompareModal(this.value||undefined)">
+              <option value="">전체</option>
+              ${bcOptions}
+            </select>
+          </div>
+          <div class="flex gap-4 mb-4">
+            <div class="card p-3 flex-1 text-center" style="background:#f0fdf4;">
+              <div class="text-[10px] text-warm-500 mb-1">총 주문수량</div>
+              <div class="text-lg font-bold text-emerald-700">${summary.totalOrderQty}</div>
+            </div>
+            <div class="card p-3 flex-1 text-center" style="background:#eff6ff;">
+              <div class="text-[10px] text-warm-500 mb-1">총 발주수량</div>
+              <div class="text-lg font-bold text-blue-700">${summary.totalPOQty}</div>
+            </div>
+            <div class="card p-3 flex-1 text-center" style="background:${summary.mismatchCount>0?'#fef2f2':'#f0fdf4'};">
+              <div class="text-[10px] text-warm-500 mb-1">불일치 건수</div>
+              <div class="text-lg font-bold ${summary.mismatchCount>0?'text-red-600':'text-emerald-700'}">${summary.mismatchCount}</div>
+            </div>
+          </div>
+          <div style="max-height:400px;overflow-y:auto;border:1px solid #f0e6db;border-radius:8px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#fdf8f4;position:sticky;top:0;">
+                  <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">상품명</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">색상</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">사이즈</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">주문수량</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">발주수량</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">차이</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows || '<tr><td colspan="6" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
+            </table>
+          </div>
+          <p class="text-[10px] text-warm-400 mt-3">* 행을 클릭하면 고객별 주문 상세를 확인할 수 있습니다. 차이 양수(+): 주문 > 발주, 음수(-): 발주 > 주문</p>
+        </div>`;
+      document.body.appendChild(modal);
+    } catch (e) { showToast(e.message || '수량 대조 조회에 실패했습니다'); }
+  }
+
+  function toggleQtyCompareDetail(row, idx, custJson) {
+    const nextRow = row.nextElementSibling;
+    if (nextRow && nextRow.classList.contains('qty-detail-row')) {
+      nextRow.remove();
+      return;
+    }
+    // 기존 열린 상세 닫기
+    document.querySelectorAll('.qty-detail-row').forEach(r => r.remove());
+
+    let customers = [];
+    try { customers = JSON.parse(decodeURIComponent(custJson)); } catch(e) {}
+    if (customers.length === 0) return;
+
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'qty-detail-row';
+    detailRow.innerHTML = `<td colspan="6" style="padding:0;border-bottom:1px solid #f0e6db;">
+      <div style="padding:8px 16px;background:#fefcfa;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#f9f0e6;">
+            <th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">주문번호</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">고객명</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">닉네임</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:right;border-bottom:1px solid #f0dcc8;">수량</th>
+            <th style="padding:5px 8px;font-size:10px;text-align:right;border-bottom:1px solid #f0dcc8;">주문일</th>
+          </tr></thead>
+          <tbody>${customers.map(c => `<tr>
+            <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${escapeHtml(c.orderNo||'')}</td>
+            <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${escapeHtml(c.name||'')}</td>
+            <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${escapeHtml(c.nickname||'-')}</td>
+            <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;text-align:right;">${c.qty}</td>
+            <td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;text-align:right;">${escapeHtml(c.date||'')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </td>`;
+    row.parentNode.insertBefore(detailRow, row.nextSibling);
   }
 
   // ============================================================

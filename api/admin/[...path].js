@@ -83,6 +83,7 @@ module.exports = async function handler(req, res) {
     case 'purchase-orders':
       if (resourceId === 'regenerate') return handlePORegenerate(req, res);
       if (resourceId === 'vendor-text') return handlePOVendorText(req, res);
+      if (resourceId === 'qty-compare') return handleQtyCompare(req, res);
       return resourceId ? handlePurchaseOrderDetail(req, res, resourceId) : handlePurchaseOrders(req, res);
     case 'sales':    return handleSales(req, res);
     case 'inventory': return resourceId ? handleInventoryDetail(req, res, resourceId) : handleInventory(req, res);
@@ -4272,4 +4273,120 @@ async function handleAfterServiceDetail(req, res, id) {
   }
 
   return fail(res, 'Method not allowed', 405);
+}
+
+// ============================================================
+//  QTY COMPARE (주문/발주 수량 대조)
+// ============================================================
+async function handleQtyCompare(req, res) {
+  if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
+  try {
+    const { broadcastId } = req.query || {};
+
+    // 1) 방송 목록 조회
+    const { data: broadcasts } = await supabaseAdmin.from('broadcasts')
+      .select('id, title').order('id', { ascending: false });
+
+    // 2) 주문 조회: 결제완료 이상, broadcastId 필터
+    let orderQuery = supabaseAdmin.from('orders')
+      .select('id, order_no, name, social, created_at, broadcast_id')
+      .in('status', ['결제완료', '배송준비', '배송완료']);
+    if (broadcastId) orderQuery = orderQuery.eq('broadcast_id', parseInt(broadcastId));
+    const { data: orders } = await orderQuery;
+    if (!orders || orders.length === 0) {
+      return ok(res, {
+        comparison: [], broadcasts: broadcasts || [],
+        summary: { totalOrderQty: 0, totalPOQty: 0, mismatchCount: 0 }
+      });
+    }
+
+    // 3) 주문 아이템 집계: (product_id, color, size) 기준
+    const orderMap = {}; // key → { productName, color, size, orderQty, customers[] }
+    for (const order of orders) {
+      const { data: items } = await supabaseAdmin.from('order_items')
+        .select('product_id, name, color, size, qty, status')
+        .eq('order_id', order.id);
+      if (!items) continue;
+      for (const item of items) {
+        if (item.status === '결제취소') continue;
+        if (!item.product_id) continue;
+        const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
+        if (!orderMap[key]) {
+          orderMap[key] = {
+            product_id: item.product_id, productName: item.name,
+            color: item.color || '', size: item.size || '',
+            orderQty: 0, customers: []
+          };
+        }
+        orderMap[key].orderQty += (item.qty || 0);
+        orderMap[key].customers.push({
+          orderNo: order.order_no, name: order.name,
+          nickname: order.social || '', qty: item.qty || 0,
+          date: order.created_at ? order.created_at.slice(5, 10).replace('-', '/') : ''
+        });
+      }
+    }
+
+    // 4) 발주 아이템 집계: (product_id, color_name, size_name) 기준
+    const poMap = {}; // key → totalQty
+    const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
+      .select('product_id, product_name, color_name, size_name, qty, purchase_order_id');
+
+    // broadcastId 필터 적용 시 해당 방송의 발주서만 필터링
+    let filteredPOItems = allPOItems || [];
+    if (broadcastId && filteredPOItems.length > 0) {
+      const poIds = [...new Set(filteredPOItems.map(i => i.purchase_order_id))];
+      const { data: pos } = await supabaseAdmin.from('purchase_orders')
+        .select('id, broadcast_id').in('id', poIds);
+      const validPOIds = new Set((pos || []).filter(p => p.broadcast_id === parseInt(broadcastId)).map(p => p.id));
+      filteredPOItems = filteredPOItems.filter(i => validPOIds.has(i.purchase_order_id));
+    }
+
+    for (const item of filteredPOItems) {
+      if (!item.product_id) continue;
+      const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
+      if (!poMap[key]) poMap[key] = { qty: 0, productName: item.product_name };
+      poMap[key].qty += (item.qty || 0);
+    }
+
+    // 5) 양쪽 merge → diff 계산
+    const allKeys = new Set([...Object.keys(orderMap), ...Object.keys(poMap)]);
+    const comparison = [];
+    let totalOrderQty = 0, totalPOQty = 0, mismatchCount = 0;
+
+    for (const key of allKeys) {
+      const om = orderMap[key];
+      const pm = poMap[key];
+      const oQty = om ? om.orderQty : 0;
+      const pQty = pm ? pm.qty : 0;
+      const diff = oQty - pQty;
+
+      totalOrderQty += oQty;
+      totalPOQty += pQty;
+      if (diff !== 0) mismatchCount++;
+
+      comparison.push({
+        productName: om ? om.productName : (pm ? pm.productName : ''),
+        color: om ? om.color : key.split('|')[1],
+        size: om ? om.size : key.split('|')[2],
+        orderQty: oQty, poQty: pQty, diff,
+        customers: om ? om.customers : []
+      });
+    }
+
+    // 정렬: 차이 있는 항목 우선 → 상품명 순
+    comparison.sort((a, b) => {
+      const aDiff = a.diff !== 0 ? 0 : 1;
+      const bDiff = b.diff !== 0 ? 0 : 1;
+      if (aDiff !== bDiff) return aDiff - bDiff;
+      return (a.productName || '').localeCompare(b.productName || '');
+    });
+
+    return ok(res, {
+      comparison, broadcasts: broadcasts || [],
+      summary: { totalOrderQty, totalPOQty, mismatchCount }
+    });
+  } catch (e) {
+    return fail(res, e.message, 500);
+  }
 }
