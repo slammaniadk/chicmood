@@ -93,6 +93,9 @@ module.exports = async function handler(req, res) {
     case 'chat':     return handleChat(req, res);
     case 'after-services': return resourceId ? handleAfterServiceDetail(req, res, resourceId) : handleAfterServices(req, res);
     case 'reports':  return handleReports(req, res);
+    case 'youtube-auth-url': return handleYouTubeAuthUrl(req, res);
+    case 'youtube-callback': return handleYouTubeCallback(req, res);
+    case 'youtube-test':     return handleYouTubeTest(req, res);
     case 'settings': return handleSettings(req, res);
     case 'admin-users': return handleAdminUsers(req, res);
     case 'logs':     return handleLogs(req, res);
@@ -2570,6 +2573,7 @@ async function handleBroadcasts(req, res) {
       scheduledAt: b.scheduled_at,
       status: b.status,
       description: b.description,
+      youtubeVideoId: b.youtube_video_id || null,
       productIds: (b.broadcast_products || []).map(bp => bp.product_id),
     }));
 
@@ -2577,12 +2581,15 @@ async function handleBroadcasts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { title, date, scheduledAt, status, description, productIds } = req.body;
+    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId } = req.body;
     if (!title) return fail(res, '방송 제목은 필수입니다');
+
+    const insertData = { title, date_text: date || '', scheduled_at: scheduledAt || null, status: status || 'live', description: description || '' };
+    if (youtubeVideoId) insertData.youtube_video_id = youtubeVideoId;
 
     const { data: broadcast, error } = await supabaseAdmin
       .from('broadcasts')
-      .insert({ title, date_text: date || '', scheduled_at: scheduledAt || null, status: status || 'live', description: description || '' })
+      .insert(insertData)
       .select('id')
       .single();
 
@@ -2632,13 +2639,14 @@ async function handleBroadcastDetail(req, res, id) {
       broadcast: {
         id: b.id, title: b.title, date: b.date_text, status: b.status,
         description: b.description, createdAt: b.created_at,
+        youtubeVideoId: b.youtube_video_id || null,
         products, sales: salesData,
       }
     });
   }
 
   if (req.method === 'PATCH') {
-    const { title, date, scheduledAt, status, description, productIds } = req.body;
+    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId } = req.body;
 
     const update = {};
     if (title !== undefined) update.title = title;
@@ -2646,6 +2654,7 @@ async function handleBroadcastDetail(req, res, id) {
     if (scheduledAt !== undefined) update.scheduled_at = scheduledAt;
     if (status !== undefined) update.status = status;
     if (description !== undefined) update.description = description;
+    if (youtubeVideoId !== undefined) update.youtube_video_id = youtubeVideoId || null;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('broadcasts').update(update).eq('id', id);
@@ -4737,5 +4746,79 @@ async function handleQtyAdjust(req, res) {
     return ok(res, { adjusted, details });
   } catch (e) {
     return fail(res, e.message || '발주 보정 실패', 500);
+  }
+}
+
+// ============================================================
+//  YOUTUBE 연동
+// ============================================================
+async function handleYouTubeAuthUrl(req, res) {
+  if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
+  try {
+    const { createOAuth2Client, SCOPES } = require('../_lib/youtube');
+    const oauth2Client = createOAuth2Client();
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: SCOPES,
+      prompt: 'consent',
+    });
+    return ok(res, { url: authUrl });
+  } catch (e) {
+    return fail(res, e.message || 'YouTube 인증 URL 생성 실패', 500);
+  }
+}
+
+async function handleYouTubeCallback(req, res) {
+  if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
+  const code = req.query.code;
+  if (!code) return fail(res, 'code가 없습니다');
+  try {
+    const { createOAuth2Client } = require('../_lib/youtube');
+    const oauth2Client = createOAuth2Client();
+    const { tokens } = await oauth2Client.getToken(code);
+
+    // system_settings에 토큰 저장
+    await supabaseAdmin.from('system_settings').upsert({
+      key: 'youtube',
+      value: {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expiry_date: tokens.expiry_date,
+        scope: tokens.scope,
+        token_type: tokens.token_type,
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+
+    await writeLog(req._admin, 'UPDATE', 'settings', 'youtube', { action: 'YouTube 계정 연동' });
+
+    // 관리자 페이지로 리디렉트
+    res.writeHead(302, { Location: '/admin.html#system' });
+    return res.end();
+  } catch (e) {
+    return fail(res, e.message || 'YouTube 인증 실패', 500);
+  }
+}
+
+async function handleYouTubeTest(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+  try {
+    const { getAuthClient, getLiveChatId, sendChatMessage } = require('../_lib/youtube');
+    const { videoId, message } = req.body;
+
+    if (!videoId) return fail(res, 'videoId가 필요합니다');
+
+    const auth = await getAuthClient();
+    if (!auth) return fail(res, 'YouTube 인증이 필요합니다. 먼저 계정을 연동해주세요.');
+
+    const liveChatId = await getLiveChatId(videoId, auth);
+    if (!liveChatId) return fail(res, '라이브 채팅을 찾을 수 없습니다. 현재 라이브 중인 영상인지 확인해주세요.');
+
+    const testMsg = message || '🛍 테스트 메시지입니다! CHICMOOD YouTube 연동 성공!';
+    await sendChatMessage(liveChatId, testMsg, auth);
+
+    return ok(res, { success: true, liveChatId });
+  } catch (e) {
+    return fail(res, e.message || 'YouTube 테스트 메시지 전송 실패', 500);
   }
 }
