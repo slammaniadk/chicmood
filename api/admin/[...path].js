@@ -192,7 +192,7 @@ async function handleStats(req, res) {
 async function handleOrders(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { status, search, page = '1', limit = '20', after } = req.query || {};
+  const { status, search, page = '1', limit = '20', after, export: isExport } = req.query || {};
 
   // 신규 주문 알림용: after 이후에 생성된 주문만 경량 반환
   if (after) {
@@ -208,8 +208,8 @@ async function handleOrders(req, res) {
   }
 
   const pageNum = Math.max(1, parseInt(page));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
-  const offset = (pageNum - 1) * limitNum;
+  const limitNum = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(limit)));
+  const offset = isExport ? 0 : (pageNum - 1) * limitNum;
 
   let query = supabaseAdmin
     .from('orders')
