@@ -3098,10 +3098,10 @@ async function handlePurchaseOrders(req, res) {
     const { data, error, count } = await query;
     if (error) return fail(res, error.message, 500);
 
-    // search가 거래처명일 수 있으므로 클라이언트에서 필터 (po_no로 못찾으면 vendor name 매칭)
+    // search가 거래처명/품목명일 수 있으므로 po_no로 못찾으면 재검색
     let filtered = data || [];
     if (search && filtered.length === 0) {
-      // po_no 매칭 실패 시 vendor name으로 재검색
+      // 1) vendor name으로 재검색
       let retryQuery = supabaseAdmin
         .from('purchase_orders')
         .select('*, vendors!inner(name), purchase_order_items(product_name, color_name, size_name, qty, received_qty)', { count: 'exact' })
@@ -3112,7 +3112,21 @@ async function handlePurchaseOrders(req, res) {
       if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) retryQuery = retryQuery.in('broadcast_id', liveBroadcastIds);
       else if (liveBroadcastIds !== null) retryQuery = retryQuery.eq('broadcast_id', -1);
       const retry = await retryQuery;
-      if (!retry.error) { filtered = retry.data || []; }
+      if (!retry.error && retry.data && retry.data.length > 0) { filtered = retry.data; }
+    }
+    if (search && filtered.length === 0) {
+      // 2) 품목명으로 재검색
+      let itemQuery = supabaseAdmin
+        .from('purchase_orders')
+        .select('*, vendors(name), purchase_order_items!inner(product_name, color_name, size_name, qty, received_qty)', { count: 'exact' })
+        .ilike('purchase_order_items.product_name', `%${search}%`)
+        .order('id', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+      if (status && status !== 'all') itemQuery = itemQuery.eq('status', status);
+      if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) itemQuery = itemQuery.in('broadcast_id', liveBroadcastIds);
+      else if (liveBroadcastIds !== null) itemQuery = itemQuery.eq('broadcast_id', -1);
+      const itemRetry = await itemQuery;
+      if (!itemRetry.error && itemRetry.data && itemRetry.data.length > 0) { filtered = itemRetry.data; }
     }
 
     const result = filtered.map(po => {
