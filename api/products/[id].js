@@ -13,12 +13,18 @@ module.exports = async function handler(req, res) {
       id, name, price, wholesale_price, original_price, discount, description, material, size, category, length_options,
       product_images ( image_url, sort_order ),
       product_colors ( name, hex_code, sort_order ),
-      broadcast_products ( broadcast_id )
+      broadcast_products ( broadcast_id, broadcasts:broadcast_id ( id, status ) )
     `)
     .eq('id', id)
     .single();
 
   if (error || !p) return fail(res, '상품을 찾을 수 없습니다', 404);
+
+  // 라이브 방송 우선, 없으면 가장 최신(큰 ID) 방송
+  const bps = (p.broadcast_products || []);
+  const liveBp = bps.find(bp => bp.broadcasts?.status === 'live');
+  const latestBp = bps.sort((a, b) => b.broadcast_id - a.broadcast_id)[0];
+  const bestBp = liveBp || latestBp;
 
   const result = {
     id: p.id,
@@ -37,7 +43,7 @@ module.exports = async function handler(req, res) {
     size: p.size || '',
     category: p.category || '',
     lengthOptions: p.length_options || '',
-    broadcastId: p.broadcast_products?.[0]?.broadcast_id || null,
+    broadcastId: bestBp?.broadcast_id || null,
   };
 
   return ok(res, result);
