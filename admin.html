@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.31 08:18</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.0.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.31 09:03</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3640,8 +3640,11 @@
   // ============================================================
   //  QTY COMPARE (주문/발주 수량 대조)
   // ============================================================
+  let _qtyCompareBroadcastId = undefined;
+
   async function openQtyCompareModal(broadcastId) {
     try {
+      _qtyCompareBroadcastId = broadcastId;
       let url = '/admin/purchase-orders/qty-compare';
       if (broadcastId) url += '?broadcastId=' + broadcastId;
       const data = await api(url);
@@ -3718,6 +3721,9 @@
               <tbody>${tableRows || '<tr><td colspan="6" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
             </table>
           </div>
+          ${summary.mismatchCount > 0 ? `<div class="flex justify-end mt-3">
+            <button class="btn-primary btn-sm" onclick="adjustQtyCompare()">불일치 ${summary.mismatchCount}건 발주 보정</button>
+          </div>` : ''}
           <p class="text-[10px] text-warm-400 mt-3">* 행을 클릭하면 고객별 주문 상세를 확인할 수 있습니다. 차이 양수(+): 주문 > 발주, 음수(-): 발주 > 주문</p>
         </div>`;
       document.body.appendChild(modal);
@@ -3760,6 +3766,28 @@
       </div>
     </td>`;
     row.parentNode.insertBefore(detailRow, row.nextSibling);
+  }
+
+  async function adjustQtyCompare() {
+    const mismatchEl = document.querySelector('#qty-compare-modal .text-red-600, #qty-compare-modal .text-emerald-700');
+    const count = mismatchEl ? mismatchEl.textContent : '?';
+    if (!confirm(`불일치 ${count}건의 부족분을 발주에 반영합니다. 진행하시겠습니까?`)) return;
+    try {
+      const body = {};
+      if (_qtyCompareBroadcastId) body.broadcastId = _qtyCompareBroadcastId;
+      const data = await api('/admin/purchase-orders/qty-adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (data.adjusted > 0) {
+        const detailMsg = (data.details || []).map(d => `${d.productName} ${d.color} ${d.size}: +${d.addedQty} (${d.action})`).join('\n');
+        showToast(`발주 보정 완료: ${data.adjusted}건 반영\n${detailMsg}`);
+      } else {
+        showToast(data.message || '보정할 항목이 없습니다');
+      }
+      openQtyCompareModal(_qtyCompareBroadcastId);
+    } catch (e) { showToast(e.message || '발주 보정에 실패했습니다'); }
   }
 
   // ============================================================
