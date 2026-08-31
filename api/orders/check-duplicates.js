@@ -14,17 +14,11 @@ module.exports = async function handler(req, res) {
     return fail(res, '잘못된 요청입니다');
   }
 
-  // 현재 라이브 방송 ID로 보정 (장바구니에 이전 방송 ID가 남아있을 수 있음)
-  let finalBcId = parseInt(broadcastId);
-  const { data: liveBc } = await supabaseAdmin
-    .from('broadcasts').select('id').eq('status', 'live').limit(1).single();
-  if (liveBc && liveBc.id !== finalBcId) finalBcId = liveBc.id;
-
   // 해당 방송에서 이 사용자의 기존 주문 조회 (결제취소 제외)
   const { data: orders, error } = await supabaseAdmin
     .from('orders')
     .select('id, order_items ( product_id, name, color, size )')
-    .eq('broadcast_id', finalBcId)
+    .eq('broadcast_id', broadcastId)
     .eq('user_id', user.id)
     .neq('status', '결제취소');
 

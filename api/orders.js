@@ -67,18 +67,6 @@ module.exports = async function handler(req, res) {
     return fail(res, '방송을 통해서만 주문이 가능합니다');
   }
 
-  // 현재 라이브 방송 확인 → 장바구니에 남은 이전 방송 ID를 현재 라이브로 보정
-  let finalBroadcastId = parseInt(broadcastId);
-  const { data: liveBc } = await supabaseAdmin
-    .from('broadcasts')
-    .select('id')
-    .eq('status', 'live')
-    .limit(1)
-    .single();
-  if (liveBc && liveBc.id !== finalBroadcastId) {
-    finalBroadcastId = liveBc.id;
-  }
-
   // 서버에서 가격 계산 (클라이언트 가격 무시) - 판매가(wholesale_price) 우선 사용
   const productIds = items.map(i => i.productId);
   const { data: products, error: pErr } = await supabaseAdmin
@@ -129,11 +117,11 @@ module.exports = async function handler(req, res) {
   let shippingFee = subtotal >= 100000 ? 0 : 4000;
   let shippingRefund = 0;
 
-  if (finalBroadcastId) {
+  if (parseInt(broadcastId)) {
     const { data: prevOrders, error: prevErr } = await supabaseAdmin
       .from('orders')
       .select('subtotal, shipping_fee, shipping_refund')
-      .eq('broadcast_id', finalBroadcastId)
+      .eq('broadcast_id', parseInt(broadcastId))
       .eq('user_id', userId)
       .neq('status', '결제취소');
 
@@ -191,7 +179,7 @@ module.exports = async function handler(req, res) {
     total,
     status: '입금확인',
   };
-  if (finalBroadcastId) orderData.broadcast_id = finalBroadcastId;
+  if (parseInt(broadcastId)) orderData.broadcast_id = parseInt(broadcastId);
 
   let order, oErr;
   ({ data: order, error: oErr } = await supabaseAdmin
