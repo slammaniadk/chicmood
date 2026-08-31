@@ -111,9 +111,8 @@ async function handleStats(req, res) {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
   const thisYear = now.getFullYear(), thisMonth = now.getMonth(), thisDate = now.getDate();
 
-  const [ordersRes, itemsRes, membersRes] = await Promise.all([
-    supabaseAdmin.from('orders').select('status, total, created_at'),
-    supabaseAdmin.from('order_items').select('name, qty, subtotal'),
+  const [ordersRes, membersRes] = await Promise.all([
+    supabaseAdmin.from('orders').select('id, status, total, created_at'),
     supabaseAdmin.from('users').select('id', { count: 'exact', head: true }),
   ]);
 
@@ -160,17 +159,22 @@ async function handleStats(req, res) {
     yearlySales[yKey].orders++; yearlySales[yKey].revenue += o.total;
   });
 
-  // Top products
-  const productAgg = {};
-  (itemsRes.data || []).forEach(item => {
-    if (!productAgg[item.name]) productAgg[item.name] = { qty: 0, revenue: 0 };
-    productAgg[item.name].qty += item.qty;
-    productAgg[item.name].revenue += item.subtotal;
-  });
-  const topProducts = Object.entries(productAgg)
-    .map(([name, d]) => ({ name, ...d }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
+  // Top products (결제취소 주문 아이템 제외)
+  const validOrderIds = allOrders.filter(o => o.status !== '결제취소').map(o => o.id);
+  let topProducts = [];
+  if (validOrderIds.length > 0) {
+    const { data: validItems } = await supabaseAdmin.from('order_items').select('name, qty, subtotal').in('order_id', validOrderIds);
+    const productAgg = {};
+    (validItems || []).forEach(item => {
+      if (!productAgg[item.name]) productAgg[item.name] = { qty: 0, revenue: 0 };
+      productAgg[item.name].qty += item.qty;
+      productAgg[item.name].revenue += item.subtotal;
+    });
+    topProducts = Object.entries(productAgg)
+      .map(([name, d]) => ({ name, ...d }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }
 
   return ok(res, {
     totalOrders: allOrders.length, totalRevenue,
@@ -2472,12 +2476,12 @@ async function handleBroadcastDetail(req, res, id) {
       .eq('id', id).single();
     if (error || !b) return fail(res, '방송을 찾을 수 없습니다', 404);
 
-    // 방송 연결 상품의 매출 계산
+    // 방송 연결 상품의 매출 계산 (broadcast_id 기준 주문 필터)
     const productIds = (b.broadcast_products || []).map(bp => bp.product_id);
     let salesData = { orderCount: 0, revenue: 0, qty: 0 };
     if (productIds.length > 0) {
-      const { data: allOrders } = await supabaseAdmin.from('orders').select('id').neq('status', '결제취소');
-      const orderIds = (allOrders || []).map(o => o.id);
+      const { data: bcOrders } = await supabaseAdmin.from('orders').select('id').eq('broadcast_id', id).neq('status', '결제취소');
+      const orderIds = (bcOrders || []).map(o => o.id);
       if (orderIds.length > 0) {
         const { data: items } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds).in('product_id', productIds);
         (items || []).forEach(i => { salesData.orderCount++; salesData.revenue += i.subtotal; salesData.qty += i.qty; });
@@ -3282,27 +3286,26 @@ async function handleSales(req, res) {
   } else if (type === 'broadcast') {
     const { data: broadcasts } = await supabaseAdmin
       .from('broadcasts')
-      .select('id, title, date_text, broadcast_products(product_id)')
+      .select('id, title, date_text')
       .order('id', { ascending: false });
-    // 방송별 매출 계산
-    let allItems = [];
-    if (orderIds.length > 0) {
-      const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
-      allItems = itemsData || [];
-    }
-    // 방송별 반품액: 주문의 broadcast_id 기준
+    // 방송별 매출 계산 (broadcast_id 기준 주문 매칭)
+    const broadcastOrderMap = {};
     const broadcastRefundMap = {};
     orders.forEach(o => {
-      if (o.broadcast_id && refundByOrderId[o.id]) {
-        broadcastRefundMap[o.broadcast_id] = (broadcastRefundMap[o.broadcast_id] || 0) + refundByOrderId[o.id];
+      if (o.broadcast_id) {
+        if (!broadcastOrderMap[o.broadcast_id]) broadcastOrderMap[o.broadcast_id] = [];
+        broadcastOrderMap[o.broadcast_id].push(o);
+        if (refundByOrderId[o.id]) {
+          broadcastRefundMap[o.broadcast_id] = (broadcastRefundMap[o.broadcast_id] || 0) + refundByOrderId[o.id];
+        }
       }
     });
     rows = (broadcasts || []).map(b => {
-      const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
-      const matchedItems = allItems.filter(i => bProductIds.includes(i.product_id));
-      const revenue = matchedItems.reduce((s, i) => s + i.subtotal, 0);
+      const matchedOrders = broadcastOrderMap[b.id] || [];
+      const orderCount = matchedOrders.length;
+      const revenue = matchedOrders.reduce((s, o) => s + o.total, 0);
       const refund = broadcastRefundMap[b.id] || 0;
-      return { broadcastTitle: b.title, orderCount: matchedItems.length, revenue, refund, netRevenue: revenue - refund };
+      return { broadcastTitle: b.title, orderCount, revenue, refund, netRevenue: revenue - refund };
     });
     if (search) {
       const s = search.toLowerCase();
