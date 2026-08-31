@@ -112,7 +112,7 @@ async function handleStats(req, res) {
   const thisYear = now.getFullYear(), thisMonth = now.getMonth(), thisDate = now.getDate();
 
   const [ordersRes, membersRes] = await Promise.all([
-    supabaseAdmin.from('orders').select('id, status, total, created_at'),
+    supabaseAdmin.from('orders').select('id, status, subtotal, total, created_at'),
     supabaseAdmin.from('users').select('id', { count: 'exact', head: true }),
   ]);
 
@@ -138,6 +138,7 @@ async function handleStats(req, res) {
   const yearlySales = {};
 
   // Single pass — 결제취소 주문은 상태 집계만 하고 매출에서 제외
+  // 매출 기준: subtotal (상품금액, 배송비 제외) — 방송별 매출과 통일
   allOrders.forEach(o => {
     statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
     statusTotals[o.status] = (statusTotals[o.status] || 0) + o.total;
@@ -145,18 +146,19 @@ async function handleStats(req, res) {
     // 결제취소 주문은 매출 집계에서 제외
     if (o.status === '결제취소') return;
 
-    totalRevenue += o.total;
+    const rev = o.subtotal || 0;
+    totalRevenue += rev;
     // KST 기준으로 날짜 변환
     const d = new Date(new Date(o.created_at).toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
     const y = d.getFullYear(), m = d.getMonth(), dt = d.getDate();
-    if (y === thisYear) { yearOrders++; yearRevenue += o.total; if (m === thisMonth) { monthOrders++; monthRevenue += o.total; if (dt === thisDate) { todayOrders++; todayRevenue += o.total; } } }
+    if (y === thisYear) { yearOrders++; yearRevenue += rev; if (m === thisMonth) { monthOrders++; monthRevenue += rev; if (dt === thisDate) { todayOrders++; todayRevenue += rev; } } }
     const dayKey = `${String(m+1).padStart(2,'0')}/${String(dt).padStart(2,'0')}`;
-    if (dailySales[dayKey]) { dailySales[dayKey].orders++; dailySales[dayKey].revenue += o.total; }
+    if (dailySales[dayKey]) { dailySales[dayKey].orders++; dailySales[dayKey].revenue += rev; }
     const mKey = `${y}.${String(m+1).padStart(2,'0')}`;
-    if (monthlySales[mKey]) { monthlySales[mKey].orders++; monthlySales[mKey].revenue += o.total; }
+    if (monthlySales[mKey]) { monthlySales[mKey].orders++; monthlySales[mKey].revenue += rev; }
     const yKey = `${y}`;
     if (!yearlySales[yKey]) yearlySales[yKey] = { orders: 0, revenue: 0 };
-    yearlySales[yKey].orders++; yearlySales[yKey].revenue += o.total;
+    yearlySales[yKey].orders++; yearlySales[yKey].revenue += rev;
   });
 
   // Top products (결제취소 주문 아이템 제외)
@@ -2583,16 +2585,16 @@ async function handleBroadcastDetail(req, res, id) {
       .eq('id', id).single();
     if (error || !b) return fail(res, '방송을 찾을 수 없습니다', 404);
 
-    // 방송 연결 상품의 매출 계산 (broadcast_id 기준 주문 필터)
-    const productIds = (b.broadcast_products || []).map(bp => bp.product_id);
+    // 방송 매출 계산 (broadcast_id 기준 주문, subtotal 기준 — 대시보드와 통일)
     let salesData = { orderCount: 0, revenue: 0, qty: 0 };
-    if (productIds.length > 0) {
-      const { data: bcOrders } = await supabaseAdmin.from('orders').select('id').eq('broadcast_id', id).neq('status', '결제취소');
-      const orderIds = (bcOrders || []).map(o => o.id);
-      if (orderIds.length > 0) {
-        const { data: items } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds).in('product_id', productIds);
-        (items || []).forEach(i => { salesData.orderCount++; salesData.revenue += i.subtotal; salesData.qty += i.qty; });
-      }
+    const { data: bcOrders } = await supabaseAdmin.from('orders')
+      .select('id, subtotal').eq('broadcast_id', id).neq('status', '결제취소');
+    if (bcOrders && bcOrders.length > 0) {
+      salesData.orderCount = bcOrders.length;
+      salesData.revenue = bcOrders.reduce((s, o) => s + (o.subtotal || 0), 0);
+      const orderIds = bcOrders.map(o => o.id);
+      const { data: items } = await supabaseAdmin.from('order_items').select('qty').in('order_id', orderIds);
+      salesData.qty = (items || []).reduce((s, i) => s + (i.qty || 0), 0);
     }
 
     const products = (b.broadcast_products || []).map(bp => ({
@@ -3296,7 +3298,7 @@ async function handleSales(req, res) {
 
   const { type = 'daily', from, to, search } = req.query || {};
 
-  let query = supabaseAdmin.from('orders').select('id, total, status, created_at, broadcast_id');
+  let query = supabaseAdmin.from('orders').select('id, subtotal, total, status, created_at, broadcast_id');
   query = query.neq('status', '결제취소');
   if (from) query = query.gte('created_at', from + 'T00:00:00');
   if (to) query = query.lte('created_at', to + 'T23:59:59');
@@ -3304,7 +3306,7 @@ async function handleSales(req, res) {
   const { data: orders, error } = await query.order('created_at', { ascending: false });
   if (error) return fail(res, error.message, 500);
 
-  const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
+  const totalRevenue = orders.reduce((s, o) => s + (o.subtotal || 0), 0);
   const orderCount = orders.length;
   const avgOrder = orderCount > 0 ? Math.round(totalRevenue / orderCount) : 0;
 
@@ -3319,10 +3321,10 @@ async function handleSales(req, res) {
     const prevFromStr = prevFromDate.toISOString().split('T')[0];
     const prevToStr = prevToDate.toISOString().split('T')[0];
     const { data: prevOrders } = await supabaseAdmin.from('orders')
-      .select('total').neq('status', '결제취소')
+      .select('subtotal').neq('status', '결제취소')
       .gte('created_at', prevFromStr + 'T00:00:00')
       .lte('created_at', prevToStr + 'T23:59:59');
-    prevRevenue = (prevOrders || []).reduce((s, o) => s + o.total, 0);
+    prevRevenue = (prevOrders || []).reduce((s, o) => s + (o.subtotal || 0), 0);
     prevOrderCount = (prevOrders || []).length;
   }
 
@@ -3354,7 +3356,7 @@ async function handleSales(req, res) {
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0, refund: 0 };
       grouped[key].orderCount++;
-      grouped[key].revenue += o.total;
+      grouped[key].revenue += (o.subtotal || 0);
       grouped[key].refund += (refundByOrderId[o.id] || 0);
     });
     rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v, netRevenue: v.revenue - v.refund }));
@@ -3365,7 +3367,7 @@ async function handleSales(req, res) {
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       if (!grouped[key]) grouped[key] = { orderCount: 0, revenue: 0, refund: 0 };
       grouped[key].orderCount++;
-      grouped[key].revenue += o.total;
+      grouped[key].revenue += (o.subtotal || 0);
       grouped[key].refund += (refundByOrderId[o.id] || 0);
     });
     rows = Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0])).map(([period, v]) => ({ period, ...v, netRevenue: v.revenue - v.refund }));
@@ -3412,7 +3414,7 @@ async function handleSales(req, res) {
     rows = (broadcasts || []).map(b => {
       const matchedOrders = broadcastOrderMap[b.id] || [];
       const orderCount = matchedOrders.length;
-      const revenue = matchedOrders.reduce((s, o) => s + o.total, 0);
+      const revenue = matchedOrders.reduce((s, o) => s + (o.subtotal || 0), 0);
       const refund = broadcastRefundMap[b.id] || 0;
       return { broadcastTitle: b.title, orderCount, revenue, refund, netRevenue: revenue - refund };
     });
