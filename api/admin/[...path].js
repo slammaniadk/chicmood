@@ -2718,7 +2718,7 @@ async function handleShippingExcel(req, res) {
       o.address || '',    // 주소
       o.phone || '',      // 전화번호1
       o.phone || '',      // 전화번호2
-      totalQty || 1,      // 수량
+      1,                  // 박스 수 (로젠택배 고정값)
       2800,               // 배송비
       '010',              // 코드
       productDetail,      // 상품상세
