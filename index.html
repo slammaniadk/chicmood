@@ -594,7 +594,7 @@
     switch(page) {
       case 'home': await renderHome(content); break;
       case 'live': await renderLive(content, param); break;
-      case 'product': await renderProduct(content, param); break;
+      case 'product': await renderProduct(content, param, parts[2]); break;
       case 'cart': renderCart(content); break;
       case 'checkout': renderCheckout(content); break;
       case 'lookup': renderLookup(content); break;
@@ -675,7 +675,7 @@
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             ${featuredProducts.map((p, i) => `
-              <a href="#product/${p.id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
+              <a href="#product/${p.id}/${liveBroadcasts[0].id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
                 <div class="relative">
                   ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
@@ -760,7 +760,7 @@
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             ${products.map((p, i) => `
-              <a href="#product/${p.id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
+              <a href="#product/${p.id}/${id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
                 <div class="relative">
                   ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
@@ -781,17 +781,20 @@
   // ============================================================
   //  PAGE: PRODUCT DETAIL
   // ============================================================
-  async function renderProduct(el, id) {
+  async function renderProduct(el, id, broadcastIdParam) {
     showPageSpinner(el);
     try {
       cachedProductDetail[id] = await api('/products/' + id);
       const p = cachedProductDetail[id];
+      // URL에서 전달받은 방송 ID 우선, 없으면 API 응답의 broadcastId 사용
+      const bcId = broadcastIdParam || p.broadcastId || null;
+      p._broadcastId = bcId;
 
       pdState = { selectedColor: 0, selectedSize: 0, selectedLength: '', qty: 1, imageIndex: 0 };
 
       el.innerHTML = `
         <section class="py-10 fade-in">
-          <a href="${p.broadcastId ? '#live/'+p.broadcastId : '#home'}" class="inline-flex items-center gap-1 text-[12px] text-warm-400 hover:text-warm-700 transition-colors mb-6">
+          <a href="${bcId ? '#live/'+bcId : '#home'}" class="inline-flex items-center gap-1 text-[12px] text-warm-400 hover:text-warm-700 transition-colors mb-6">
             ← 상품 목록
           </a>
           <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
@@ -926,7 +929,7 @@
     const existing = cart.find(item => item.productId === productId && item.color === color && item.size === size);
     if (existing) { existing.qty += pdState.qty; }
     else {
-      cart.push({ productId, name: p.name, price: p.price, color, size, qty: pdState.qty, image: p.images[0], broadcastId: p.broadcastId || null });
+      cart.push({ productId, name: p.name, price: p.price, color, size, qty: pdState.qty, image: p.images[0], broadcastId: p._broadcastId || p.broadcastId || null });
     }
     saveCart(); updateCartBadge();
     showToast('장바구니에 담았습니다');
