@@ -238,8 +238,8 @@ module.exports = async function handler(req, res) {
     try {
       const { sendOrderNotification } = require('./_lib/youtube');
       sendOrderNotification(parseInt(broadcastId), social || name, orderItems, total)
-        .catch(() => {}); // 에러 무시 — 주문 성공이 우선
-    } catch(e) { /* youtube 모듈 로드 실패 무시 */ }
+        .catch(err => console.error('[YouTube 알림 실패]', err.message || err));
+    } catch(e) { console.error('[YouTube 모듈 로드 실패]', e.message); }
   }
 
   return ok(res, {
