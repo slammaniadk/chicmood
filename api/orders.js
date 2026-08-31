@@ -67,6 +67,16 @@ module.exports = async function handler(req, res) {
     return fail(res, '방송을 통해서만 주문이 가능합니다');
   }
 
+  // 종료된 방송 주문 차단
+  const { data: bc, error: bcErr } = await supabaseAdmin
+    .from('broadcasts').select('id, status').eq('id', parseInt(broadcastId)).single();
+  if (bcErr || !bc) {
+    return fail(res, '방송 정보를 찾을 수 없습니다');
+  }
+  if (bc.status === 'ended') {
+    return fail(res, '종료된 방송의 상품은 주문할 수 없습니다');
+  }
+
   // 서버에서 가격 계산 (클라이언트 가격 무시) - 판매가(wholesale_price) 우선 사용
   const productIds = items.map(i => i.productId);
   const { data: products, error: pErr } = await supabaseAdmin
