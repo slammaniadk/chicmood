@@ -50,10 +50,6 @@ async function writeLog(admin, action, targetType, targetId, detail) {
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
 
-  const admin = requireAdmin(req, res, fail);
-  if (!admin) return;
-  req._admin = admin;  // 핸들러에서 로그 기록용
-
   // path 파싱: /api/admin/orders/123 → ['orders','123']
   // Vercel rewrite에서 path가 문자열로 올 수 있음
   let pathSegments = req.query.path || [];
@@ -61,6 +57,13 @@ module.exports = async function handler(req, res) {
     pathSegments = pathSegments.split('/').filter(Boolean);
   }
   const resource = pathSegments[0];
+
+  // YouTube OAuth 콜백은 Google이 리디렉트하므로 관리자 인증 불필요
+  if (resource === 'youtube-callback') return handleYouTubeCallback(req, res);
+
+  const admin = requireAdmin(req, res, fail);
+  if (!admin) return;
+  req._admin = admin;  // 핸들러에서 로그 기록용
   const resourceId = pathSegments[1];
 
   switch (resource) {
@@ -4789,8 +4792,6 @@ async function handleYouTubeCallback(req, res) {
       },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'key' });
-
-    await writeLog(req._admin, 'UPDATE', 'settings', 'youtube', { action: 'YouTube 계정 연동' });
 
     // 관리자 페이지로 리디렉트
     res.writeHead(302, { Location: '/admin.html#system' });
