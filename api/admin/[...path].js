@@ -4398,57 +4398,66 @@ async function handleQtyCompare(req, res) {
   try {
     const { broadcastId } = req.query || {};
 
-    // 1) 방송 목록 조회
-    const { data: broadcasts } = await supabaseAdmin.from('broadcasts')
-      .select('id, title').order('id', { ascending: false });
-
-    // 2) 주문 조회: 결제완료 이상, broadcastId 필터
+    // 1) 방송 목록 + 주문 조회 (병렬)
     let orderQuery = supabaseAdmin.from('orders')
       .select('id, order_no, name, social, created_at, broadcast_id')
       .in('status', ['결제완료', '배송준비', '배송완료']);
     if (broadcastId) orderQuery = orderQuery.eq('broadcast_id', parseInt(broadcastId));
-    const { data: orders } = await orderQuery;
-    if (!orders || orders.length === 0) {
+
+    const [bcResult, orderResult] = await Promise.all([
+      supabaseAdmin.from('broadcasts').select('id, title').order('id', { ascending: false }),
+      orderQuery,
+    ]);
+    const broadcasts = bcResult.data || [];
+    const orders = orderResult.data || [];
+
+    if (orders.length === 0) {
       return ok(res, {
-        comparison: [], broadcasts: broadcasts || [],
+        comparison: [], broadcasts,
         summary: { totalOrderQty: 0, totalPOQty: 0, mismatchCount: 0 }
       });
     }
 
-    // 3) 주문 아이템 집계: (product_id, color, size) 기준
-    const orderMap = {}; // key → { productName, color, size, orderQty, customers[] }
-    for (const order of orders) {
-      const { data: items } = await supabaseAdmin.from('order_items')
-        .select('product_id, name, color, size, qty, status')
-        .eq('order_id', order.id);
-      if (!items) continue;
-      for (const item of items) {
-        if (item.status === '결제취소') continue;
-        if (!item.product_id) continue;
-        const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
-        if (!orderMap[key]) {
-          orderMap[key] = {
-            product_id: item.product_id, productName: item.name,
-            color: item.color || '', size: item.size || '',
-            orderQty: 0, customers: []
-          };
-        }
-        orderMap[key].orderQty += (item.qty || 0);
+    // 2) 주문 아이템 + 발주 아이템 배치 조회 (병렬)
+    const orderIds = orders.map(o => o.id);
+    const orderLookup = {};
+    orders.forEach(o => { orderLookup[o.id] = o; });
+
+    let poItemQuery = supabaseAdmin.from('purchase_order_items')
+      .select('product_id, product_name, color_name, size_name, qty, purchase_order_id');
+
+    const [itemsResult, poItemsResult] = await Promise.all([
+      supabaseAdmin.from('order_items')
+        .select('product_id, name, color, size, qty, status, order_id')
+        .in('order_id', orderIds),
+      poItemQuery,
+    ]);
+
+    // 3) 주문 아이템 집계
+    const orderMap = {};
+    (itemsResult.data || []).forEach(item => {
+      if (item.status === '결제취소' || !item.product_id) return;
+      const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
+      if (!orderMap[key]) {
+        orderMap[key] = {
+          product_id: item.product_id, productName: item.name,
+          color: item.color || '', size: item.size || '',
+          orderQty: 0, customers: []
+        };
+      }
+      orderMap[key].orderQty += (item.qty || 0);
+      const order = orderLookup[item.order_id];
+      if (order) {
         orderMap[key].customers.push({
           orderNo: order.order_no, name: order.name,
           nickname: order.social || '', qty: item.qty || 0,
           date: order.created_at ? order.created_at.slice(5, 10).replace('-', '/') : ''
         });
       }
-    }
+    });
 
-    // 4) 발주 아이템 집계: (product_id, color_name, size_name) 기준
-    const poMap = {}; // key → totalQty
-    const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
-      .select('product_id, product_name, color_name, size_name, qty, purchase_order_id');
-
-    // broadcastId 필터 적용 시 해당 방송의 발주서만 필터링
-    let filteredPOItems = allPOItems || [];
+    // 4) 발주 아이템 집계
+    let filteredPOItems = poItemsResult.data || [];
     if (broadcastId && filteredPOItems.length > 0) {
       const poIds = [...new Set(filteredPOItems.map(i => i.purchase_order_id))];
       const { data: pos } = await supabaseAdmin.from('purchase_orders')
@@ -4457,6 +4466,7 @@ async function handleQtyCompare(req, res) {
       filteredPOItems = filteredPOItems.filter(i => validPOIds.has(i.purchase_order_id));
     }
 
+    const poMap = {};
     for (const item of filteredPOItems) {
       if (!item.product_id) continue;
       const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
@@ -4490,7 +4500,6 @@ async function handleQtyCompare(req, res) {
       });
     }
 
-    // 정렬: 차이 있는 항목 우선 → 상품명 순
     comparison.sort((a, b) => {
       const aDiff = a.diff !== 0 ? 0 : 1;
       const bDiff = b.diff !== 0 ? 0 : 1;
@@ -4499,7 +4508,7 @@ async function handleQtyCompare(req, res) {
     });
 
     return ok(res, {
-      comparison, broadcasts: broadcasts || [],
+      comparison, broadcasts,
       summary: { totalOrderQty, totalPOQty, mismatchCount }
     });
   } catch (e) {
@@ -4523,23 +4532,20 @@ async function handleQtyAdjust(req, res) {
     const { data: orders } = await orderQuery;
     if (!orders || orders.length === 0) return ok(res, { adjusted: 0, details: [], message: '해당 주문이 없습니다' });
 
-    // 2) 주문 아이템 집계: (product_id, color, size)
+    // 2) 주문 아이템 배치 조회 + 집계
+    const orderIds = orders.map(o => o.id);
+    const { data: allOrderItems } = await supabaseAdmin.from('order_items')
+      .select('product_id, name, color, size, qty, status')
+      .in('order_id', orderIds);
     const orderMap = {};
-    for (const order of orders) {
-      const { data: items } = await supabaseAdmin.from('order_items')
-        .select('product_id, name, color, size, qty, status')
-        .eq('order_id', order.id);
-      if (!items) continue;
-      for (const item of items) {
-        if (item.status === '결제취소') continue;
-        if (!item.product_id) continue;
-        const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
-        if (!orderMap[key]) {
-          orderMap[key] = { product_id: item.product_id, name: item.name, color: item.color || '', size: item.size || '', orderQty: 0 };
-        }
-        orderMap[key].orderQty += (item.qty || 0);
+    (allOrderItems || []).forEach(item => {
+      if (item.status === '결제취소' || !item.product_id) return;
+      const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
+      if (!orderMap[key]) {
+        orderMap[key] = { product_id: item.product_id, name: item.name, color: item.color || '', size: item.size || '', orderQty: 0 };
       }
-    }
+      orderMap[key].orderQty += (item.qty || 0);
+    });
 
     // 3) 발주 아이템 집계
     const poMap = {};
