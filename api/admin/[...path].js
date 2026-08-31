@@ -795,7 +795,7 @@ async function handleOrderModify(req, res, orderId) {
   const productIds = [...new Set(items.map(i => i.productId).filter(Boolean))];
   const [orderResult, productsResult] = await Promise.all([
     supabaseAdmin.from('orders')
-      .select('id, order_no, status, broadcast_id, subtotal, shipping_fee, total')
+      .select('id, order_no, status, broadcast_id, user_id, subtotal, shipping_fee, shipping_refund, total')
       .eq('id', orderId).single(),
     supabaseAdmin.from('products')
       .select('id, name, price, wholesale_price, available_qty')
@@ -858,9 +858,34 @@ async function handleOrderModify(req, res, orderId) {
     .from('order_items').insert(newOrderItems);
   if (insertErr) return fail(res, insertErr.message, 500);
 
-  // 7. 새 available_qty 차감 (병렬) + subtotal/total 재계산
+  // 7. 새 available_qty 차감 (병렬) + subtotal/total 재계산 (배송비 재계산 포함)
   const newSubtotal = newOrderItems.reduce((s, i) => s + i.subtotal, 0);
-  const newTotal = newSubtotal + (order.shipping_fee || 0);
+
+  // 배송비 재계산: 동일방송 동일회원 기준
+  let newShippingFee = newSubtotal >= 100000 ? 0 : 4000;
+  let newShippingRefund = 0;
+
+  if (order.broadcast_id && order.user_id) {
+    const { data: prevOrders } = await supabaseAdmin.from('orders')
+      .select('subtotal, shipping_fee, shipping_refund')
+      .eq('broadcast_id', order.broadcast_id)
+      .eq('user_id', order.user_id)
+      .neq('status', '결제취소')
+      .neq('id', orderId);
+
+    if (prevOrders && prevOrders.length > 0) {
+      newShippingFee = 0;
+      const previousSubtotal = prevOrders.reduce((s, o) => s + o.subtotal, 0);
+      const previousShippingFees = prevOrders.reduce((s, o) => s + o.shipping_fee, 0);
+      const previousRefunds = prevOrders.reduce((s, o) => s + (o.shipping_refund || 0), 0);
+      const cumulativeSubtotal = previousSubtotal + newSubtotal;
+      if (cumulativeSubtotal >= 100000) {
+        newShippingRefund = Math.max(0, previousShippingFees - previousRefunds);
+      }
+    }
+  }
+
+  const newTotal = newSubtotal + newShippingFee - newShippingRefund;
 
   const qtyUpdates = [];
   // 상품별 차감 수량 합산 후 한번에 처리
@@ -880,7 +905,7 @@ async function handleOrderModify(req, res, orderId) {
   }
   qtyUpdates.push(
     supabaseAdmin.from('orders')
-      .update({ subtotal: newSubtotal, total: newTotal })
+      .update({ subtotal: newSubtotal, shipping_fee: newShippingFee, shipping_refund: newShippingRefund, total: newTotal })
       .eq('id', orderId)
   );
   await Promise.all(qtyUpdates);
