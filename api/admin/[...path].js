@@ -2579,7 +2579,7 @@ async function handleBroadcastDetail(req, res, id) {
   if (req.method === 'GET') {
     const { data: b, error } = await supabaseAdmin
       .from('broadcasts')
-      .select('*, broadcast_products(product_id, products(id, name, price))')
+      .select('*, broadcast_products(product_id, products(id, name, price, wholesale_price, size, product_colors(name)))')
       .eq('id', id).single();
     if (error || !b) return fail(res, '방송을 찾을 수 없습니다', 404);
 
@@ -2596,7 +2596,9 @@ async function handleBroadcastDetail(req, res, id) {
     }
 
     const products = (b.broadcast_products || []).map(bp => ({
-      id: bp.products?.id, name: bp.products?.name || '', price: bp.products?.price || 0,
+      id: bp.products?.id, name: bp.products?.name || '', price: bp.products?.wholesale_price || bp.products?.price || 0,
+      colors: (bp.products?.product_colors || []).map(c => ({ name: c.name })),
+      size: bp.products?.size || 'FREE',
     }));
 
     return ok(res, {
