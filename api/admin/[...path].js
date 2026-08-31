@@ -839,7 +839,7 @@ async function handleOrderModify(req, res, orderId) {
     const price = prod.wholesale_price || prod.price;
     const qty = Math.max(1, Math.min(99, parseInt(item.qty) || 1));
     return {
-      order_id: parseInt(orderId),
+      order_id: orderId,
       product_id: item.productId,
       name: prod.name,
       color: item.color,
