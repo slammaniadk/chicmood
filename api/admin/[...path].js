@@ -1291,81 +1291,64 @@ async function updateInventoryFromPO(poId) {
       .eq('purchase_order_id', poId);
     if (!poItems || poItems.length === 0) return { updated: 0 };
 
-    let updated = 0;
+    const validItems = poItems.filter(i => i.product_id);
+    if (validItems.length === 0) return { updated: 0 };
+
     const poRef = `PO#${poId}`;
+    const productIds = [...new Set(validItems.map(i => i.product_id))];
 
-    for (const item of poItems) {
+    // 배치 조회: 관련 재고 + 로그 한번에 가져오기
+    const [{ data: allInv }, { data: allLogs }] = await Promise.all([
+      supabaseAdmin.from('inventory').select('id, product_id, color_name, size_name, stock_qty').in('product_id', productIds),
+      supabaseAdmin.from('inventory_log').select('id, inventory_id, qty').eq('reason', poRef),
+    ]);
+
+    const invMap = {};
+    (allInv || []).forEach(inv => { invMap[`${inv.product_id}|${inv.color_name || ''}|${inv.size_name || ''}`] = inv; });
+    const logMap = {};
+    (allLogs || []).forEach(log => { logMap[log.inventory_id] = log; });
+
+    let updated = 0;
+    const ops = [];
+
+    for (const item of validItems) {
       const receivedQty = item.received_qty || 0;
-      if (!item.product_id) continue;
-
-      // 기존 재고 조회 (없으면 생성)
-      let { data: inv } = await supabaseAdmin.from('inventory')
-        .select('id, stock_qty')
-        .eq('product_id', item.product_id)
-        .eq('color_name', item.color_name || '')
-        .eq('size_name', item.size_name || '')
-        .single();
+      const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
+      let inv = invMap[key];
 
       if (!inv && receivedQty > 0) {
         const { data: newInv } = await supabaseAdmin.from('inventory')
           .insert({ product_id: item.product_id, color_name: item.color_name || '', size_name: item.size_name || '', stock_qty: 0 })
           .select('id, stock_qty').single();
         inv = newInv;
+        if (inv) invMap[key] = inv;
       }
       if (!inv) continue;
 
-      // 이 PO에서 이 재고에 이전에 반영된 수량 확인 (inventory_id 기준)
-      const { data: existingLog } = await supabaseAdmin.from('inventory_log')
-        .select('id, qty')
-        .eq('inventory_id', inv.id)
-        .eq('reason', poRef)
-        .single();
-
+      const existingLog = logMap[inv.id];
       const previouslyReflected = existingLog ? (existingLog.qty || 0) : 0;
       const diff = receivedQty - previouslyReflected;
-      if (diff === 0) continue; // 변동 없음
+      if (diff === 0) continue;
 
-      // 재고 수량 업데이트 (차이만 적용)
       const newStockQty = Math.max(0, (inv.stock_qty || 0) + diff);
+      const now = new Date().toISOString();
 
       if (newStockQty <= 0 && receivedQty <= 0) {
-        // 입고수량 0 + 재고 0 → 로그 삭제, 재고 레코드도 삭제
-        if (existingLog) {
-          await supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id);
-        }
-        // 이 재고에 다른 로그가 없으면 레코드도 삭제
-        const { count: otherLogs } = await supabaseAdmin.from('inventory_log')
-          .select('id', { count: 'exact', head: true }).eq('inventory_id', inv.id);
-        if (!otherLogs || otherLogs === 0) {
-          await supabaseAdmin.from('inventory').delete().eq('id', inv.id);
-        } else {
-          await supabaseAdmin.from('inventory')
-            .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
-            .eq('id', inv.id);
-        }
+        if (existingLog) ops.push(supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id));
+        ops.push(supabaseAdmin.from('inventory').update({ stock_qty: 0, updated_at: now }).eq('id', inv.id));
       } else {
-        await supabaseAdmin.from('inventory')
-          .update({ stock_qty: newStockQty, updated_at: new Date().toISOString() })
-          .eq('id', inv.id);
-
-        // 로그 업데이트 또는 생성
+        ops.push(supabaseAdmin.from('inventory').update({ stock_qty: newStockQty, updated_at: now }).eq('id', inv.id));
         if (existingLog) {
-          if (receivedQty <= 0) {
-            await supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id);
-          } else {
-            await supabaseAdmin.from('inventory_log')
-              .update({ qty: receivedQty, type: 'in' })
-              .eq('id', existingLog.id);
-          }
+          if (receivedQty <= 0) ops.push(supabaseAdmin.from('inventory_log').delete().eq('id', existingLog.id));
+          else ops.push(supabaseAdmin.from('inventory_log').update({ qty: receivedQty, type: 'in' }).eq('id', existingLog.id));
         } else if (receivedQty > 0) {
-          await supabaseAdmin.from('inventory_log').insert({
-            inventory_id: inv.id, product_id: item.product_id,
-            type: 'in', qty: receivedQty, reason: poRef,
-          });
+          ops.push(supabaseAdmin.from('inventory_log').insert({ inventory_id: inv.id, product_id: item.product_id, type: 'in', qty: receivedQty, reason: poRef }));
         }
       }
       updated++;
     }
+
+    if (ops.length > 0) await Promise.all(ops);
     return { updated };
   } catch (e) { return { updated: 0, error: e.message }; }
 }
@@ -1379,67 +1362,61 @@ async function allocateReceivedToOrders(poId) {
       .eq('purchase_order_id', poId);
     if (!poItems || poItems.length === 0) return { allocated: 0, orders: 0 };
 
-    let totalAllocated = 0;
-    const allocatedOrderIds = new Set();
+    const validItems = poItems.filter(i => i.product_id);
+    if (validItems.length === 0) return { allocated: 0, orders: 0 };
+
+    // 중복 제거된 상품/색상/사이즈 조합
     const processedCombos = new Set();
-
-    for (const poItem of poItems) {
-      if (!poItem.product_id) continue;
-
-      // 동일 상품/색상/사이즈 조합 중복 처리 방지
+    const uniqueCombos = [];
+    for (const poItem of validItems) {
       const comboKey = `${poItem.product_id}|${poItem.color_name}|${poItem.size_name}`;
       if (processedCombos.has(comboKey)) continue;
       processedCombos.add(comboKey);
+      uniqueCombos.push(poItem);
+    }
 
-      // 2) 해당 상품/색상/사이즈의 전체 PO 입고 수량 합계
-      const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
-        .select('received_qty')
-        .eq('product_id', poItem.product_id)
-        .eq('color_name', poItem.color_name)
-        .eq('size_name', poItem.size_name);
-      const totalReceived = (allPOItems || []).reduce((s, i) => s + (i.received_qty || 0), 0);
+    const productIds = [...new Set(uniqueCombos.map(i => i.product_id))];
+
+    // 2) 배치 조회: 전체 PO 입고수량, 결제완료 주문, 관련 주문품목 한번에
+    const [{ data: allPOItemsRaw }, { data: paidOrders }, { data: allAllocItemsRaw }] = await Promise.all([
+      supabaseAdmin.from('purchase_order_items').select('product_id, color_name, size_name, received_qty').in('product_id', productIds),
+      supabaseAdmin.from('orders').select('id').eq('status', '결제완료').order('created_at', { ascending: true }),
+      supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty').in('product_id', productIds),
+    ]);
+
+    if (!paidOrders || paidOrders.length === 0) return { allocated: 0, orders: 0 };
+    const paidOrderIds = paidOrders.map(o => o.id);
+    const paidOrderSet = new Set(paidOrderIds);
+    const orderIndexMap = {};
+    paidOrderIds.forEach((oid, idx) => { orderIndexMap[oid] = idx; });
+
+    let totalAllocated = 0;
+    const allocatedOrderIds = new Set();
+    const allocOps = [];
+
+    for (const poItem of uniqueCombos) {
+      // PO 입고수량 합계 (메모리에서 필터)
+      const totalReceived = (allPOItemsRaw || [])
+        .filter(i => i.product_id === poItem.product_id && i.color_name === poItem.color_name && i.size_name === poItem.size_name)
+        .reduce((s, i) => s + (i.received_qty || 0), 0);
       if (totalReceived <= 0) continue;
 
-      // 3) 이미 배정된 총량 조회 (모든 주문 대상 — 배송준비 등 이미 전환된 주문 포함)
-      const { data: allAllocItems } = await supabaseAdmin
-        .from('order_items')
-        .select('allocated_qty')
-        .eq('product_id', poItem.product_id)
-        .eq('color', poItem.color_name)
-        .eq('size', poItem.size_name)
-        .gt('allocated_qty', 0);
-      const totalAlreadyAllocated = (allAllocItems || []).reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
+      // 이미 배정된 총량 (메모리에서 필터)
+      const totalAlreadyAllocated = (allAllocItemsRaw || [])
+        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name && (i.allocated_qty || 0) > 0)
+        .reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
 
       let remaining = Math.max(0, totalReceived - totalAlreadyAllocated);
       if (remaining <= 0) continue;
 
-      // 4) 결제완료 주문 조회 (FIFO: created_at ASC)
-      const { data: paidOrders } = await supabaseAdmin
-        .from('orders')
-        .select('id')
-        .eq('status', '결제완료')
-        .order('created_at', { ascending: true });
-      if (!paidOrders || paidOrders.length === 0) continue;
+      // 결제완료 주문의 매칭 품목 (메모리에서 필터 + FIFO 정렬)
+      const matchingItems = (allAllocItemsRaw || [])
+        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name && paidOrderSet.has(i.order_id))
+        .sort((a, b) => (orderIndexMap[a.order_id] || 0) - (orderIndexMap[b.order_id] || 0));
 
-      const paidOrderIds = paidOrders.map(o => o.id);
+      if (matchingItems.length === 0) continue;
 
-      // 매칭되는 주문 품목 조회
-      const { data: matchingItems } = await supabaseAdmin
-        .from('order_items')
-        .select('id, order_id, qty, allocated_qty')
-        .eq('product_id', poItem.product_id)
-        .eq('color', poItem.color_name)
-        .eq('size', poItem.size_name)
-        .in('order_id', paidOrderIds);
-
-      if (!matchingItems || matchingItems.length === 0) continue;
-
-      // FIFO 정렬: paidOrders 순서 기준
-      const orderIndexMap = {};
-      paidOrderIds.forEach((oid, idx) => { orderIndexMap[oid] = idx; });
-      matchingItems.sort((a, b) => (orderIndexMap[a.order_id] || 0) - (orderIndexMap[b.order_id] || 0));
-
-      // 5) FIFO 배정: 남은 수량을 순서대로 배분
+      // FIFO 배정
       for (const oi of matchingItems) {
         if (remaining <= 0) break;
         const needed = oi.qty - (oi.allocated_qty || 0);
@@ -1447,43 +1424,46 @@ async function allocateReceivedToOrders(poId) {
 
         const allocate = Math.min(needed, remaining);
         const newAllocated = (oi.allocated_qty || 0) + allocate;
-
-        // 품목 배정 수량만 갱신 (상태는 전량 배정 시 일괄 배송준비로 처리)
-        const itemUpdate = { allocated_qty: newAllocated };
-        await supabaseAdmin.from('order_items')
-          .update(itemUpdate)
-          .eq('id', oi.id);
-
+        oi.allocated_qty = newAllocated; // 메모리 업데이트 (중복 배정 방지)
+        allocOps.push(supabaseAdmin.from('order_items').update({ allocated_qty: newAllocated }).eq('id', oi.id));
         remaining -= allocate;
         totalAllocated += allocate;
         allocatedOrderIds.add(oi.order_id);
       }
     }
 
-    // 6) 품목별 상태 확인 + 전량 배정 시 배송준비 자동 승격 + 주문 상태 재계산
-    for (const orderId of allocatedOrderIds) {
-      const { data: orderItems } = await supabaseAdmin.from('order_items')
-        .select('id, qty, allocated_qty, status').eq('order_id', orderId);
-      if (!orderItems || orderItems.length === 0) continue;
+    // 배정 업데이트 병렬 실행
+    if (allocOps.length > 0) await Promise.all(allocOps);
 
-      // 전량 배정된 품목 → 배송준비로 자동 승격
-      const allAllocated = orderItems.every(oi => (oi.allocated_qty || 0) >= oi.qty);
-      if (allAllocated) {
-        // 모든 품목 전량 배정 → 결제완료 품목을 배송준비로
-        const pendingItems = orderItems.filter(oi => oi.status === '결제완료');
-        for (const oi of pendingItems) {
-          await supabaseAdmin.from('order_items')
-            .update({ status: '배송준비' })
-            .eq('id', oi.id);
+    // 6) 영향받은 주문의 전량 배정 확인 + 상태 승격 (병렬)
+    if (allocatedOrderIds.size > 0) {
+      const orderIdArr = [...allocatedOrderIds];
+      const { data: allOrderItems } = await supabaseAdmin.from('order_items')
+        .select('id, order_id, qty, allocated_qty, status').in('order_id', orderIdArr);
+
+      const statusOps = [];
+      const recalcIds = [];
+      const orderItemsByOrder = {};
+      (allOrderItems || []).forEach(oi => {
+        if (!orderItemsByOrder[oi.order_id]) orderItemsByOrder[oi.order_id] = [];
+        orderItemsByOrder[oi.order_id].push(oi);
+      });
+
+      for (const orderId of orderIdArr) {
+        const orderItems = orderItemsByOrder[orderId] || [];
+        if (orderItems.length === 0) continue;
+        const allAllocated = orderItems.every(oi => (oi.allocated_qty || 0) >= oi.qty);
+        if (allAllocated) {
+          const pendingItemIds = orderItems.filter(oi => oi.status === '결제완료').map(oi => oi.id);
+          if (pendingItemIds.length > 0) {
+            statusOps.push(supabaseAdmin.from('order_items').update({ status: '배송준비' }).in('id', pendingItemIds));
+          }
+          statusOps.push(supabaseAdmin.from('orders').update({ status: '배송준비' }).eq('id', orderId).eq('status', '결제완료'));
         }
-        await supabaseAdmin.from('orders')
-          .update({ status: '배송준비' })
-          .eq('id', orderId)
-          .eq('status', '결제완료');
+        recalcIds.push(orderId);
       }
-
-      // 주문 상태 재계산
-      await recalcOrderStatus(orderId);
+      if (statusOps.length > 0) await Promise.all(statusOps);
+      await Promise.all(recalcIds.map(id => recalcOrderStatus(id)));
     }
 
     return { allocated: totalAllocated, orders: allocatedOrderIds.size };
@@ -1500,42 +1480,46 @@ async function deallocateExcessFromOrders(poId) {
       .eq('purchase_order_id', poId);
     if (!poItems || poItems.length === 0) return { deallocated: 0, orders: 0 };
 
+    const validItems = poItems.filter(i => i.product_id);
+    if (validItems.length === 0) return { deallocated: 0, orders: 0 };
+
+    const processedCombos = new Set();
+    const uniqueCombos = [];
+    for (const item of validItems) {
+      const key = `${item.product_id}|${item.color_name}|${item.size_name}`;
+      if (processedCombos.has(key)) continue;
+      processedCombos.add(key);
+      uniqueCombos.push(item);
+    }
+
+    const productIds = [...new Set(uniqueCombos.map(i => i.product_id))];
+
+    // 배치 조회: 전체 PO 입고수량 + 배정된 주문품목 한번에
+    const [{ data: allPOItemsRaw }, { data: allAllocItemsRaw }] = await Promise.all([
+      supabaseAdmin.from('purchase_order_items').select('product_id, color_name, size_name, received_qty').in('product_id', productIds),
+      supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).gt('allocated_qty', 0),
+    ]);
+
     let totalDeallocated = 0;
     const affectedOrderIds = new Set();
-    const processedCombos = new Set();
+    const deallocOps = [];
 
-    for (const poItem of poItems) {
-      if (!poItem.product_id) continue;
+    for (const poItem of uniqueCombos) {
+      const totalReceived = (allPOItemsRaw || [])
+        .filter(i => i.product_id === poItem.product_id && i.color_name === poItem.color_name && i.size_name === poItem.size_name)
+        .reduce((s, i) => s + (i.received_qty || 0), 0);
 
-      const comboKey = `${poItem.product_id}|${poItem.color_name}|${poItem.size_name}`;
-      if (processedCombos.has(comboKey)) continue;
-      processedCombos.add(comboKey);
+      const allocItems = (allAllocItemsRaw || [])
+        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name);
+      const totalAllocated = allocItems.reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
 
-      // 해당 상품/색상/사이즈의 전체 PO 입고수량 합계
-      const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
-        .select('received_qty')
-        .eq('product_id', poItem.product_id)
-        .eq('color_name', poItem.color_name)
-        .eq('size_name', poItem.size_name);
-      const totalReceived = (allPOItems || []).reduce((s, i) => s + (i.received_qty || 0), 0);
-
-      // 현재 총 배정수량
-      const { data: allocItems } = await supabaseAdmin.from('order_items')
-        .select('id, order_id, qty, allocated_qty, status')
-        .eq('product_id', poItem.product_id)
-        .eq('color', poItem.color_name)
-        .eq('size', poItem.size_name)
-        .gt('allocated_qty', 0);
-      const totalAllocated = (allocItems || []).reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
-
-      // 초과분 계산
       let excess = totalAllocated - totalReceived;
       if (excess <= 0) continue;
 
-      // LIFO: 최근 배정(배송준비 상태)부터 해제 — 배송완료는 건드리지 않음
-      const deallocCandidates = (allocItems || [])
+      // LIFO: 최근 배정(배송준비/결제완료)부터 해제 — 배송완료는 건드리지 않음
+      const deallocCandidates = allocItems
         .filter(oi => oi.status === '배송준비' || oi.status === '결제완료')
-        .sort((a, b) => b.id - a.id); // 최근 것부터
+        .sort((a, b) => b.id - a.id);
 
       for (const oi of deallocCandidates) {
         if (excess <= 0) break;
@@ -1543,20 +1527,15 @@ async function deallocateExcessFromOrders(poId) {
         if (canDealloc <= 0) continue;
 
         const newAllocated = (oi.allocated_qty || 0) - canDealloc;
-        await supabaseAdmin.from('order_items')
-          .update({ allocated_qty: newAllocated, status: '결제완료' })
-          .eq('id', oi.id);
-
+        deallocOps.push(supabaseAdmin.from('order_items').update({ allocated_qty: newAllocated, status: '결제완료' }).eq('id', oi.id));
         excess -= canDealloc;
         totalDeallocated += canDealloc;
         affectedOrderIds.add(oi.order_id);
       }
     }
 
-    // 영향받은 주문의 상태 재계산
-    for (const orderId of affectedOrderIds) {
-      await recalcOrderStatus(orderId);
-    }
+    if (deallocOps.length > 0) await Promise.all(deallocOps);
+    if (affectedOrderIds.size > 0) await Promise.all([...affectedOrderIds].map(id => recalcOrderStatus(id)));
 
     return { deallocated: totalDeallocated, orders: affectedOrderIds.size };
   } catch (e) {
@@ -3270,15 +3249,12 @@ async function handlePurchaseOrderDetail(req, res, id) {
       update.total_amount = items.reduce((s, i) => s + (i.qty || 1) * (i.costPrice || 0), 0);
     }
 
-    // receivedItems: 입고 수량 업데이트 [{id, receivedQty}]
+    // receivedItems: 입고 수량 업데이트 [{id, receivedQty}] — 병렬 처리
     if (receivedItems && Array.isArray(receivedItems)) {
-      for (const ri of receivedItems) {
-        if (ri.id && ri.receivedQty !== undefined) {
-          await supabaseAdmin.from('purchase_order_items')
-            .update({ received_qty: ri.receivedQty })
-            .eq('id', ri.id);
-        }
-      }
+      const riOps = receivedItems
+        .filter(ri => ri.id && ri.receivedQty !== undefined)
+        .map(ri => supabaseAdmin.from('purchase_order_items').update({ received_qty: ri.receivedQty }).eq('id', ri.id));
+      if (riOps.length > 0) await Promise.all(riOps);
     }
 
     // 입고 상태 자동 판별: 입고수량 vs 발주수량 비교
@@ -3307,11 +3283,12 @@ async function handlePurchaseOrderDetail(req, res, id) {
     let deallocationResult = null;
     let inventoryResult = null;
     if (receivedItems || update.status === '부분입고' || update.status === '입고완료') {
-      // 입고 수량을 재고에 반영 (diff 기반: 증가/감소 모두 처리)
-      inventoryResult = await updateInventoryFromPO(parseInt(id));
-      // 초과 배정 해제 (입고수량 감소 시)
-      deallocationResult = await deallocateExcessFromOrders(parseInt(id));
-      // 고객별 FIFO 배정 (입고 상태일 때만 — 추가 배정)
+      // 재고 반영 + 초과 배정 해제 병렬 실행
+      [inventoryResult, deallocationResult] = await Promise.all([
+        updateInventoryFromPO(parseInt(id)),
+        deallocateExcessFromOrders(parseInt(id)),
+      ]);
+      // 고객별 FIFO 배정 (입고 상태일 때만 — deallocation 이후 실행)
       if (update.status === '부분입고' || update.status === '입고완료') {
         allocationResult = await allocateReceivedToOrders(parseInt(id));
       }
