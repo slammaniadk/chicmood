@@ -677,7 +677,7 @@
             ${featuredProducts.map((p, i) => `
               <a href="#product/${p.id}/${liveBroadcasts[0].id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
+                  ${p.images && p.images[0] ? `<img src="${p.images[0].replace('w=600&h=800','w=300&h=400')}" alt="${p.name}" loading="lazy" decoding="async" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -697,7 +697,7 @@
                 <a href="#live/${b.id}" class="block bg-white border border-warm-200 rounded-xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1">
                   <div class="relative h-48 sm:h-56 overflow-hidden bg-warm-100">
                     <div class="grid grid-cols-${cols} h-full">
-                      ${b.previewImages.slice(0,3).map(img => `<img src="${img}" alt="" class="w-full h-full object-cover" />`).join('')}
+                      ${b.previewImages.slice(0,3).map(img => `<img src="${img.replace('w=600&h=800','w=300&h=400')}" alt="" class="w-full h-full object-cover" loading="lazy" decoding="async" />`).join('')}
                     </div>
                     <div class="absolute top-3 left-3">
                       <span class="bg-red-500 text-white text-[10px] font-bold tracking-wider px-3 py-1 rounded-full animate-pulse">● LIVE</span>
@@ -762,7 +762,7 @@
             ${products.map((p, i) => `
               <a href="#product/${p.id}/${id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${p.images[0]}" alt="${p.name}" loading="lazy" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
+                  ${p.images && p.images[0] ? `<img src="${p.images[0].replace('w=600&h=800','w=300&h=400')}" alt="${p.name}" loading="lazy" decoding="async" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -800,12 +800,12 @@
           <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
             <div>
               <div class="aspect-[3/4] bg-warm-100 rounded-lg overflow-hidden mb-2">
-                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진 미등록</span></div>`}
+                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${p.images[0]}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" decoding="async" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진 미등록</span></div>`}
               </div>
               ${p.images && p.images.length > 1 ? `<div class="grid grid-cols-${p.images.length} gap-2">
                 ${p.images.map((img, i) => `
                   <div class="thumb-wrap ${i===0?'active':''} aspect-square bg-warm-100 rounded" onclick="pdSwitchImage(${id},${i},this)">
-                    <img src="${img.replace('w=600&h=800','w=200&h=200')}" alt="썸네일 ${i+1}" class="w-full h-full object-cover rounded" />
+                    <img src="${img.replace('w=600&h=800','w=200&h=200')}" alt="썸네일 ${i+1}" class="w-full h-full object-cover rounded" decoding="async" />
                   </div>
                 `).join('')}
               </div>` : ''}
@@ -966,7 +966,7 @@
           ${cart.map((item, idx) => `
             <div class="flex items-center gap-4 bg-white border border-warm-200 rounded-lg p-4">
               <a href="#product/${item.productId}" class="w-16 h-20 bg-warm-100 rounded flex-shrink-0 overflow-hidden flex items-center justify-center">
-                ${item.image ? `<img src="${item.image.replace('w=600&h=800','w=100&h=130')}" alt="${item.name}" class="w-full h-full object-cover rounded" />` : `<span class="text-[9px] text-warm-400 text-center">사진<br>미등록</span>`}
+                ${item.image ? `<img src="${item.image.replace('w=600&h=800','w=100&h=130')}" alt="${item.name}" class="w-full h-full object-cover rounded" decoding="async" />` : `<span class="text-[9px] text-warm-400 text-center">사진<br>미등록</span>`}
               </a>
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-warm-800 truncate">${item.name}</p>
