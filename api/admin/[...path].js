@@ -200,7 +200,7 @@ async function handleStats(req, res) {
 async function handleOrders(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
 
-  const { status, search, page = '1', limit = '20', after, export: isExport } = req.query || {};
+  const { status, search, page = '1', limit = '20', after, export: isExport, duplicates } = req.query || {};
 
   // 신규 주문 알림용: after 이후에 생성된 주문만 경량 반환
   if (after) {
@@ -215,6 +215,34 @@ async function handleOrders(req, res) {
     return ok(res, { orders: (data || []).map(o => ({ id: o.id, orderNo: o.order_no, name: o.name, total: o.total, createdAt: o.created_at })) });
   }
 
+  // 미병합 중복 필터: 동일방송+동일주문자 2건 이상 그룹의 주문 ID 수집
+  let duplicateIds = null;
+  if (duplicates === 'unmerged') {
+    const { data: candidates } = await supabaseAdmin
+      .from('orders')
+      .select('id, broadcast_id, name, phone')
+      .is('merge_history_id', null)
+      .not('status', 'in', '("배송완료","결제취소")');
+    if (candidates && candidates.length > 0) {
+      const groups = {};
+      for (const c of candidates) {
+        if (!c.broadcast_id) continue;
+        const key = `${c.broadcast_id}::${c.name}::${c.phone}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(c.id);
+      }
+      duplicateIds = [];
+      for (const ids of Object.values(groups)) {
+        if (ids.length >= 2) duplicateIds.push(...ids);
+      }
+      if (duplicateIds.length === 0) {
+        return ok(res, { orders: [], total: 0, page: 1, limit: 20 });
+      }
+    } else {
+      return ok(res, { orders: [], total: 0, page: 1, limit: 20 });
+    }
+  }
+
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = isExport ? 5000 : Math.min(50, Math.max(1, parseInt(limit)));
   const offset = isExport ? 0 : (pageNum - 1) * limitNum;
@@ -225,6 +253,7 @@ async function handleOrders(req, res) {
     .order('created_at', { ascending: false })
     .range(offset, offset + limitNum - 1);
 
+  if (duplicateIds) query = query.in('id', duplicateIds);
   if (status && status !== 'all') query = query.eq('status', status);
 
   // 검색어가 있으면 이름, 주문번호, 전화번호, 닉네임 + 상품명 검색
@@ -252,6 +281,7 @@ async function handleOrders(req, res) {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limitNum - 1);
+    if (duplicateIds) query = query.in('id', duplicateIds);
     if (status && status !== 'all') query = query.eq('status', status);
     if (search) {
       const { data: matchedItems2 } = await supabaseAdmin

@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.3.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.08.31 21:15</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.3.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.02 16:33</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -761,6 +761,7 @@
   let orderSearch = '';
   let orderPage = 1;
   let mergeChecked = new Set();
+  let showDuplicatesOnly = false;
 
   async function renderOrders(el) {
     showSpinner(el);
@@ -768,6 +769,7 @@
       const params = new URLSearchParams({ page: orderPage, limit: 20 });
       if (orderFilter !== 'all') params.set('status', orderFilter);
       if (orderSearch) params.set('search', orderSearch);
+      if (showDuplicatesOnly) params.set('duplicates', 'unmerged');
 
       const data = await api('/admin/orders?' + params.toString());
       const statuses = ['all','입금확인','결제완료','결제취소','배송준비','배송완료'];
@@ -790,8 +792,9 @@
           <div class="flex flex-wrap items-center gap-3 mb-6">
             <div class="flex flex-wrap gap-2">
               ${statuses.map(s => `
-                <button class="filter-tab ${orderFilter === s ? 'active' : ''}" onclick="orderFilter='${s}';orderPage=1;renderOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>
+                <button class="filter-tab ${orderFilter === s && !showDuplicatesOnly ? 'active' : ''}" onclick="showDuplicatesOnly=false;orderFilter='${s}';orderPage=1;renderOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>
               `).join('')}
+              <button class="filter-tab ${showDuplicatesOnly ? 'active' : ''}" style="${showDuplicatesOnly ? 'background:#7c3aed;color:#fff;border-color:#7c3aed' : 'color:#7c3aed;border-color:#7c3aed'}" onclick="showDuplicatesOnly=!showDuplicatesOnly;if(showDuplicatesOnly)orderFilter='all';orderPage=1;renderOrders(document.getElementById('page-content'))">미병합 중복</button>
             </div>
             <div class="flex-1 min-w-[200px]">
               <input type="text" class="input-field" placeholder="이름, 닉네임, 상품명, 주문번호, 전화번호 검색..." value="${escapeHtml(orderSearch)}" onkeydown="if(event.key==='Enter'){orderSearch=this.value;orderPage=1;renderOrders(document.getElementById('page-content'))}" />
@@ -809,7 +812,22 @@
               </thead>
               <tbody>
                 ${data.orders.length === 0 ? '<tr><td colspan="10" class="text-center text-warm-400 py-12">주문이 없습니다</td></tr>' : ''}
-                ${data.orders.map(o => {
+                ${(() => {
+                  // 미병합 중복 모드: 그룹별 교차 배경색
+                  const _dupGroupMap = {};
+                  if (showDuplicatesOnly) {
+                    const _gKeys = [];
+                    data.orders.forEach(o => {
+                      const gk = (o.broadcastId||'') + '::' + o.name + '::' + (o.phone||'');
+                      if (!_dupGroupMap[gk] && _dupGroupMap[gk] !== 0) {
+                        _dupGroupMap[gk] = _gKeys.length;
+                        _gKeys.push(gk);
+                      }
+                    });
+                  }
+                  return data.orders.map(o => {
+                  const _gk = (o.broadcastId||'') + '::' + o.name + '::' + (o.phone||'');
+                  const _dupBg = showDuplicatesOnly ? ((_dupGroupMap[_gk] || 0) % 2 === 0 ? 'background:#f5f3ff;' : 'background:#fefce8;') : '';
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}<br>${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                   const totalQty = o.items.reduce((s,i) => s + i.qty, 0);
@@ -826,7 +844,7 @@
                   }))));
                   const mergeDisabled = ['배송완료','결제취소'].includes(o.status);
                   return `
-                    <tr>
+                    <tr style="${_dupBg}">
                       <td><input type="checkbox" ${mergeDisabled ? 'disabled' : ''} ${mergeChecked.has(o.id) ? 'checked' : ''} onchange="toggleMergeCheck('${o.id}', this.checked, this)" /></td>
                       <td class="font-semibold text-warm-800" style="font-size:9px;max-width:100px;word-break:break-all;">${o.orderNo}${o.mergeHistoryId ? ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#ede9fe;color:#7c3aed;font-weight:600;">병합</span>' : ''}</td>
                       <td class="whitespace-nowrap">
@@ -868,7 +886,7 @@
                       </td>
                     </tr>
                   `;
-                }).join('')}
+                }).join(''); })()}
               </tbody>
             </table>
           </div>
