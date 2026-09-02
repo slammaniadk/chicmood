@@ -2756,11 +2756,19 @@ async function handleShippingImport(req, res) {
 
   let success = 0, skipped = 0, failed = 0;
   const details = [];
+  const duplicateNames = [];
 
   // phone 정규화: 숫자만 남기고 앞 7자리
   const normalizePhone = (p) => (p || '').replace(/[^0-9]/g, '').slice(0, 7);
   // 이름 정규화: 앞뒤 공백 제거
   const normalizeName = (n) => (n || '').trim();
+
+  // 동일주문자 복수 주문 감지: (이름+전화앞7) 그룹핑
+  const orderGroupCount = {};
+  for (const o of orders) {
+    const gk = normalizeName(o.name) + '::' + normalizePhone(o.phone);
+    orderGroupCount[gk] = (orderGroupCount[gk] || 0) + 1;
+  }
 
   for (const row of rows) {
     const [trackingNo, rawName, phone] = row;
@@ -2779,6 +2787,15 @@ async function handleShippingImport(req, res) {
     if (!matched) {
       skipped++;
       details.push({ name, phone, reason: '매칭 주문 없음' });
+      continue;
+    }
+
+    // 동일주문자 복수 주문인 경우 스킵 (수기 등록 유도)
+    const matchedGk = normalizeName(matched.name) + '::' + normalizePhone(matched.phone);
+    if (orderGroupCount[matchedGk] >= 2) {
+      skipped++;
+      if (!duplicateNames.includes(name)) duplicateNames.push(name);
+      details.push({ name, phone, reason: '동일주문자 복수 주문 — 수기 등록 필요' });
       continue;
     }
 
@@ -2815,7 +2832,7 @@ async function handleShippingImport(req, res) {
     }
   }
 
-  return ok(res, { success, skipped, failed, details });
+  return ok(res, { success, skipped, failed, details, duplicateNames });
 }
 
 // ============================================================
