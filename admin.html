@@ -794,7 +794,7 @@
               ${statuses.map(s => `
                 <button class="filter-tab ${orderFilter === s && !showDuplicatesOnly ? 'active' : ''}" onclick="showDuplicatesOnly=false;orderFilter='${s}';orderPage=1;renderOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>
               `).join('')}
-              <button class="filter-tab ${showDuplicatesOnly ? 'active' : ''}" style="${showDuplicatesOnly ? 'background:#7c3aed;color:#fff;border-color:#7c3aed' : 'color:#7c3aed;border-color:#7c3aed'}" onclick="showDuplicatesOnly=!showDuplicatesOnly;if(showDuplicatesOnly)orderFilter='all';orderPage=1;renderOrders(document.getElementById('page-content'))">미병합 중복</button>
+              <button class="filter-tab ${showDuplicatesOnly ? 'active' : ''}" style="${showDuplicatesOnly ? 'background:#7c3aed;color:#fff;border-color:#7c3aed' : 'color:#7c3aed;border-color:#7c3aed'}" onclick="showDuplicatesOnly=!showDuplicatesOnly;if(showDuplicatesOnly)orderFilter='all';orderPage=1;renderOrders(document.getElementById('page-content'))">병합대상조회</button>
             </div>
             <div class="flex-1 min-w-[200px]">
               <input type="text" class="input-field" placeholder="이름, 닉네임, 상품명, 주문번호, 전화번호 검색..." value="${escapeHtml(orderSearch)}" onkeydown="if(event.key==='Enter'){orderSearch=this.value;orderPage=1;renderOrders(document.getElementById('page-content'))}" />
