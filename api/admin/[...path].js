@@ -797,6 +797,10 @@ async function handleOrderSplit(req, res) {
     name: order.name,
   });
 
+  // 13) 분리 후 주문 상태 재계산 (배정 상태 반영)
+  await recalcOrderStatus(orderId);
+  await recalcOrderStatus(newOrder.id);
+
   return ok(res, {
     split: true,
     originalOrder: {
@@ -1472,6 +1476,73 @@ async function allocateReceivedToOrders(poId) {
   } catch (e) {
     return { allocated: 0, orders: 0, error: e.message };
   }
+}
+
+// 상품별 직접 배정 (PO 없이 수동 입고 시 사용)
+async function allocateByProduct(productId, colorName, sizeName) {
+  try {
+    const { data: inv } = await supabaseAdmin.from('inventory')
+      .select('stock_qty').eq('product_id', productId)
+      .eq('color_name', colorName || '').eq('size_name', sizeName || '').single();
+    if (!inv || inv.stock_qty <= 0) return { allocated: 0 };
+
+    // 이미 배정된 총량
+    const { data: allocItems } = await supabaseAdmin.from('order_items')
+      .select('allocated_qty').eq('product_id', productId)
+      .eq('color', colorName || '').eq('size', sizeName || '')
+      .not('status', 'in', '("배송완료","결제취소")').gt('allocated_qty', 0);
+    const totalAlloc = (allocItems || []).reduce((s, i) => s + (i.allocated_qty || 0), 0);
+    let remaining = Math.max(0, inv.stock_qty - totalAlloc);
+    if (remaining <= 0) return { allocated: 0 };
+
+    // 결제완료 주문 (FIFO)
+    const { data: paidOrders } = await supabaseAdmin.from('orders')
+      .select('id').eq('status', '결제완료').order('created_at', { ascending: true });
+    if (!paidOrders || paidOrders.length === 0) return { allocated: 0 };
+
+    const paidSet = new Set(paidOrders.map(o => o.id));
+    const orderIdx = {};
+    paidOrders.forEach((o, i) => { orderIdx[o.id] = i; });
+
+    const { data: pending } = await supabaseAdmin.from('order_items')
+      .select('id, order_id, qty, allocated_qty')
+      .eq('product_id', productId).eq('color', colorName || '').eq('size', sizeName || '')
+      .eq('status', '결제완료');
+    const matched = (pending || []).filter(i => paidSet.has(i.order_id))
+      .sort((a, b) => (orderIdx[a.order_id] || 0) - (orderIdx[b.order_id] || 0));
+    if (matched.length === 0) return { allocated: 0 };
+
+    const ops = [];
+    const affectedOrders = new Set();
+    let totalAllocated = 0;
+    for (const oi of matched) {
+      if (remaining <= 0) break;
+      const needed = oi.qty - (oi.allocated_qty || 0);
+      if (needed <= 0) continue;
+      const alloc = Math.min(needed, remaining);
+      ops.push(supabaseAdmin.from('order_items')
+        .update({ allocated_qty: (oi.allocated_qty || 0) + alloc }).eq('id', oi.id));
+      remaining -= alloc;
+      totalAllocated += alloc;
+      affectedOrders.add(oi.order_id);
+    }
+    if (ops.length > 0) await Promise.all(ops);
+
+    // 전량 배정 주문 → 배송준비 승격
+    for (const orderId of affectedOrders) {
+      const { data: items } = await supabaseAdmin.from('order_items')
+        .select('qty, allocated_qty, status').eq('order_id', orderId);
+      const active = (items || []).filter(i => i.status !== '결제취소');
+      if (active.length > 0 && active.every(i => (i.allocated_qty || 0) >= i.qty)) {
+        await supabaseAdmin.from('order_items').update({ status: '배송준비' })
+          .eq('order_id', orderId).eq('status', '결제완료');
+        await supabaseAdmin.from('orders').update({ status: '배송준비' })
+          .eq('id', orderId).eq('status', '결제완료');
+      }
+    }
+
+    return { allocated: totalAllocated, orders: affectedOrders.size };
+  } catch (e) { return { allocated: 0, error: e.message }; }
 }
 
 // 입고수량 감소 시 초과 배정 해제 (LIFO: 최근 배정부터 해제)
@@ -3616,6 +3687,9 @@ async function handleInventory(req, res) {
       qty, reason: reason || '',
     });
 
+    // 수동 입고/조정 후 대기 주문 자동 배정
+    try { await allocateByProduct(productId, colorName || '', sizeName || ''); } catch (e) { /* 배정 실패해도 입고 유지 */ }
+
     return ok(res, { id: invId }, 201);
   }
 
@@ -3636,6 +3710,14 @@ async function handleInventoryDetail(req, res, id) {
       inventory_id: parseInt(id), product_id: inv.product_id, type: 'adjust',
       qty: diff, reason: reason || '재고 조정',
     });
+
+    // 재고 증가 시 대기 주문 자동 배정
+    if (diff > 0) {
+      try {
+        const { data: invDetail } = await supabaseAdmin.from('inventory').select('color_name, size_name').eq('id', id).single();
+        if (invDetail) await allocateByProduct(inv.product_id, invDetail.color_name || '', invDetail.size_name || '');
+      } catch (e) { /* 배정 실패해도 조정 유지 */ }
+    }
 
     return ok(res, { id: parseInt(id) });
   }
