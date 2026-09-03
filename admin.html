@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 14:52</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 16:13</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4098,11 +4098,8 @@
 
       const params = new URLSearchParams({ page: invPage, limit: 30 });
       if (invSearch) params.set('search', invSearch);
+      if (invHideZero) params.set('hideZero', '1');
       const data = await api('/admin/inventory?' + params.toString());
-      if (invHideZero) {
-        data.inventory = (data.inventory||[]).filter(i => i.stockQty > 0);
-        data.total = data.inventory.length;
-      }
       const totalPages = Math.ceil(data.total / data.limit) || 1;
       const lowStockCount = (data.inventory||[]).filter(i => i.stockQty <= 5).length;
       const zeroCount = (data.inventory||[]).filter(i => i.stockQty === 0).length;
@@ -4118,6 +4115,12 @@
               ${zeroCount > 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllZeroInventory()" style="font-size:12px;">재고0 전체삭제 (${zeroCount}건)</button>` : ''}
               <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
             </div>
+          </div>
+          <div style="background:#f9f5f0;border:1px solid #e4c5a5;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#6b4220;line-height:1.7;">
+            <strong>재고 흐름 안내</strong><br>
+            <span style="color:#38a169">+증가</span> : PO 입고 / 수동 입고·조정 / 반품완료 / 주문취소(배정 복원)<br>
+            <span style="color:#e53e3e">-차감</span> : 주문 배정 시 (결제완료→배송준비) / 수동 차감<br>
+            <span style="color:#a0aec0">변동없음</span> : 배송완료 (배정 시점에 이미 차감됨)
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex gap-2">

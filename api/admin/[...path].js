@@ -3610,7 +3610,7 @@ async function handleSales(req, res) {
 // ============================================================
 async function handleInventory(req, res) {
   if (req.method === 'GET') {
-    const { search, page = '1', limit = '30' } = req.query || {};
+    const { search, page = '1', limit = '30', hideZero } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -3622,15 +3622,15 @@ async function handleInventory(req, res) {
         .from('inventory')
         .select('*, products!inner(name)', { count: 'exact' })
         .ilike('products.name', `%${search}%`)
-        .order('id', { ascending: false })
-        .range(offset, offset + limitNum - 1);
+        .order('id', { ascending: false });
     } else {
       query = supabaseAdmin
         .from('inventory')
         .select('*, products(name)', { count: 'exact' })
-        .order('id', { ascending: false })
-        .range(offset, offset + limitNum - 1);
+        .order('id', { ascending: false });
     }
+    if (hideZero === '1') query = query.gt('stock_qty', 0);
+    query = query.range(offset, offset + limitNum - 1);
 
     const { data, error, count } = await query;
     if (error) return fail(res, error.message, 500);
