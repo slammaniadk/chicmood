@@ -797,9 +797,20 @@ async function handleOrderSplit(req, res) {
     name: order.name,
   });
 
-  // 13) 분리 후 주문 상태 재계산 (배정 상태 반영)
-  await recalcOrderStatus(orderId);
-  await recalcOrderStatus(newOrder.id);
+  // 13) 분리 후 배정 상태 확인 → 전량 배정 시 배송준비 승격
+  for (const oid of [orderId, newOrder.id]) {
+    const { data: ois } = await supabaseAdmin.from('order_items')
+      .select('id, qty, allocated_qty, status').eq('order_id', oid);
+    const active = (ois || []).filter(i => i.status !== '결제취소');
+    if (active.length > 0 && active.every(i => (i.allocated_qty || 0) >= i.qty)) {
+      const pending = active.filter(i => i.status === '결제완료').map(i => i.id);
+      if (pending.length > 0) {
+        await supabaseAdmin.from('order_items').update({ status: '배송준비' }).in('id', pending);
+      }
+      await supabaseAdmin.from('orders').update({ status: '배송준비' }).eq('id', oid).eq('status', '결제완료');
+    }
+    await recalcOrderStatus(oid);
+  }
 
   return ok(res, {
     split: true,
