@@ -3696,16 +3696,35 @@ async function handleInventoryReconcile(req, res) {
       returnMap[key] = (returnMap[key] || 0) + (i.qty || 0);
     });
 
-    // 모든 키 합치기
-    const allKeys = new Set([...Object.keys(receivedMap), ...Object.keys(shippedMap), ...Object.keys(returnMap)]);
+    // 1d) 수동 입고/조정 (PO 외): inventory_log에서 수동 입력 건만 추출
+    const { data: manualLogs } = await supabaseAdmin.from('inventory_log')
+      .select('product_id, qty, reason, type, inventory!inventory_id(color_name, size_name)')
+      .in('type', ['in', 'adjust']);
 
-    // correct_stock 계산
+    const manualMap = {};
+    (manualLogs || []).forEach(log => {
+      const reason = log.reason || '';
+      // PO 입고, 자동 복원, 이전 재조정 항목 제외
+      if (reason.startsWith('PO#')) return;
+      if (reason === '주문 상태변경 재고 복원') return;
+      if (reason.startsWith('재고 재조정')) return;
+
+      if (!log.product_id || !log.inventory) return;
+      const key = `${log.product_id}|${log.inventory.color_name || ''}|${log.inventory.size_name || ''}`;
+      manualMap[key] = (manualMap[key] || 0) + (log.qty || 0);
+    });
+
+    // 모든 키 합치기
+    const allKeys = new Set([...Object.keys(receivedMap), ...Object.keys(shippedMap), ...Object.keys(returnMap), ...Object.keys(manualMap)]);
+
+    // correct_stock 계산: PO입고 + 수동입고/조정 - 배송완료출고 + 반품완료
     const correctStockMap = {};
     for (const key of allKeys) {
       const received = receivedMap[key] || 0;
       const shipped = shippedMap[key] || 0;
       const returned = returnMap[key] || 0;
-      correctStockMap[key] = Math.max(0, received - shipped + returned);
+      const manual = manualMap[key] || 0;
+      correctStockMap[key] = Math.max(0, received + manual - shipped + returned);
     }
 
     // Step 2: 현재 inventory와 비교
