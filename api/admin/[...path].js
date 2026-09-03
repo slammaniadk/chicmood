@@ -4166,7 +4166,7 @@ async function handleReports(req, res) {
   let summary = {};
 
   // 날짜 범위 적용된 주문 조회
-  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, total, created_at, broadcast_id').neq('status', '결제취소');
+  let orderQuery = supabaseAdmin.from('orders').select('id, user_id, name, subtotal, total, created_at, broadcast_id').neq('status', '결제취소');
   if (from) orderQuery = orderQuery.gte('created_at', from + 'T00:00:00');
   if (to) orderQuery = orderQuery.lte('created_at', to + 'T23:59:59');
   const { data: orders } = await orderQuery;
@@ -4215,7 +4215,7 @@ async function handleReports(req, res) {
       const key = o.user_id || o.name;
       if (!grouped[key]) grouped[key] = { name: o.name, orderCount: 0, totalSpent: 0, refund: 0, lastOrderAt: null };
       grouped[key].orderCount++;
-      grouped[key].totalSpent += o.total;
+      grouped[key].totalSpent += (o.subtotal || 0);
       grouped[key].refund += (refundByOrderId[o.id] || 0);
       if (!grouped[key].lastOrderAt || o.created_at > grouped[key].lastOrderAt) grouped[key].lastOrderAt = o.created_at;
     });
@@ -4230,11 +4230,23 @@ async function handleReports(req, res) {
       .from('broadcasts')
       .select('id, title, date_text, status, broadcast_products(product_id)')
       .order('id', { ascending: false });
-    // 방송별 매출 계산
+    // 방송별 주문 그룹핑 (orders.broadcast_id 기준 — 중복 집계 방지)
+    const ordersByBroadcast = {};
+    (orders || []).forEach(o => {
+      if (!o.broadcast_id) return;
+      if (!ordersByBroadcast[o.broadcast_id]) ordersByBroadcast[o.broadcast_id] = [];
+      ordersByBroadcast[o.broadcast_id].push(o);
+    });
+    // 방송별 주문아이템 조회
     let allItems = [];
+    const orderIdToItems = {};
     if (orderIds.length > 0) {
-      const { data: itemsData } = await supabaseAdmin.from('order_items').select('product_id, qty, subtotal').in('order_id', orderIds);
+      const { data: itemsData } = await supabaseAdmin.from('order_items').select('order_id, product_id, qty, subtotal').in('order_id', orderIds);
       allItems = itemsData || [];
+      allItems.forEach(i => {
+        if (!orderIdToItems[i.order_id]) orderIdToItems[i.order_id] = [];
+        orderIdToItems[i.order_id].push(i);
+      });
     }
     // 방송별 반품액
     const broadcastRefundMap = {};
@@ -4244,14 +4256,16 @@ async function handleReports(req, res) {
       }
     });
     rows = (broadcasts || []).map(b => {
-      const bProductIds = (b.broadcast_products || []).map(bp => bp.product_id);
-      const matched = allItems.filter(i => bProductIds.includes(i.product_id));
-      const revenue = matched.reduce((s, i) => s + i.subtotal, 0);
+      const bcOrders = ordersByBroadcast[b.id] || [];
+      const bcOrderIds = bcOrders.map(o => o.id);
+      const bcItems = bcOrderIds.flatMap(oid => orderIdToItems[oid] || []);
+      const revenue = bcItems.reduce((s, i) => s + (i.subtotal || 0), 0);
       const refund = broadcastRefundMap[b.id] || 0;
       return {
         title: b.title, date: b.date_text, status: b.status,
-        productCount: bProductIds.length,
-        salesQty: matched.reduce((s, i) => s + i.qty, 0),
+        productCount: (b.broadcast_products || []).length,
+        orderCount: bcOrders.length,
+        salesQty: bcItems.reduce((s, i) => s + i.qty, 0),
         revenue, refund, netRevenue: revenue - refund,
       };
     });
