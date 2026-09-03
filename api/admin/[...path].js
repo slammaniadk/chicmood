@@ -2793,7 +2793,7 @@ async function handleShippingExcel(req, res) {
   // 로젠택배 형식 행 생성
   const rows = orders.map(o => {
     const orderItems = items.filter(i => i.order_id === o.id);
-    const productDetail = orderItems.map(i => `${i.name}(${i.color||''}/${i.size||''})x${i.qty}`).join(', ');
+    const productDetail = `총 ${orderItems.length}품목 / ` + orderItems.map(i => `${i.product_id||''}번 ${i.name}(${i.color||''}/${i.size||''})x${i.qty}`).join(', ');
     const totalQty = orderItems.reduce((s, i) => s + i.qty, 0);
     return [
       o.name,             // 수취인명
