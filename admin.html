@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 16:20</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 16:21</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4089,7 +4089,7 @@
   let invPage = 1;
   let invSearch = '';
   let invTab = 'stock'; // stock or log
-  let invHideZero = false;
+  let invHideZero = true;
 
   async function renderInventory(el) {
     showSpinner(el);
@@ -4109,7 +4109,7 @@
           <div class="flex justify-between items-center mb-6">
             <div class="flex items-center gap-3">
               <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">재고관리</h2>
-              <span style="background:#f9f5f0;border:1px solid #e4c5a5;border-radius:6px;padding:5px 12px;font-size:12px;color:#6b4220;line-height:1.5;"><span style="color:#38a169;font-weight:600">+증가</span> 발주입고 · 수동입고/조정 · 반품완료 · 주문취소(배정복원) &nbsp;&nbsp;<span style="color:#e53e3e;font-weight:600">-차감</span> 주문배정(결제완료→배송준비) · 수동차감 &nbsp;&nbsp;<span style="color:#a0aec0;font-weight:600">변동없음</span> 배송완료(배정 시점에 이미 차감)</span>
+              <span style="background:#f9f5f0;border:1px solid #e4c5a5;border-radius:6px;padding:5px 12px;font-size:12px;color:#6b4220;line-height:1.8;display:inline-block;"><span style="color:#38a169;font-weight:600">+증가</span> 발주입고 · 수동입고/조정 · 반품완료 · 주문취소(배정복원)<br><span style="color:#e53e3e;font-weight:600">-차감</span> 주문배정(결제완료→배송준비) · 수동차감<br><span style="color:#a0aec0;font-weight:600">변동없음</span> 배송완료(배정 시점에 이미 차감)</span>
             </div>
             <div class="flex gap-2">
               <button onclick="downloadPageExcel('재고관리','재고관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
