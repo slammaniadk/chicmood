@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 14:46</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.4.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 14:52</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1407,6 +1407,7 @@
         method: 'POST',
         body: JSON.stringify({ targetId, sourceIds })
       });
+      ids.forEach(id => notifiedOrderIds.add(id));
       showToast(`${ids.length}건의 주문이 병합되었습니다`);
       mergeChecked.clear();
       renderOrders(document.getElementById('page-content'));
@@ -1432,6 +1433,8 @@
         body: JSON.stringify({ targetId })
       });
       const restored = (result.restoredOrders || []).map(r => `${r.originalOrderNo} → ${r.newOrderNo}`).join('\n');
+      (result.restoredOrders || []).forEach(r => { if (r.newOrderId) notifiedOrderIds.add(r.newOrderId); });
+      notifiedOrderIds.add(targetId);
       showToast(`병합이 해제되었습니다\n${restored}`);
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
@@ -1579,6 +1582,7 @@
         body: JSON.stringify({ orderId: _splitOrderId, itemIds })
       });
       const msg = `주문이 분리되었습니다\n원본: ${result.originalOrder.orderNo} (${fmt(result.originalOrder.total)})\n새 주문: ${result.newOrder.orderNo} (${fmt(result.newOrder.total)})`;
+      notifiedOrderIds.add(result.newOrder.id);
       showToast(msg);
       document.getElementById('split-modal').remove();
       renderOrders(document.getElementById('page-content'));
