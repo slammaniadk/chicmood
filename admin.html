@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.3.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 09:39</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.3.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.03 09:48</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4087,6 +4087,7 @@
             <div class="flex gap-2">
               <button onclick="downloadPageExcel('재고관리','재고관리')" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderInventory(document.getElementById('page-content'))">🔄 새로고침</button>
+              <button class="btn-outline btn-sm" onclick="openReconcileModal()">🔧 재고 재조정</button>
               ${zeroCount > 0 ? `<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteAllZeroInventory()" style="font-size:12px;">재고0 전체삭제 (${zeroCount}건)</button>` : ''}
               <button class="btn-primary" onclick="openInventoryModal()">+ 입고/조정</button>
             </div>
@@ -4336,6 +4337,110 @@
       showToast(count + '건 삭제 완료');
       renderInventory(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function openReconcileModal() {
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'reconcile-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6" style="max-width:700px;">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 재조정</h3>
+          <button onclick="document.getElementById('reconcile-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-warm-500 text-[13px] mb-4">변경 예정 내역을 확인하는 중...</p>
+        <div class="flex justify-center py-8"><div class="spinner"></div></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    try {
+      const result = await api('/admin/inventory/reconcile', { method: 'POST', body: JSON.stringify({ dryRun: true }) });
+      const changes = result.inventoryChanges || [];
+      const content = modal.querySelector('.overlay-content');
+
+      if (changes.length === 0) {
+        content.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 재조정</h3>
+            <button onclick="document.getElementById('reconcile-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <p class="text-center text-warm-500 py-8">모든 재고가 정상입니다. 변경할 항목이 없습니다.</p>
+          <button class="btn-outline w-full" onclick="document.getElementById('reconcile-modal').remove()">닫기</button>
+        `;
+        return;
+      }
+
+      const rows = changes.map(c => `
+        <tr>
+          <td style="font-size:12px">${escapeHtml(String(c.productId))}</td>
+          <td style="font-size:12px">${escapeHtml(c.colorName || '-')}</td>
+          <td style="font-size:12px">${escapeHtml(c.sizeName || '-')}</td>
+          <td style="font-size:12px;text-align:center">${c.before}</td>
+          <td style="font-size:12px;text-align:center;font-weight:600;color:${c.diff > 0 ? '#16a34a' : '#dc2626'}">${c.after}</td>
+          <td style="font-size:12px;text-align:center;color:${c.diff > 0 ? '#16a34a' : '#dc2626'}">${c.diff > 0 ? '+' : ''}${c.diff}</td>
+        </tr>
+      `).join('');
+
+      content.innerHTML = `
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 재조정</h3>
+          <button onclick="document.getElementById('reconcile-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-[13px] text-warm-600 mb-3">총 <strong>${changes.length}건</strong>의 재고가 변경됩니다. 실행하면 배정도 초기화 후 재배정됩니다.</p>
+        <div class="card overflow-x-auto mb-4" style="max-height:340px;overflow-y:auto;">
+          <table>
+            <thead><tr><th>상품ID</th><th>색상</th><th>사이즈</th><th>현재값</th><th>변경값</th><th>차이</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn-outline flex-1" onclick="document.getElementById('reconcile-modal').remove()">취소</button>
+          <button id="reconcile-exec-btn" class="btn-primary flex-1" onclick="executeReconcile()">실행</button>
+        </div>
+      `;
+    } catch (e) {
+      showToast(e.message || '재조정 미리보기에 실패했습니다');
+      document.getElementById('reconcile-modal')?.remove();
+    }
+  }
+
+  async function executeReconcile() {
+    const btn = document.getElementById('reconcile-exec-btn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></span>실행 중...';
+
+    try {
+      const result = await api('/admin/inventory/reconcile', { method: 'POST', body: JSON.stringify({}) });
+      const totalChanges = result.totalChanges || 0;
+      const realloc = result.reallocation || {};
+      const ordersReset = result.ordersReset || 0;
+
+      const content = document.querySelector('#reconcile-modal .overlay-content');
+      if (content) {
+        content.innerHTML = `
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 재조정 완료</h3>
+            <button onclick="document.getElementById('reconcile-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+          </div>
+          <div class="space-y-2 text-[13px] text-warm-700 mb-6">
+            <p>재고 변경: <strong>${totalChanges}건</strong></p>
+            <p>주문 초기화: <strong>${ordersReset}건</strong></p>
+            <p>재배정 수량: <strong>${realloc.totalAllocated || 0}개</strong> (주문 ${realloc.ordersAffected || 0}건)</p>
+            ${(realloc.errors || []).length > 0 ? `<p class="text-red-500">배정 오류: ${realloc.errors.length}건</p>` : ''}
+          </div>
+          <button class="btn-primary w-full" onclick="document.getElementById('reconcile-modal').remove()">확인</button>
+        `;
+      }
+      showToast('재고 재조정이 완료되었습니다');
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '재고 재조정에 실패했습니다');
+      btn.disabled = false;
+      btn.textContent = '실행';
+    }
   }
 
   async function openInventoryAdjustModal(invId, currentQty, productName) {
