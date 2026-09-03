@@ -403,6 +403,13 @@ async function handleOrderMerge(req, res) {
     return fail(res, `병합 불가 상태(${blocked.map(o => o.status).join(', ')})의 주문이 포함되어 있습니다`, 400);
   }
 
+  // 3-1) 검증: 배정 상태가 다른 주문끼리 병합 방지 (배송준비 + 결제완료 혼합 불가)
+  const hasReady = orders.some(o => o.status === '배송준비');
+  const hasPaid = orders.some(o => o.status === '결제완료');
+  if (hasReady && hasPaid) {
+    return fail(res, '배송준비 주문과 결제완료 주문은 병합할 수 없습니다. 같은 상태의 주문만 병합해주세요.', 400);
+  }
+
   // 4) 병합 이력 스냅샷 저장 (병합해제용)
   const sourceSnapshots = [];
   for (const srcId of sourceIds) {
