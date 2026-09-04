@@ -7,10 +7,13 @@
     "dev": "vercel dev"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1126.0",
+    "@aws-sdk/s3-request-presigner": "^3.1126.0",
     "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^17.4.2",
+    "googleapis": "^144.0.0",
     "jsonwebtoken": "^9.0.2",
-    "xlsx": "^0.18.5",
-    "googleapis": "^144.0.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "pg": "^8.23.0"

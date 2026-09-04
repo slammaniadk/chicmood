@@ -1,4 +1,6 @@
-const { supabaseAdmin } = require('../_lib/supabase');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { r2, R2_BUCKET, R2_PUBLIC_URL } = require('../_lib/r2');
 const { ok, fail, handleCors } = require('../_lib/response');
 
 module.exports = async function handler(req, res) {
@@ -14,21 +16,23 @@ module.exports = async function handler(req, res) {
   const ext = filename.split('.').pop();
   const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-  const { data, error } = await supabaseAdmin.storage
-    .from('product-images')
-    .createSignedUploadUrl(path);
+  try {
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: path,
+      ContentType: contentType || 'application/octet-stream',
+    });
 
-  if (error) return fail(res, error.message, 500);
+    const signedUrl = await getSignedUrl(r2, command, { expiresIn: 600 });
+    const publicUrl = `${R2_PUBLIC_URL}/${path}`;
 
-  // 공개 URL 생성
-  const { data: publicData } = supabaseAdmin.storage
-    .from('product-images')
-    .getPublicUrl(path);
-
-  return ok(res, {
-    signedUrl: data.signedUrl,
-    token: data.token,
-    path,
-    publicUrl: publicData.publicUrl,
-  });
+    return ok(res, {
+      signedUrl,
+      token: '',
+      path,
+      publicUrl,
+    });
+  } catch (err) {
+    return fail(res, err.message, 500);
+  }
 };

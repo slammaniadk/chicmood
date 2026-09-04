@@ -294,11 +294,8 @@
   // ============================================================
   function fmt(n) { return '₩' + n.toLocaleString('ko-KR'); }
 
-  function thumbUrl(url, w, h) {
-    if (!url) return '';
-    const resized = url.replace('/object/public/', '/render/image/public/');
-    const sep = resized.includes('?') ? '&' : '?';
-    return resized + sep + 'width=' + w + '&height=' + h + '&resize=cover&quality=75';
+  function thumbUrl(url) {
+    return url || '';
   }
 
   function showToast(msg) {
