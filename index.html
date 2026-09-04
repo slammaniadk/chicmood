@@ -682,7 +682,7 @@
             ${featuredProducts.map((p, i) => `
               <a href="#product/${p.id}/${liveBroadcasts[0].id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 300, 400)}" alt="${p.name}" loading="lazy" decoding="async" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -767,7 +767,7 @@
             ${products.map((p, i) => `
               <a href="#product/${p.id}/${id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 300, 400)}" alt="${p.name}" loading="lazy" decoding="async" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진 미등록</span></div>`}
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -805,7 +805,7 @@
           <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
             <div>
               <div class="aspect-[3/4] bg-warm-100 rounded-lg overflow-hidden mb-2">
-                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${thumbUrl(p.images[0], 600, 800)}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" decoding="async" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진 미등록</span></div>`}
+                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${thumbUrl(p.images[0])}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" decoding="async" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center\\'><span class=\\'text-warm-400 text-sm\\'>사진없음</span></div>'" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진없음</span></div>`}
               </div>
               ${p.images && p.images.length > 1 ? `<div class="grid grid-cols-${p.images.length} gap-2">
                 ${p.images.map((img, i) => `
