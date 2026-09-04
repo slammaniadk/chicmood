@@ -117,18 +117,8 @@ function extractVideoId(url) {
  * 주문 알림 메시지 조합
  */
 function formatOrderMessage(nickname, items, total) {
-  const firstName = items[0]?.name || '상품';
-  const totalQty = items.reduce((s, i) => s + (i.qty || 1), 0);
-  const count = items.length;
   const formattedTotal = total.toLocaleString('ko-KR');
-
-  if (count === 1 && totalQty === 1) {
-    return `🛍 ${nickname}님 주문완료! ${firstName} (${formattedTotal}원)`;
-  }
-  if (count === 1) {
-    return `🛍 ${nickname}님 주문완료! ${firstName} ${totalQty}개 (${formattedTotal}원)`;
-  }
-  return `🛍 ${nickname}님 주문완료! ${firstName} 외 ${count - 1}건 (${formattedTotal}원)`;
+  return `🛍 ${nickname}님 주문완료!(주문금액: ${formattedTotal}원)`;
 }
 
 /**
