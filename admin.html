@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.5.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.04 17:48</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.5.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.04 17:53</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2617,39 +2617,46 @@
 
     let completed = 0;
     let failed = 0;
-    const CONCURRENT = 4; // 동시 업로드 수 제한
+    const CONCURRENT = 6;
 
-    // 동시 업로드 워커
-    async function uploadWorker(queue) {
-      while (queue.length > 0) {
-        const file = queue.shift();
-        try {
-          const { signedUrl, token, publicUrl } = await api('/images/upload-url', {
-            method: 'POST',
-            body: JSON.stringify({ filename: file.name, contentType: file.type })
-          });
-          const uploadRes = await fetch(signedUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type },
-            body: file
-          });
-          if (!uploadRes.ok) throw new Error('업로드 실패');
-          pmImageUrls.push(publicUrl);
-        } catch (e) {
-          failed++;
-          showToast(`${file.name} 업로드 실패: ${e.message}`);
+    try {
+      // 1) signed URL 일괄 요청 (API 1회)
+      const fileList = [...files].map(f => ({ filename: f.name, contentType: f.type }));
+      const { urls } = await api('/images/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({ files: fileList })
+      });
+
+      // 2) R2 업로드만 병렬 처리
+      const queue = [...files].map((f, i) => ({ file: f, ...urls[i] }));
+      async function uploadWorker(q) {
+        while (q.length > 0) {
+          const item = q.shift();
+          try {
+            const res = await fetch(item.signedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': item.file.type },
+              body: item.file
+            });
+            if (!res.ok) throw new Error('업로드 실패');
+            pmImageUrls.push(item.publicUrl);
+          } catch (e) {
+            failed++;
+            showToast(`${item.file.name} 업로드 실패`);
+          }
+          completed++;
+          statusEl.textContent = `업로드 중... (${completed}/${files.length})`;
         }
-        completed++;
-        statusEl.textContent = `업로드 중... (${completed}/${files.length})`;
       }
-    }
 
-    const queue = [...files];
-    const workers = [];
-    for (let i = 0; i < Math.min(CONCURRENT, files.length); i++) {
-      workers.push(uploadWorker(queue));
+      const workers = [];
+      for (let i = 0; i < Math.min(CONCURRENT, queue.length); i++) {
+        workers.push(uploadWorker(queue));
+      }
+      await Promise.all(workers);
+    } catch (e) {
+      showToast('업로드 URL 생성 실패: ' + e.message);
     }
-    await Promise.all(workers);
 
     renderImagePreviews();
     const msg = failed > 0 ? `${files.length - failed}장 업로드 완료 (${failed}장 실패)` : `${files.length}장 업로드 완료`;
@@ -2681,6 +2688,9 @@
 
     if (!name) { showToast('상품명은 필수입니다'); return; }
 
+    const saveBtn = document.querySelector('#product-modal .btn-primary');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '저장 중...'; }
+
     try {
       if (id) {
         await api('/admin/products/' + id, {
@@ -2698,6 +2708,7 @@
       document.getElementById('product-modal').remove();
       renderProducts(document.getElementById('page-content'));
     } catch (e) {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = id ? '수정' : '등록'; }
       showToast(e.message || '저장에 실패했습니다');
     }
   }

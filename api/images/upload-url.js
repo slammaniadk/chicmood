@@ -7,8 +7,28 @@ module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
 
-  const { filename, contentType } = req.body;
+  const { filename, contentType, files } = req.body;
 
+  // 일괄 요청: { files: [{ filename, contentType }, ...] }
+  if (files && Array.isArray(files)) {
+    try {
+      const results = await Promise.all(files.map(async (f) => {
+        const ext = f.filename.split('.').pop();
+        const path = `uploads/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const command = new PutObjectCommand({
+          Bucket: R2_BUCKET, Key: path,
+          ContentType: f.contentType || 'application/octet-stream',
+        });
+        const signedUrl = await getSignedUrl(r2, command, { expiresIn: 600 });
+        return { signedUrl, token: '', path, publicUrl: `${R2_PUBLIC_URL}/${path}` };
+      }));
+      return ok(res, { urls: results });
+    } catch (err) {
+      return fail(res, err.message, 500);
+    }
+  }
+
+  // 단건 요청 (기존 호환)
   if (!filename) {
     return fail(res, 'filename은 필수입니다');
   }
