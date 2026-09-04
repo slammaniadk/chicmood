@@ -192,7 +192,7 @@
     </div>
     <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
     <p class="text-[10px] text-warm-300 tracking-wider mt-1">Developed by DK Studio</p>
-    <p class="text-[9px] text-warm-300 mt-1">Ver 2.5.0 &middot; Last Modified 2026.09.04 16:30</p>
+    <p class="text-[9px] text-warm-300 mt-1">Ver 2.5.1 &middot; Last Modified 2026.09.04 18:30</p>
   </footer>
 
   <!-- 오버레이: 로딩 -->
@@ -294,8 +294,12 @@
   // ============================================================
   function fmt(n) { return '₩' + n.toLocaleString('ko-KR'); }
 
-  function thumbUrl(url) {
-    return url || '';
+  function thumbUrl(url, w, h) {
+    if (!url) return '';
+    if (url.startsWith('data:')) return url;
+    const width = w || 400;
+    const height = h || Math.round(width * 4 / 3);
+    return 'https://wsrv.nl/?url=' + encodeURIComponent(url) + '&w=' + width + '&h=' + height + '&fit=cover&output=webp&q=80&n=-1';
   }
 
   function showToast(msg) {
@@ -805,7 +809,7 @@
           <div class="grid lg:grid-cols-2 gap-10 lg:gap-14">
             <div>
               <div class="aspect-[3/4] bg-warm-100 rounded-lg overflow-hidden mb-2">
-                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${thumbUrl(p.images[0])}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" decoding="async" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center\\'><span class=\\'text-warm-400 text-sm\\'>사진없음</span></div>'" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진없음</span></div>`}
+                ${p.images && p.images[0] ? `<img id="pd-main-img" src="${thumbUrl(p.images[0], 600, 800)}" alt="${p.name}" class="w-full h-full object-cover transition-opacity duration-300" decoding="async" onerror="this.outerHTML='<div class=\\'w-full h-full flex items-center justify-center\\'><span class=\\'text-warm-400 text-sm\\'>사진없음</span></div>'" />` : `<div class="w-full h-full flex items-center justify-center"><span class="text-warm-400 text-sm">사진없음</span></div>`}
               </div>
               ${p.images && p.images.length > 1 ? `<div class="grid grid-cols-${p.images.length} gap-2">
                 ${p.images.map((img, i) => `
