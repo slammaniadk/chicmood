@@ -164,7 +164,7 @@ function formatOrderMessage(nickname, items, total) {
   const formattedTotal = total.toLocaleString('ko-KR');
   const name = items[0] ? items[0].name : '';
   const suffix = items.length > 1 ? ` 외 ${items.length - 1}품목` : '';
-  return `${nickname}님 주문완료! ${name}${suffix}(주문금액: ${formattedTotal}원)`;
+  return `🛍 ${nickname}님 주문완료! ${name}${suffix}(주문금액: ${formattedTotal}원)`;
 }
 
 /**
