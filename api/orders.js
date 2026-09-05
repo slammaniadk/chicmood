@@ -233,13 +233,12 @@ module.exports = async function handler(req, res) {
       .eq('id', item.product_id);
   }
 
-  // YouTube 라이브 채팅 주문 알림 (fire-and-forget, 실패해도 주문에 영향 없음)
+  // YouTube 라이브 채팅 주문 알림 (await으로 완료 대기, 실패해도 주문에 영향 없음)
   if (broadcastId) {
     try {
       const { sendOrderNotification } = require('./_lib/youtube');
-      sendOrderNotification(parseInt(broadcastId), social || name, orderItems, total)
-        .catch(err => console.error('[YouTube 알림 실패]', err.message || err));
-    } catch(e) { console.error('[YouTube 모듈 로드 실패]', e.message); }
+      await sendOrderNotification(parseInt(broadcastId), social || name, orderItems, total);
+    } catch(e) { console.error('[YouTube 알림 실패]', e.message); }
   }
 
   return ok(res, {
