@@ -162,12 +162,9 @@ function extractVideoId(url) {
  */
 function formatOrderMessage(nickname, items, total) {
   const formattedTotal = total.toLocaleString('ko-KR');
-  const first = items[0];
-  const name = first ? first.name : '';
-  const shortName = name.length > 15 ? name.slice(0, 15) + '..' : name;
-  const suffix = items.length > 1 ? ' 외 품목' : '';
-  const msg = `${nickname}님 주문완료! ${shortName}${suffix}(주문금액: ${formattedTotal}원)`;
-  return msg.length > 200 ? msg.slice(0, 197) + '...' : msg;
+  const name = items[0] ? items[0].name : '';
+  const suffix = items.length > 1 ? ` 외 ${items.length - 1}품목` : '';
+  return `${nickname}님 주문완료! ${name}${suffix}(주문금액: ${formattedTotal}원)`;
 }
 
 /**
