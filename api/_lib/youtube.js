@@ -165,9 +165,8 @@ function formatOrderMessage(nickname, items, total) {
   const first = items[0];
   const name = first ? first.name : '';
   const shortName = name.length > 15 ? name.slice(0, 15) + '..' : name;
-  const productInfo = first ? `${first.product_id}번 ${shortName}` : '';
   const suffix = items.length > 1 ? ' 외 품목' : '';
-  const msg = `${nickname}님 주문완료! ${productInfo}${suffix}(주문금액: ${formattedTotal}원)`;
+  const msg = `${nickname}님 주문완료! ${shortName}${suffix}(주문금액: ${formattedTotal}원)`;
   return msg.length > 200 ? msg.slice(0, 197) + '...' : msg;
 }
 
