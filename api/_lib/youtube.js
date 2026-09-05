@@ -162,7 +162,10 @@ function extractVideoId(url) {
  */
 function formatOrderMessage(nickname, items, total) {
   const formattedTotal = total.toLocaleString('ko-KR');
-  return `🛍 ${nickname}님 주문완료!(주문금액: ${formattedTotal}원)`;
+  const first = items[0];
+  const productInfo = first ? `${first.product_id}번 ${first.name}` : '';
+  const suffix = items.length > 1 ? ' 외 품목' : '';
+  return `${nickname}님 주문완료! ${productInfo}${suffix}(주문금액: ${formattedTotal}원)`;
 }
 
 /**
