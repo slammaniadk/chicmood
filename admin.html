@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.5.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.06 08:32</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.5.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.07 12:37</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -430,6 +430,7 @@
   let orderPollingTimer = null;
   let orderLastTimestamp = new Date().toISOString();
   const notifiedOrderIds = new Set();
+  let suppressOrderNoti = false;
 
   function startOrderPolling() {
     if (orderPollingTimer) return; // 이미 실행 중
@@ -452,7 +453,7 @@
         data.orders.forEach(order => {
           if (!notifiedOrderIds.has(order.id)) {
             notifiedOrderIds.add(order.id);
-            showOrderNotification(order);
+            if (!suppressOrderNoti) showOrderNotification(order);
           }
           // 다음 폴링 기준점 갱신
           if (order.createdAt > orderLastTimestamp) {
@@ -1400,6 +1401,7 @@
 
     if (!confirm(`${firstName}(${firstPhone})님의 주문 ${ids.length}건을 병합하시겠습니까?\n첫 번째 주문에 나머지 품목이 합쳐지고, 나머지 주문은 삭제됩니다.`)) return;
 
+    suppressOrderNoti = true;
     try {
       const targetId = ids[0];
       const sourceIds = ids.slice(1);
@@ -1408,12 +1410,14 @@
         body: JSON.stringify({ targetId, sourceIds })
       });
       ids.forEach(id => notifiedOrderIds.add(id));
+      orderLastTimestamp = new Date().toISOString();
       showToast(`${ids.length}건의 주문이 병합되었습니다`);
       mergeChecked.clear();
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '주문 병합에 실패했습니다');
     }
+    suppressOrderNoti = false;
   }
 
   async function deleteOrder(id, orderNo) {
@@ -1427,6 +1431,7 @@
 
   async function unmergeOrder(targetId, orderNo) {
     if (!confirm(`주문 ${orderNo}의 병합을 해제하시겠습니까?\n병합 전 원본 주문이 새 주문번호로 복원됩니다.`)) return;
+    suppressOrderNoti = true;
     try {
       const result = await api('/admin/orders/unmerge', {
         method: 'POST',
@@ -1435,11 +1440,13 @@
       const restored = (result.restoredOrders || []).map(r => `${r.originalOrderNo} → ${r.newOrderNo}`).join('\n');
       (result.restoredOrders || []).forEach(r => { if (r.newOrderId) notifiedOrderIds.add(r.newOrderId); });
       notifiedOrderIds.add(targetId);
+      orderLastTimestamp = new Date().toISOString();
       showToast(`병합이 해제되었습니다\n${restored}`);
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '병합해제에 실패했습니다');
     }
+    suppressOrderNoti = false;
   }
 
   // ============================================================
@@ -1576,6 +1583,7 @@
 
     if (!confirm(`선택한 품목을 새 주문으로 분리하시겠습니까?\n\n분리 품목: ${itemNames}`)) return;
 
+    suppressOrderNoti = true;
     try {
       const result = await api('/admin/orders/split', {
         method: 'POST',
@@ -1583,12 +1591,14 @@
       });
       const msg = `주문이 분리되었습니다\n원본: ${result.originalOrder.orderNo} (${fmt(result.originalOrder.total)})\n새 주문: ${result.newOrder.orderNo} (${fmt(result.newOrder.total)})`;
       notifiedOrderIds.add(result.newOrder.id);
+      orderLastTimestamp = new Date().toISOString();
       showToast(msg);
       document.getElementById('split-modal').remove();
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '주문 분리에 실패했습니다');
     }
+    suppressOrderNoti = false;
   }
 
   // ============================================================
