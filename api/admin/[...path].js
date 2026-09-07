@@ -2240,7 +2240,7 @@ async function createAutoPurchaseOrders(orderId) {
 async function handlePOVendorText(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
   try {
-    const vendorId = req.query.vendorId;
+    const { vendorId, broadcastFilter, broadcastId } = req.query || {};
     if (!vendorId) return fail(res, '거래처 ID가 필요합니다');
 
     // 거래처명 조회
@@ -2248,11 +2248,23 @@ async function handlePOVendorText(req, res) {
     if (!vendor) return fail(res, '거래처를 찾을 수 없습니다', 404);
 
     // 발주대기/부분입고 PO의 품목 조회
-    const { data: pos } = await supabaseAdmin
+    let poQuery = supabaseAdmin
       .from('purchase_orders')
       .select('id, purchase_order_items(product_name, color_name, size_name, qty, received_qty)')
       .eq('vendor_id', vendorId)
       .in('status', ['발주대기', '부분입고']);
+
+    const specificBroadcastId = broadcastId ? parseInt(broadcastId) : null;
+    if (specificBroadcastId) {
+      poQuery = poQuery.eq('broadcast_id', specificBroadcastId);
+    } else if (broadcastFilter === 'live') {
+      const { data: liveBc } = await supabaseAdmin.from('broadcasts').select('id').eq('status', 'live');
+      const liveIds = (liveBc || []).map(b => b.id);
+      if (liveIds.length > 0) poQuery = poQuery.in('broadcast_id', liveIds);
+      else poQuery = poQuery.eq('broadcast_id', -1);
+    }
+
+    const { data: pos } = await poQuery;
 
     // 미입고 잔량 그룹핑
     const groupMap = {};
@@ -3188,14 +3200,15 @@ async function handleVendorDetail(req, res, id) {
 // ============================================================
 async function handlePurchaseOrders(req, res) {
   if (req.method === 'GET') {
-    const { status, search, page = '1', limit = '20', broadcastFilter } = req.query || {};
+    const { status, search, page = '1', limit = '20', broadcastFilter, broadcastId } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
 
-    // 방송중 필터: live 방송의 broadcast_id 목록 조회
+    // 방송 필터: 특정 broadcastId 또는 live 방송 목록
     let liveBroadcastIds = null;
-    if (broadcastFilter === 'live') {
+    const specificBroadcastId = broadcastId ? parseInt(broadcastId) : null;
+    if (!specificBroadcastId && broadcastFilter === 'live') {
       const { data: liveBc } = await supabaseAdmin.from('broadcasts').select('id').eq('status', 'live');
       liveBroadcastIds = (liveBc || []).map(b => b.id);
     }
@@ -3207,7 +3220,9 @@ async function handlePurchaseOrders(req, res) {
       .range(offset, offset + limitNum - 1);
 
     if (status && status !== 'all') query = query.eq('status', status);
-    if (liveBroadcastIds !== null) {
+    if (specificBroadcastId) {
+      query = query.eq('broadcast_id', specificBroadcastId);
+    } else if (liveBroadcastIds !== null) {
       if (liveBroadcastIds.length > 0) query = query.in('broadcast_id', liveBroadcastIds);
       else query = query.eq('broadcast_id', -1); // 방송중인 것이 없으면 빈 결과
     }
@@ -3227,7 +3242,8 @@ async function handlePurchaseOrders(req, res) {
         .order('id', { ascending: false })
         .range(offset, offset + limitNum - 1);
       if (status && status !== 'all') retryQuery = retryQuery.eq('status', status);
-      if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) retryQuery = retryQuery.in('broadcast_id', liveBroadcastIds);
+      if (specificBroadcastId) retryQuery = retryQuery.eq('broadcast_id', specificBroadcastId);
+      else if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) retryQuery = retryQuery.in('broadcast_id', liveBroadcastIds);
       else if (liveBroadcastIds !== null) retryQuery = retryQuery.eq('broadcast_id', -1);
       const retry = await retryQuery;
       if (!retry.error && retry.data && retry.data.length > 0) { filtered = retry.data; }
@@ -3241,7 +3257,8 @@ async function handlePurchaseOrders(req, res) {
         .order('id', { ascending: false })
         .range(offset, offset + limitNum - 1);
       if (status && status !== 'all') itemQuery = itemQuery.eq('status', status);
-      if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) itemQuery = itemQuery.in('broadcast_id', liveBroadcastIds);
+      if (specificBroadcastId) itemQuery = itemQuery.eq('broadcast_id', specificBroadcastId);
+      else if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) itemQuery = itemQuery.in('broadcast_id', liveBroadcastIds);
       else if (liveBroadcastIds !== null) itemQuery = itemQuery.eq('broadcast_id', -1);
       const itemRetry = await itemQuery;
       if (!itemRetry.error && itemRetry.data && itemRetry.data.length > 0) { filtered = itemRetry.data; }

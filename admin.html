@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.5.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.07 12:37</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.6.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.07 12:46</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1813,7 +1813,10 @@
   async function copyVendorPOText(vendorId, evt) {
     const btn = evt && evt.target ? evt.target.closest('button') : null;
     try {
-      const d = await api('/admin/purchase-orders/vendor-text?vendorId=' + vendorId);
+      let poTextUrl = '/admin/purchase-orders/vendor-text?vendorId=' + vendorId;
+      if (poBroadcastId === 'live') poTextUrl += '&broadcastFilter=live';
+      else if (poBroadcastId !== 'all') poTextUrl += '&broadcastId=' + poBroadcastId;
+      const d = await api(poTextUrl);
       if (!d.items || d.items.length === 0) { showToast('미입고 품목이 없습니다'); return; }
       let msg = `[발주서] ${d.vendorName} 귀중\n\n안녕하세요,\n아래와 같이 발주 요청드립니다.\n\n`;
       d.items.forEach(i => {
@@ -1822,7 +1825,7 @@
       });
       msg += `\n총 수량: ${d.totalQty}개\n\n확인 부탁드립니다. 감사합니다.`;
       const onCopied = () => {
-        markCopied('po:' + vendorId);
+        markCopied('po:' + vendorId + ':' + poBroadcastId);
         if (btn) { btn.innerHTML = '<span style="color:#e53e3e">●</span> 발주문구'; }
       };
       navigator.clipboard.writeText(msg).then(() => {
@@ -3226,16 +3229,20 @@
   let poFilter = 'all';
   let poPage = 1;
   let poSearch = '';
-  let poBroadcastFilter = 'live'; // 기본: 방송중 발주만
+  let poBroadcastId = 'live'; // 'live'=방송중전체, 'all'=전체, 숫자=특정방송ID
 
   async function renderPurchaseOrders(el) {
     showSpinner(el);
     try {
       const params = new URLSearchParams({ page: poPage, limit: 20 });
       if (poFilter !== 'all') params.set('status', poFilter);
-      if (poBroadcastFilter === 'live') params.set('broadcastFilter', 'live');
+      if (poBroadcastId === 'live') params.set('broadcastFilter', 'live');
+      else if (poBroadcastId !== 'all') params.set('broadcastId', poBroadcastId);
       if (poSearch) params.set('search', poSearch);
-      const data = await api('/admin/purchase-orders?' + params.toString());
+      const [data, allBroadcasts] = await Promise.all([
+        api('/admin/purchase-orders?' + params.toString()),
+        api('/admin/broadcasts')
+      ]);
       const totalPages = Math.ceil(data.total / data.limit);
       const statuses = ['all','발주대기','부분입고','입고완료'];
       const statusLabels = { all:'전체', 발주대기:'발주대기', 부분입고:'부분입고', 입고완료:'입고완료' };
@@ -3253,9 +3260,12 @@
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-3 mb-4">
-            <div class="flex flex-wrap gap-2">
-              <button class="filter-tab ${poBroadcastFilter==='live'?'active':''}" onclick="poBroadcastFilter='live';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">방송중</button>
-              <button class="filter-tab ${poBroadcastFilter==='all'?'active':''}" onclick="poBroadcastFilter='all';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">전체</button>
+            <div class="flex flex-wrap gap-2 items-center">
+              <select class="input-field" style="max-width:240px;padding:4px 8px;font-size:13px;" onchange="poBroadcastId=this.value;poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">
+                <option value="live" ${poBroadcastId==='live'?'selected':''}>방송중 전체</option>
+                <option value="all" ${poBroadcastId==='all'?'selected':''}>전체</option>
+                ${(allBroadcasts||[]).map(b => `<option value="${b.id}" ${String(poBroadcastId)===String(b.id)?'selected':''}>${escapeHtml(b.title||b.date||'방송 #'+b.id)}${b.status==='live'?' (방송중)':''}</option>`).join('')}
+              </select>
               <span class="text-warm-300 mx-1">|</span>
               ${statuses.map(s => `<button class="filter-tab ${poFilter===s?'active':''}" onclick="poFilter='${s}';poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">${statusLabels[s]}</button>`).join('')}
             </div>
@@ -3286,7 +3296,7 @@
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
-                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId}, event)">${isCopied('po:'+po.vendorId)?'<span style="color:#e53e3e">●</span> ':''}발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
+                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId}, event)">${isCopied('po:'+po.vendorId+':'+poBroadcastId)?'<span style="color:#e53e3e">●</span> ':''}발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
                     </tr>
                   `;
                 }).join('')}
