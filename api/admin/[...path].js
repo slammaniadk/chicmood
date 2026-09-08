@@ -223,7 +223,6 @@ async function handleOrders(req, res) {
     const { data: candidates } = await supabaseAdmin
       .from('orders')
       .select('id, broadcast_id, name, phone')
-      .is('merge_history_id', null)
       .not('status', 'in', '("배송완료","결제취소")');
     if (candidates && candidates.length > 0) {
       const groups = {};
