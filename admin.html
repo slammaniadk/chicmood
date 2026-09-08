@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.6.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 14:06</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.7.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 14:28</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -278,8 +278,9 @@
     { key: 'chat', label: 'Chatting', icon: '💬' },
   ];
 
-  const ALWAYS_VISIBLE_MENUS = ['dashboard', 'system'];
+  const ALWAYS_VISIBLE_MENUS = ['dashboard'];
   let menuVisibility = {};
+  let userMenuPermissions = (adminUser && adminUser.menuPermissions) ? adminUser.menuPermissions : null;
 
   async function loadMenuVisibility() {
     try {
@@ -290,7 +291,9 @@
 
   function isMenuVisible(key) {
     if (ALWAYS_VISIBLE_MENUS.includes(key)) return true;
-    return menuVisibility[key] !== false;
+    if (menuVisibility[key] === false) return false;
+    if (userMenuPermissions !== null && userMenuPermissions[key] === false) return false;
+    return true;
   }
 
   function applyMenuVisibility() {
@@ -443,6 +446,7 @@
 
       adminToken = res.token;
       adminUser = res.user;
+      userMenuPermissions = res.user.menuPermissions || null;
       localStorage.setItem('chicmood_admin_token', adminToken);
       localStorage.setItem('chicmood_admin_user', JSON.stringify(adminUser));
       await loadMenuVisibility();
@@ -456,6 +460,7 @@
   function doLogout() {
     adminToken = null;
     adminUser = null;
+    userMenuPermissions = null;
     localStorage.removeItem('chicmood_admin_token');
     localStorage.removeItem('chicmood_admin_user');
     stopOrderPolling();
@@ -4973,14 +4978,16 @@
 
   async function renderSystem(el) {
     showSpinner(el);
-    const tabs = ['settings','admin-users','logs','backup'];
-    const tabLabels = { settings:'택배/계좌 설정', 'admin-users':'관리자 계정', logs:'활동 로그', backup:'데이터 백업' };
+    const allSysTabs = ['settings','admin-users','logs','backup','youtube','menu-settings'];
+    const allTabLabels = { settings:'택배/계좌 설정', 'admin-users':'관리자 계정', logs:'활동 로그', backup:'데이터 백업', youtube:'YouTube 연동', 'menu-settings':'메뉴 표시 설정' };
+    const isMaster = !!(adminUser && adminUser.isMaster);
+    const tabs = allSysTabs.filter(t => t !== 'menu-settings' || isMaster);
+    const tabLabels = allTabLabels;
     try {
       if (sysTab === 'settings') {
         const data = await api('/admin/settings');
         const shipping = data.shipping || {};
         const bank = data.bank || {};
-        const ytConnected = !!data.youtube && !!data.youtube.refresh_token;
         el.innerHTML = `
           <div class="fade-in">
             <div class="flex justify-between items-center mb-6">
@@ -5008,40 +5015,12 @@
                   <button class="btn-primary w-full" onclick="saveBankSettings()">저장</button>
                 </form>
               </div>
-              <div class="card md:col-span-2">
-                <h3 class="font-semibold text-warm-800 mb-4">YouTube 라이브 채팅 연동</h3>
-                <div class="space-y-3">
-                  <div class="flex items-center gap-3">
-                    <span class="text-[13px]">연동 상태:</span>
-                    <span class="text-[13px] font-semibold ${ytConnected ? 'text-green-600' : 'text-red-500'}">${ytConnected ? '연동됨' : '미연동'}</span>
-                  </div>
-                  <p class="text-[11px] text-warm-400">주문이 들어오면 현재 라이브 중인 YouTube 채팅창에 주문 알림 메시지를 자동 발송합니다.</p>
-                  <div class="flex gap-2">
-                    <button class="btn-primary" onclick="connectYouTube()">${ytConnected ? 'YouTube 계정 재연동' : 'YouTube 계정 연동'}</button>
-                    ${ytConnected ? '<button class="btn-outline" onclick="testYouTubeMessage()">테스트 메시지 전송</button>' : ''}
-                  </div>
-                </div>
-              </div>
-              <div class="card md:col-span-2">
-                <h3 class="font-semibold text-warm-800 mb-4">메뉴 표시 설정</h3>
-                <p class="text-[11px] text-warm-400 mb-4">사용하지 않는 메뉴를 숨겨 관리 화면을 간결하게 만들 수 있습니다.</p>
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
-                  ${NAV_ITEMS.map(item => {
-                    const alwaysOn = ALWAYS_VISIBLE_MENUS.includes(item.key);
-                    const checked = alwaysOn || isMenuVisible(item.key);
-                    return `<label class="flex items-center gap-2 p-2 rounded-lg border ${alwaysOn ? 'border-warm-200 bg-warm-50' : 'border-warm-100 hover:border-warm-300'} cursor-${alwaysOn ? 'not-allowed' : 'pointer'} transition-colors">
-                      <input type="checkbox" class="menu-vis-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} ${alwaysOn ? 'disabled' : ''} style="accent-color:#6b4220;" />
-                      <span class="text-[13px] ${alwaysOn ? 'text-warm-400' : 'text-warm-700'}">${item.icon} ${item.label}</span>
-                    </label>`;
-                  }).join('')}
-                </div>
-                <button class="btn-primary" onclick="saveMenuVisibility()">메뉴 설정 저장</button>
-              </div>
             </div>
           </div>
         `;
       } else if (sysTab === 'admin-users') {
         const data = await api('/admin/admin-users');
+        window._adminUsersData = data.users || [];
         const myId = adminUser?.id;
         el.innerHTML = `
           <div class="fade-in">
@@ -5063,12 +5042,14 @@
                 <button class="btn-primary btn-sm" onclick="openAdminUserModal()">+ 관리자 추가</button>
               </div>
               <table>
-                <thead><tr><th>이름</th><th>전화번호</th><th>역할</th><th>가입일</th><th>관리</th></tr></thead>
+                <thead><tr><th>이름</th><th>전화번호</th><th>권한</th><th>가입일</th><th>관리</th></tr></thead>
                 <tbody>
                   ${(data.users||[]).map(u => {
                     const d = new Date(u.createdAt);
                     const isMe = u.id === myId;
-                    return `<tr><td class="font-semibold">${escapeHtml(u.name)}${isMe?' <span class="text-[10px] text-rose-400">(나)</span>':''}</td><td>${escapeHtml(u.phone)}</td><td>${u.role}</td><td class="text-warm-400 text-[12px]">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</td><td class="space-x-1">${isMe?'<span class="text-warm-300 text-[11px]">-</span>':`<button class="text-[11px] text-blue-500 hover:underline bg-transparent border-none cursor-pointer" onclick="resetAdminPassword('${u.id}','${escapeHtml(u.name)}')">PW초기화</button><button class="text-[11px] text-red-400 hover:underline bg-transparent border-none cursor-pointer" onclick="demoteAdmin('${u.id}','${escapeHtml(u.name)}')">권한해제</button>`}</td></tr>`;
+                    const permLabel = u.isMaster ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-semibold">마스터</span>' : (u.menuPermissions && Object.values(u.menuPermissions).some(v => v === false)) ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-500">제한됨</span>' : '<span class="text-[11px] px-1.5 py-0.5 rounded bg-green-50 text-green-600">전체</span>';
+                    const canSetPerm = isMaster && !isMe && !u.isMaster;
+                    return `<tr><td class="font-semibold">${escapeHtml(u.name)}${isMe?' <span class="text-[10px] text-rose-400">(나)</span>':''}</td><td>${escapeHtml(u.phone)}</td><td>${permLabel}</td><td class="text-warm-400 text-[12px]">${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}</td><td class="space-x-1">${isMe?'<span class="text-warm-300 text-[11px]">-</span>':`${canSetPerm?`<button class="text-[11px] text-purple-500 hover:underline bg-transparent border-none cursor-pointer" onclick="openPermissionsModal('${u.id}')">권한설정</button>`:''}<button class="text-[11px] text-blue-500 hover:underline bg-transparent border-none cursor-pointer" onclick="resetAdminPassword('${u.id}','${escapeHtml(u.name)}')">PW초기화</button>${!u.isMaster?`<button class="text-[11px] text-red-400 hover:underline bg-transparent border-none cursor-pointer" onclick="demoteAdmin('${u.id}','${escapeHtml(u.name)}')">권한해제</button>`:''}`}</td></tr>`;
                   }).join('')}
                 </tbody>
               </table>
@@ -5175,6 +5156,57 @@
               <p class="text-[12px] text-red-500 font-semibold mb-4">⚠ 이 작업은 되돌릴 수 없습니다. 반드시 백업을 먼저 수행한 후 실행하세요.</p>
               <button class="btn-primary w-full bg-red-500 hover:bg-red-600" onclick="resetOperationData()">운영 데이터 초기화 실행</button>
               <div id="reset-status" class="mt-3 text-[13px] text-warm-500"></div>
+            </div>
+          </div>
+        `;
+      } else if (sysTab === 'youtube') {
+        const data = await api('/admin/settings');
+        const ytConnected = !!data.youtube && !!data.youtube.refresh_token;
+        el.innerHTML = `
+          <div class="fade-in">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="card">
+              <h3 class="font-semibold text-warm-800 mb-4">YouTube 라이브 채팅 연동</h3>
+              <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                  <span class="text-[13px]">연동 상태:</span>
+                  <span class="text-[13px] font-semibold ${ytConnected ? 'text-green-600' : 'text-red-500'}">${ytConnected ? '연동됨' : '미연동'}</span>
+                </div>
+                <p class="text-[11px] text-warm-400">주문이 들어오면 현재 라이브 중인 YouTube 채팅창에 주문 알림 메시지를 자동 발송합니다.</p>
+                <div class="flex gap-2">
+                  <button class="btn-primary" onclick="connectYouTube()">${ytConnected ? 'YouTube 계정 재연동' : 'YouTube 계정 연동'}</button>
+                  ${ytConnected ? '<button class="btn-outline" onclick="testYouTubeMessage()">테스트 메시지 전송</button>' : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (sysTab === 'menu-settings') {
+        el.innerHTML = `
+          <div class="fade-in">
+            <div class="flex justify-between items-center mb-6">
+              <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">시스템관리</h2>
+              <button class="btn-outline btn-sm" onclick="renderSystem(document.getElementById('page-content'))">🔄 새로고침</button>
+            </div>
+            <div class="flex gap-1 mb-6">${tabs.map(t => `<button class="sub-tab ${sysTab===t?'active':''}" onclick="sysTab='${t}';renderSystem(document.getElementById('page-content'))">${tabLabels[t]}</button>`).join('')}</div>
+            <div class="card">
+              <h3 class="font-semibold text-warm-800 mb-4">메뉴 표시 설정</h3>
+              <p class="text-[11px] text-warm-400 mb-4">사용하지 않는 메뉴를 숨겨 관리 화면을 간결하게 만들 수 있습니다.</p>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
+                ${NAV_ITEMS.map(item => {
+                  const alwaysOn = ALWAYS_VISIBLE_MENUS.includes(item.key);
+                  const checked = alwaysOn || menuVisibility[item.key] !== false;
+                  return `<label class="flex items-center gap-2 p-2 rounded-lg border ${alwaysOn ? 'border-warm-200 bg-warm-50' : 'border-warm-100 hover:border-warm-300'} cursor-${alwaysOn ? 'not-allowed' : 'pointer'} transition-colors">
+                    <input type="checkbox" class="menu-vis-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} ${alwaysOn ? 'disabled' : ''} style="accent-color:#6b4220;" />
+                    <span class="text-[13px] ${alwaysOn ? 'text-warm-400' : 'text-warm-700'}">${item.icon} ${item.label}</span>
+                  </label>`;
+                }).join('')}
+              </div>
+              <button class="btn-primary" onclick="saveMenuVisibility()">메뉴 설정 저장</button>
             </div>
           </div>
         `;
@@ -5433,6 +5465,54 @@
       showToast(`${userName}님의 관리자 권한이 해제되었습니다`);
       renderSystem(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '권한 해제에 실패했습니다'); }
+  }
+
+  function openPermissionsModal(userId) {
+    const userData = (window._adminUsersData || []).find(u => u.id === userId);
+    if (!userData) { showToast('사용자 정보를 찾을 수 없습니다'); return; }
+    const currentPerms = userData.menuPermissions || {};
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'perm-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6" style="max-width:480px;">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">${escapeHtml(userData.name)} 메뉴 권한 설정</h3>
+          <button onclick="document.getElementById('perm-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <p class="text-[12px] text-warm-400 mb-4">접근을 허용할 메뉴를 선택하세요. 체크 해제된 메뉴는 해당 관리자에게 표시되지 않습니다.</p>
+        <div class="space-y-2 mb-6">
+          ${NAV_ITEMS.map(item => {
+            const isDashboard = item.key === 'dashboard';
+            const checked = isDashboard || currentPerms[item.key] !== false;
+            return `<label class="flex items-center gap-3 p-2 rounded-lg border ${isDashboard ? 'border-warm-200 bg-warm-50' : 'border-warm-100 hover:border-warm-300'} cursor-${isDashboard ? 'not-allowed' : 'pointer'} transition-colors">
+              <input type="checkbox" class="perm-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} ${isDashboard ? 'disabled' : ''} style="accent-color:#6b4220;" />
+              <span class="text-[13px] ${isDashboard ? 'text-warm-400' : 'text-warm-700'}">${item.icon} ${item.label}</span>
+            </label>`;
+          }).join('')}
+        </div>
+        <button class="btn-primary w-full" onclick="savePermissions('${userId}')">권한 저장</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  async function savePermissions(userId) {
+    const perms = {};
+    let hasRestriction = false;
+    document.querySelectorAll('.perm-chk').forEach(chk => {
+      const key = chk.dataset.menuKey;
+      if (key === 'dashboard') return;
+      perms[key] = chk.checked;
+      if (!chk.checked) hasRestriction = true;
+    });
+    const menuPermissions = hasRestriction ? perms : null;
+    try {
+      await api('/admin/admin-users', { method: 'PATCH', body: JSON.stringify({ userId, action: 'set-permissions', menuPermissions }) });
+      showToast('메뉴 권한이 저장되었습니다');
+      document.getElementById('perm-modal').remove();
+      renderSystem(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '권한 저장에 실패했습니다'); }
   }
 
   function openChangeMyPasswordModal() {

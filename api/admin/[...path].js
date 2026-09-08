@@ -4324,9 +4324,9 @@ async function handleSettings(req, res) {
 // ============================================================
 async function handleAdminUsers(req, res) {
   if (req.method === 'GET') {
-    const { data, error } = await supabaseAdmin.from('users').select('id, name, phone, role, created_at').eq('role', 'admin').order('created_at');
+    const { data, error } = await supabaseAdmin.from('users').select('id, name, phone, role, created_at, menu_permissions, is_master').eq('role', 'admin').order('created_at');
     if (error) return fail(res, error.message, 500);
-    const users = (data || []).map(u => ({ id: u.id, name: u.name, phone: u.phone, role: u.role, createdAt: u.created_at }));
+    const users = (data || []).map(u => ({ id: u.id, name: u.name, phone: u.phone, role: u.role, createdAt: u.created_at, menuPermissions: u.menu_permissions || null, isMaster: !!u.is_master }));
     return ok(res, { users });
   }
 
@@ -4342,7 +4342,7 @@ async function handleAdminUsers(req, res) {
   }
 
   if (req.method === 'PATCH') {
-    const { userId, action, newPassword } = req.body;
+    const { userId, action, newPassword, menuPermissions } = req.body;
     if (!userId) return fail(res, 'userId는 필수입니다');
     if (action === 'reset-password') {
       const pw = newPassword || '0000';
@@ -4351,9 +4351,27 @@ async function handleAdminUsers(req, res) {
       return ok(res, { message: '비밀번호가 초기화되었습니다' });
     }
     if (action === 'demote') {
+      // 마스터 관리자 해제 방지
+      const { data: target } = await supabaseAdmin.from('users').select('is_master').eq('id', userId).single();
+      if (target && target.is_master) return fail(res, '마스터 관리자는 권한을 해제할 수 없습니다');
       const { error } = await supabaseAdmin.from('users').update({ role: 'user' }).eq('id', userId);
       if (error) return fail(res, error.message, 500);
       return ok(res, { message: '관리자 권한이 해제되었습니다' });
+    }
+    if (action === 'set-permissions') {
+      const caller = getUserFromRequest(req);
+      if (!caller) return fail(res, '로그인이 필요합니다', 401);
+      // 본인 권한 변경 불가
+      if (caller.id === userId) return fail(res, '본인의 권한은 변경할 수 없습니다');
+      // 마스터 관리자만 권한 변경 가능
+      const { data: callerData } = await supabaseAdmin.from('users').select('is_master').eq('id', caller.id).single();
+      if (!callerData || !callerData.is_master) return fail(res, '마스터 관리자만 권한을 변경할 수 있습니다');
+      // 마스터 대상 변경 불가
+      const { data: target } = await supabaseAdmin.from('users').select('is_master').eq('id', userId).single();
+      if (target && target.is_master) return fail(res, '마스터 관리자의 권한은 변경할 수 없습니다');
+      const { error } = await supabaseAdmin.from('users').update({ menu_permissions: menuPermissions || null }).eq('id', userId);
+      if (error) return fail(res, error.message, 500);
+      return ok(res, { message: '메뉴 권한이 저장되었습니다' });
     }
     return fail(res, '알 수 없는 액션입니다');
   }

@@ -52,7 +52,7 @@ module.exports = async function handler(req, res) {
 
   const { data: user, error } = await supabaseAdmin
     .from('users')
-    .select('id, name, phone, password, role, nickname, zipcode, address, address_detail')
+    .select('id, name, phone, password, role, nickname, zipcode, address, address_detail, menu_permissions, is_master')
     .eq('phone', phone)
     .single();
 
@@ -60,7 +60,7 @@ module.exports = async function handler(req, res) {
     return fail(res, '전화번호 또는 비밀번호가 일치하지 않습니다', 401);
   }
 
-  const token = signToken({ id: user.id, name: user.name, phone: user.phone, role: user.role || 'user' });
+  const token = signToken({ id: user.id, name: user.name, phone: user.phone, role: user.role || 'user', isMaster: !!user.is_master });
 
   return ok(res, {
     token,
@@ -73,6 +73,8 @@ module.exports = async function handler(req, res) {
       zipcode: user.zipcode || '',
       addrBase: user.address || '',
       addrDetail: user.address_detail || '',
+      menuPermissions: user.menu_permissions || null,
+      isMaster: !!user.is_master,
     },
   });
 };
