@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.6.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 12:30</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.6.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 14:06</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -278,6 +278,32 @@
     { key: 'chat', label: 'Chatting', icon: '💬' },
   ];
 
+  const ALWAYS_VISIBLE_MENUS = ['dashboard', 'system'];
+  let menuVisibility = {};
+
+  async function loadMenuVisibility() {
+    try {
+      const data = await api('/admin/settings');
+      menuVisibility = data.menu_visibility || {};
+    } catch (e) { menuVisibility = {}; }
+  }
+
+  function isMenuVisible(key) {
+    if (ALWAYS_VISIBLE_MENUS.includes(key)) return true;
+    return menuVisibility[key] !== false;
+  }
+
+  function applyMenuVisibility() {
+    // 데스크톱 탭 숨김 처리
+    document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+      const key = tab.getAttribute('data-tab');
+      tab.style.display = isMenuVisible(key) ? '' : 'none';
+    });
+    // 사이드바 메뉴 재구성
+    const page = (location.hash.slice(1) || 'dashboard');
+    buildSidebarMenu(page);
+  }
+
   function navigate(page) {
     location.hash = '#' + page;
     closeSidebar();
@@ -295,7 +321,7 @@
   function buildSidebarMenu(activePage) {
     const menu = document.getElementById('sidebar-menu');
     if (!menu) return;
-    menu.innerHTML = NAV_ITEMS.map(item =>
+    menu.innerHTML = NAV_ITEMS.filter(item => isMenuVisible(item.key)).map(item =>
       `<button class="sidebar-item ${activePage === item.key ? 'active' : ''}" onclick="navigate('${item.key}')">${item.icon} ${item.label}</button>`
     ).join('');
   }
@@ -322,9 +348,18 @@
     // 주문 알림 폴링 시작 (로그인 상태일 때만)
     startOrderPolling();
 
+    // 메뉴 표시/숨김 적용
+    applyMenuVisibility();
+
+    // 숨긴 메뉴 접근 시 대시보드로 리다이렉트
+    const page = hash || 'dashboard';
+    if (page !== 'dashboard' && !isMenuVisible(page)) {
+      navigate('dashboard');
+      return;
+    }
+
     // 탭 활성화
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    const page = hash || 'dashboard';
     const activeTab = document.querySelector(`.tab[data-tab="${page}"]`);
     if (activeTab) activeTab.classList.add('active');
     buildSidebarMenu(page);
@@ -350,7 +385,10 @@
   }
 
   window.addEventListener('hashchange', router);
-  window.addEventListener('DOMContentLoaded', router);
+  window.addEventListener('DOMContentLoaded', async () => {
+    if (adminToken) await loadMenuVisibility();
+    router();
+  });
 
   // ESC 키로 최상위 모달 닫기
   document.addEventListener('keydown', e => {
@@ -407,6 +445,7 @@
       adminUser = res.user;
       localStorage.setItem('chicmood_admin_token', adminToken);
       localStorage.setItem('chicmood_admin_user', JSON.stringify(adminUser));
+      await loadMenuVisibility();
       showToast('관리자 로그인 성공');
       navigate('dashboard');
     } catch (e) {
@@ -4983,6 +5022,21 @@
                   </div>
                 </div>
               </div>
+              <div class="card md:col-span-2">
+                <h3 class="font-semibold text-warm-800 mb-4">메뉴 표시 설정</h3>
+                <p class="text-[11px] text-warm-400 mb-4">사용하지 않는 메뉴를 숨겨 관리 화면을 간결하게 만들 수 있습니다.</p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
+                  ${NAV_ITEMS.map(item => {
+                    const alwaysOn = ALWAYS_VISIBLE_MENUS.includes(item.key);
+                    const checked = alwaysOn || isMenuVisible(item.key);
+                    return `<label class="flex items-center gap-2 p-2 rounded-lg border ${alwaysOn ? 'border-warm-200 bg-warm-50' : 'border-warm-100 hover:border-warm-300'} cursor-${alwaysOn ? 'not-allowed' : 'pointer'} transition-colors">
+                      <input type="checkbox" class="menu-vis-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} ${alwaysOn ? 'disabled' : ''} style="accent-color:#6b4220;" />
+                      <span class="text-[13px] ${alwaysOn ? 'text-warm-400' : 'text-warm-700'}">${item.icon} ${item.label}</span>
+                    </label>`;
+                  }).join('')}
+                </div>
+                <button class="btn-primary" onclick="saveMenuVisibility()">메뉴 설정 저장</button>
+              </div>
             </div>
           </div>
         `;
@@ -5275,6 +5329,23 @@
         }
       })});
       showToast('계좌 설정이 저장되었습니다');
+    } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
+  }
+
+  async function saveMenuVisibility() {
+    try {
+      const vis = {};
+      document.querySelectorAll('.menu-vis-chk').forEach(chk => {
+        vis[chk.dataset.menuKey] = chk.checked;
+      });
+      ALWAYS_VISIBLE_MENUS.forEach(k => { vis[k] = true; });
+      await api('/admin/settings', { method: 'PATCH', body: JSON.stringify({
+        key: 'menu_visibility',
+        value: vis
+      })});
+      menuVisibility = vis;
+      applyMenuVisibility();
+      showToast('메뉴 표시 설정이 저장되었습니다');
     } catch (e) { showToast(e.message || '저장에 실패했습니다'); }
   }
 
