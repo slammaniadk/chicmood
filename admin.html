@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.7.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 14:28</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.7.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.08 14:34</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -290,8 +290,9 @@
   }
 
   function isMenuVisible(key) {
-    if (ALWAYS_VISIBLE_MENUS.includes(key)) return true;
-    if (menuVisibility[key] === false) return false;
+    // 글로벌 메뉴 표시 설정 (ALWAYS_VISIBLE은 글로벌에서만 보호)
+    if (!ALWAYS_VISIBLE_MENUS.includes(key) && menuVisibility[key] === false) return false;
+    // 개인 권한 체크 (대시보드 포함 모두 제한 가능)
     if (userMenuPermissions !== null && userMenuPermissions[key] === false) return false;
     return true;
   }
@@ -354,10 +355,11 @@
     // 메뉴 표시/숨김 적용
     applyMenuVisibility();
 
-    // 숨긴 메뉴 접근 시 대시보드로 리다이렉트
+    // 숨긴 메뉴 접근 시 첫 번째 접근 가능 메뉴로 리다이렉트
     const page = hash || 'dashboard';
-    if (page !== 'dashboard' && !isMenuVisible(page)) {
-      navigate('dashboard');
+    if (!isMenuVisible(page)) {
+      const firstVisible = NAV_ITEMS.find(item => isMenuVisible(item.key));
+      navigate(firstVisible ? firstVisible.key : 'dashboard');
       return;
     }
 
@@ -5483,11 +5485,10 @@
         <p class="text-[12px] text-warm-400 mb-4">접근을 허용할 메뉴를 선택하세요. 체크 해제된 메뉴는 해당 관리자에게 표시되지 않습니다.</p>
         <div class="space-y-2 mb-6">
           ${NAV_ITEMS.map(item => {
-            const isDashboard = item.key === 'dashboard';
-            const checked = isDashboard || currentPerms[item.key] !== false;
-            return `<label class="flex items-center gap-3 p-2 rounded-lg border ${isDashboard ? 'border-warm-200 bg-warm-50' : 'border-warm-100 hover:border-warm-300'} cursor-${isDashboard ? 'not-allowed' : 'pointer'} transition-colors">
-              <input type="checkbox" class="perm-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} ${isDashboard ? 'disabled' : ''} style="accent-color:#6b4220;" />
-              <span class="text-[13px] ${isDashboard ? 'text-warm-400' : 'text-warm-700'}">${item.icon} ${item.label}</span>
+            const checked = currentPerms[item.key] !== false;
+            return `<label class="flex items-center gap-3 p-2 rounded-lg border border-warm-100 hover:border-warm-300 cursor-pointer transition-colors">
+              <input type="checkbox" class="perm-chk" data-menu-key="${item.key}" ${checked ? 'checked' : ''} style="accent-color:#6b4220;" />
+              <span class="text-[13px] text-warm-700">${item.icon} ${item.label}</span>
             </label>`;
           }).join('')}
         </div>
@@ -5502,7 +5503,6 @@
     let hasRestriction = false;
     document.querySelectorAll('.perm-chk').forEach(chk => {
       const key = chk.dataset.menuKey;
-      if (key === 'dashboard') return;
       perms[key] = chk.checked;
       if (!chk.checked) hasRestriction = true;
     });
