@@ -5204,7 +5204,7 @@ async function handleYouTubeCallback(req, res) {
   const code = req.query.code;
   if (!code) return fail(res, 'code가 없습니다');
   try {
-    const { createOAuth2Client } = require('../_lib/youtube');
+    const { createOAuth2Client, clearAuthCache } = require('../_lib/youtube');
     const oauth2Client = createOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
@@ -5220,6 +5220,9 @@ async function handleYouTubeCallback(req, res) {
       },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'key' });
+
+    // 캐시 초기화 (이전 계정 토큰 제거)
+    clearAuthCache();
 
     // 관리자 페이지로 리디렉트
     res.writeHead(302, { Location: '/admin.html#system' });
