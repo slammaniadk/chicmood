@@ -30,7 +30,6 @@ module.exports = async function handler(req, res) {
     if (order.name !== name || !order.phone.endsWith(phoneLast4)) {
       return fail(res, '본인 확인에 실패했습니다', 403);
     }
-    if (action !== 'cancel') return fail(res, '주문조회에서는 취소만 가능합니다');
   } else {
     return fail(res, '로그인이 필요합니다', 401);
   }

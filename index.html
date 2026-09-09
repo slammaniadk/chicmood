@@ -535,21 +535,29 @@
     const btn = document.querySelector('#modify-order-modal .btn-confirm');
     if (btn) { btn.disabled = true; btn.textContent = '처리 중...'; }
     try {
+      const body = {
+        action: 'modify',
+        items: _modifyState.items.map(i => ({
+          productId: i.productId,
+          color: i.color,
+          size: i.size,
+          qty: i.qty,
+        }))
+      };
+      // 게스트(주문조회) 인증 정보 추가
+      const lkName = document.getElementById('lk-name');
+      const lkPhone = document.getElementById('lk-phone');
+      if (lkName && lkPhone) {
+        body.name = lkName.value.trim();
+        body.phoneLast4 = lkPhone.value.trim();
+      }
       const result = await api('/orders/' + _modifyState.orderNo, {
         method: 'PATCH',
-        body: JSON.stringify({
-          action: 'modify',
-          items: _modifyState.items.map(i => ({
-            productId: i.productId,
-            color: i.color,
-            size: i.size,
-            qty: i.qty,
-          }))
-        })
+        body: JSON.stringify(body)
       });
       closeModifyModal();
       showToast('주문이 수정되었습니다 (총 ' + fmt(result.total) + ')');
-      renderMypage(document.getElementById('page-content'));
+      if (lkName && lkPhone) { doLookup(); } else { renderMypage(document.getElementById('page-content')); }
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = '수정 완료'; }
       showToast(e.message || '수정 중 오류가 발생했습니다');
@@ -1324,11 +1332,13 @@
         return;
       }
 
+      window._mypageOrders = {};
       resultEl.innerHTML = matched.map(order => {
+        window._mypageOrders[order.orderNo] = order;
         const d = new Date(order.createdAt);
         const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         const statusClass = 'status-' + order.status;
-        const canCancel = order.status === '입금확인';
+        const canModify = order.status === '입금확인';
 
         return `
           <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4 slide-up">
@@ -1355,9 +1365,10 @@
               <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${escapeHtml(order.address)}</p>
               ${order.memo ? `<p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">요청사항</span> ${escapeHtml(order.memo)}</p>` : ''}
             </div>
-            ${canCancel ? `
-            <div class="border-t border-warm-100 mt-3 pt-3">
-              <button class="w-full py-2.5 rounded-lg text-[12px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors" onclick="cancelOrderGuest('${order.orderNo}')">주문 취소</button>
+            ${canModify ? `
+            <div class="border-t border-warm-100 mt-3 pt-3 flex gap-2">
+              <button class="flex-1 py-2.5 rounded-lg text-[12px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors" onclick="cancelOrderGuest('${order.orderNo}')">주문 취소</button>
+              <button class="flex-1 py-2.5 rounded-lg text-[12px] font-semibold bg-warm-800 text-white hover:bg-warm-900 transition-colors" onclick="openModifyModal('${order.orderNo}')">주문 수정</button>
             </div>
             ` : ''}
           </div>
@@ -1525,104 +1536,58 @@
   // ============================================================
   //  PAGE: MYPAGE
   // ============================================================
-  async function renderMypage(el) {
+  function renderMypage(el) {
     if (!currentUser) { location.hash = '#login'; return; }
 
-    showPageSpinner(el);
-
-    try {
-      const phoneLast4 = currentUser.phone.slice(-4);
-      const orders = await api('/orders/lookup', {
-        method: 'POST',
-        body: JSON.stringify({ name: currentUser.name, phoneLast4 })
-      });
-
-      el.innerHTML = `
-        <section class="py-10 fade-in">
-          <div class="max-w-lg mx-auto">
-            <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-8">마이페이지</h1>
-            <div class="bg-white border border-warm-200 rounded-lg p-6 mb-8">
-              <div class="flex items-center gap-4 mb-4">
-                <div class="w-12 h-12 rounded-full bg-warm-200 flex items-center justify-center">
-                  <span class="font-serif text-lg font-bold text-warm-700">${currentUser.name.charAt(0)}</span>
-                </div>
-                <div>
-                  <p class="font-semibold text-warm-800">${escapeHtml(currentUser.name)}${currentUser.nickname ? ` <span class="text-[12px] text-warm-400 font-normal">(${escapeHtml(currentUser.nickname)})</span>` : ''}</p>
-                  <p class="text-[12px] text-warm-400">${escapeHtml(currentUser.phone)}</p>
-                  ${currentUser.addrBase ? `<p class="text-[11px] text-warm-300 mt-1">${escapeHtml(currentUser.addrBase)}${currentUser.addrDetail ? ' ' + escapeHtml(currentUser.addrDetail) : ''}</p>` : ''}
-                </div>
+    el.innerHTML = `
+      <section class="py-10 fade-in">
+        <div class="max-w-lg mx-auto">
+          <h1 class="font-serif text-2xl font-semibold text-warm-900 text-center italic mb-8">마이페이지</h1>
+          <div class="bg-white border border-warm-200 rounded-lg p-6 mb-8">
+            <div class="flex items-center gap-4 mb-4">
+              <div class="w-12 h-12 rounded-full bg-warm-200 flex items-center justify-center">
+                <span class="font-serif text-lg font-bold text-warm-700">${currentUser.name.charAt(0)}</span>
               </div>
-              <div class="flex gap-2">
-                <button class="btn-outline flex-1 text-[13px]" onclick="toggleProfileEdit()">프로필 수정</button>
-                <button class="btn-outline flex-1 text-[13px]" onclick="doLogout()">로그아웃</button>
+              <div>
+                <p class="font-semibold text-warm-800">${escapeHtml(currentUser.name)}${currentUser.nickname ? ` <span class="text-[12px] text-warm-400 font-normal">(${escapeHtml(currentUser.nickname)})</span>` : ''}</p>
+                <p class="text-[12px] text-warm-400">${escapeHtml(currentUser.phone)}</p>
+                ${currentUser.addrBase ? `<p class="text-[11px] text-warm-300 mt-1">${escapeHtml(currentUser.addrBase)}${currentUser.addrDetail ? ' ' + escapeHtml(currentUser.addrDetail) : ''}</p>` : ''}
               </div>
             </div>
-
-            <!-- 프로필 수정 폼 -->
-            <div id="profile-edit-form" class="bg-white border border-warm-200 rounded-lg p-6 mb-8 hidden">
-              <p class="text-[11px] font-semibold tracking-wider text-warm-500 uppercase mb-4">프로필 수정</p>
-              <div class="space-y-4">
-                <div>
-                  <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">닉네임 (유튜브/소셜)</label>
-                  <input id="pf-nickname" type="text" class="input-field" placeholder="@chicmood_viewer" value="${escapeHtml(currentUser.nickname || '')}" />
-                </div>
-                <div>
-                  <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">배송지 주소</label>
-                  <div class="flex gap-2 mb-2">
-                    <input id="pf-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly value="${escapeHtml(currentUser.zipcode || '')}" />
-                    <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openProfilePostcode()">주소 검색</button>
-                  </div>
-                  <input id="pf-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly value="${escapeHtml(currentUser.addrBase || '')}" />
-                  <input id="pf-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" value="${escapeHtml(currentUser.addrDetail || '')}" />
-                </div>
-                <button class="btn-primary w-full text-[13px]" onclick="saveProfile()">저장</button>
-              </div>
+            <div class="flex gap-2">
+              <button class="btn-outline flex-1 text-[13px]" onclick="toggleProfileEdit()">프로필 수정</button>
+              <button class="btn-outline flex-1 text-[13px]" onclick="doLogout()">로그아웃</button>
             </div>
-
-            <p class="elegant-divider text-[11px] tracking-[0.3em] text-warm-400 uppercase font-light mb-6">My Orders</p>
-            ${orders.length === 0 ? `
-              <div class="text-center py-12">
-                <p class="text-warm-400 text-sm">주문 내역이 없습니다.</p>
-                <a href="#home" class="text-[13px] text-warm-600 underline underline-offset-4 mt-2 inline-block">쇼핑하러 가기</a>
-              </div>
-            ` : (() => { window._mypageOrders = {}; return orders; })().map(order => {
-              window._mypageOrders[order.orderNo] = order;
-              const d = new Date(order.createdAt);
-              const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-              const statusClass = 'status-' + order.status;
-              return `
-                <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4">
-                  <div class="flex justify-between items-start mb-3">
-                    <div>
-                      <p class="text-[11px] text-warm-400 mb-0.5">${dateStr}</p>
-                      <p class="text-sm font-bold text-warm-800">${order.orderNo}</p>
-                    </div>
-                    <span class="status-badge ${statusClass}">${order.status}</span>
-                  </div>
-                  <div class="space-y-1.5">
-                    ${order.items.map(item => `
-                      <div class="flex justify-between items-center text-sm">
-                        <span class="text-warm-600">${item.name} <span class="text-warm-400">(${item.color}/${item.size}) x${item.qty}</span></span>
-                        <span class="font-semibold text-warm-800">${fmt(item.subtotal)}</span>
-                      </div>
-                    `).join('')}
-                  </div>
-                  <div class="border-t border-warm-100 mt-3 pt-3">
-                    <div class="flex justify-between items-center">
-                      <span class="text-[11px] text-warm-400">총 결제금액</span>
-                      <span class="text-base font-bold text-warm-800">${fmt(order.total)}</span>
-                    </div>
-                    <p class="text-[10px] text-warm-300 text-right mt-0.5">배송비 ${order.shippingFee === 0 ? '무료' : fmt(order.shippingFee)}</p>
-                  </div>
-                </div>
-              `;
-            }).join('')}
           </div>
-        </section>
-      `;
-    } catch (e) {
-      el.innerHTML = '<p class="py-20 text-center text-warm-400">주문 내역을 불러오는 중 오류가 발생했습니다.</p>';
-    }
+
+          <!-- 프로필 수정 폼 -->
+          <div id="profile-edit-form" class="bg-white border border-warm-200 rounded-lg p-6 mb-8 hidden">
+            <p class="text-[11px] font-semibold tracking-wider text-warm-500 uppercase mb-4">프로필 수정</p>
+            <div class="space-y-4">
+              <div>
+                <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">닉네임 (유튜브/소셜)</label>
+                <input id="pf-nickname" type="text" class="input-field" placeholder="@chicmood_viewer" value="${escapeHtml(currentUser.nickname || '')}" />
+              </div>
+              <div>
+                <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">배송지 주소</label>
+                <div class="flex gap-2 mb-2">
+                  <input id="pf-zipcode" type="text" class="input-field flex-1" placeholder="우편번호" readonly value="${escapeHtml(currentUser.zipcode || '')}" />
+                  <button type="button" class="btn-primary text-[13px] flex-shrink-0 whitespace-nowrap" onclick="openProfilePostcode()">주소 검색</button>
+                </div>
+                <input id="pf-address" type="text" class="input-field mb-2" placeholder="기본 주소" readonly value="${escapeHtml(currentUser.addrBase || '')}" />
+                <input id="pf-address-detail" type="text" class="input-field" placeholder="상세 주소 입력 (동/호수)" value="${escapeHtml(currentUser.addrDetail || '')}" />
+              </div>
+              <button class="btn-primary w-full text-[13px]" onclick="saveProfile()">저장</button>
+            </div>
+          </div>
+
+          <div class="text-center border-t border-warm-200 pt-8">
+            <p class="text-[12px] text-warm-400 mb-3">주문 내역은 주문조회에서 확인하세요.</p>
+            <a href="#lookup" class="btn-outline inline-flex items-center gap-2 text-[13px]">주문 조회하기</a>
+          </div>
+        </div>
+      </section>
+    `;
   }
 
   function toggleProfileEdit() {
