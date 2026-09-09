@@ -11,19 +11,29 @@ module.exports = async function handler(req, res) {
 
   if (!['cancel', 'modify'].includes(action)) return fail(res, '지원하지 않는 작업입니다');
 
-  // JWT 인증
-  const user = getUserFromRequest(req);
-  if (!user || !user.id) return fail(res, '로그인이 필요합니다', 401);
-
   // 주문 조회
   const { data: order, error: oErr } = await supabaseAdmin
     .from('orders')
-    .select('id, status, user_id, broadcast_id')
+    .select('id, status, user_id, broadcast_id, name, phone')
     .eq('order_no', orderNo)
     .single();
 
   if (oErr || !order) return fail(res, '주문을 찾을 수 없습니다', 404);
-  if (order.user_id !== user.id) return fail(res, '본인의 주문만 변경할 수 있습니다', 403);
+
+  // 인증: JWT 또는 이름+전화번호 뒤4자리 (주문조회 게스트)
+  const user = getUserFromRequest(req);
+  const { name, phoneLast4 } = req.body;
+
+  if (user && user.id) {
+    if (order.user_id !== user.id) return fail(res, '본인의 주문만 변경할 수 있습니다', 403);
+  } else if (name && phoneLast4) {
+    if (order.name !== name || !order.phone.endsWith(phoneLast4)) {
+      return fail(res, '본인 확인에 실패했습니다', 403);
+    }
+    if (action !== 'cancel') return fail(res, '주문조회에서는 취소만 가능합니다');
+  } else {
+    return fail(res, '로그인이 필요합니다', 401);
+  }
 
   // 입금확인 상태에서만 취소/수정 가능
   if (order.status !== '입금확인') {

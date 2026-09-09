@@ -4,7 +4,6 @@
     { "source": "/api/broadcasts/:id", "destination": "/api/broadcasts/[id]" },
     { "source": "/api/products/:id", "destination": "/api/products/[id]" },
     { "source": "/api/orders/lookup", "destination": "/api/orders/lookup" },
-    { "source": "/api/orders/cancel", "destination": "/api/orders/cancel" },
     { "source": "/api/orders/:orderNo", "destination": "/api/orders/[orderNo]" },
     { "source": "/admin", "destination": "/admin.html" },
     { "source": "/(.*)", "destination": "/index.html" }

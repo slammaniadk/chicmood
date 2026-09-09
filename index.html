@@ -344,7 +344,7 @@
     const phoneLast4 = document.getElementById('lk-phone').value.trim();
     showConfirmModal('주문 취소', '정말 주문을 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.', async () => {
       try {
-        await api('/orders/cancel', { method: 'POST', body: JSON.stringify({ orderNo, name, phoneLast4 }) });
+        await api('/orders/' + orderNo, { method: 'PATCH', body: JSON.stringify({ action: 'cancel', name, phoneLast4 }) });
         showToast('주문이 취소되었습니다');
         doLookup();
       } catch (e) {
