@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.7.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.09 11:12</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.09 16:54</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4167,6 +4167,7 @@
   let invSearch = '';
   let invTab = 'stock'; // stock or log
   let invHideZero = true;
+  let invWarehouse = ''; // '' = 전체, '판매', '보관'
 
   async function renderInventory(el) {
     showSpinner(el);
@@ -4176,6 +4177,7 @@
       const params = new URLSearchParams({ page: invPage, limit: 30 });
       if (invSearch) params.set('search', invSearch);
       if (invHideZero) params.set('hideZero', '1');
+      if (invWarehouse) params.set('warehouse', invWarehouse);
       const data = await api('/admin/inventory?' + params.toString());
       const totalPages = Math.ceil(data.total / data.limit) || 1;
       const lowStockCount = (data.inventory||[]).filter(i => i.stockQty <= 5).length;
@@ -4203,28 +4205,40 @@
             </div>
             <input type="text" class="input-field" style="max-width:260px;" placeholder="상품명 검색..." value="${escapeHtml(invSearch)}" onkeydown="if(event.key==='Enter'){invSearch=this.value;invPage=1;renderInventory(document.getElementById('page-content'))}" />
             <button class="filter-tab ${invHideZero?'active':''}" onclick="invHideZero=!invHideZero;invPage=1;renderInventory(document.getElementById('page-content'))">재고있음만</button>
+            <span style="border-left:1px solid #e4c5a5;height:20px;margin:0 4px;"></span>
+            <div class="flex gap-1">
+              <button class="filter-tab ${invWarehouse===''?'active':''}" onclick="invWarehouse='';invPage=1;renderInventory(document.getElementById('page-content'))">전체</button>
+              <button class="filter-tab ${invWarehouse==='판매'?'active':''}" onclick="invWarehouse='판매';invPage=1;renderInventory(document.getElementById('page-content'))">판매</button>
+              <button class="filter-tab ${invWarehouse==='보관'?'active':''}" onclick="invWarehouse='보관';invPage=1;renderInventory(document.getElementById('page-content'))">보관</button>
+            </div>
           </div>
           <div class="card overflow-x-auto">
             <table>
-              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>현재고</th><th>배정</th><th>미배정</th><th>배정 고객</th><th>관리</th></tr></thead>
+              <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>창고</th><th>현재고</th><th>배정</th><th>미배정</th><th>배정 고객</th><th>관리</th></tr></thead>
               <tbody>
-                ${(data.inventory||[]).length===0?'<tr><td colspan="8" class="text-center text-warm-400 py-12">재고 데이터가 없습니다</td></tr>':''}
+                ${(data.inventory||[]).length===0?'<tr><td colspan="9" class="text-center text-warm-400 py-12">재고 데이터가 없습니다</td></tr>':''}
                 ${(data.inventory||[]).map(inv => {
-                  const allocList = (inv.allocations||[]).map(a =>
+                  const isSale = (inv.warehouse||'판매') === '판매';
+                  const whBadge = isSale
+                    ? '<span style="display:inline-block;background:#f0fff4;color:#38a169;border:1px solid #c6f6d5;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600">판매</span>'
+                    : '<span style="display:inline-block;background:#ebf8ff;color:#3182ce;border:1px solid #bee3f8;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600">보관</span>';
+                  const allocList = isSale ? (inv.allocations||[]).map(a =>
                     '<span style="display:inline-block;background:#f9efe6;border:1px solid #e4c5a5;border-radius:4px;padding:1px 6px;margin:1px 2px;font-size:11px;white-space:nowrap">' +
                     escapeHtml(a.customerName) + ' ' + a.allocatedQty + '개' +
                     '<span style="color:#a0aec0;margin-left:3px">(' + a.orderStatus + ')</span></span>'
-                  ).join('');
+                  ).join('') : '';
                   return `
                   <tr>
                     <td class="font-semibold">${escapeHtml(inv.productName)}</td>
                     <td>${escapeHtml(inv.colorName||'-')}</td>
                     <td>${escapeHtml(inv.sizeName||'-')}</td>
+                    <td>${whBadge}</td>
                     <td class="font-semibold">${inv.stockQty}</td>
-                    <td class="font-semibold" style="color:#38a169">${inv.allocatedQty||0}</td>
-                    <td class="font-semibold" style="color:${inv.freeQty>0?'#d69e2e':'#a0aec0'}">${inv.freeQty||0}</td>
+                    <td class="font-semibold" style="color:#38a169">${isSale ? (inv.allocatedQty||0) : '<span style="color:#a0aec0">-</span>'}</td>
+                    <td class="font-semibold" style="color:${inv.freeQty>0?'#d69e2e':'#a0aec0'}">${isSale ? (inv.freeQty||0) : '<span style="color:#a0aec0">-</span>'}</td>
                     <td class="text-[12px]">${allocList || '<span style="color:#a0aec0">-</span>'}</td>
                     <td class="whitespace-nowrap">
+                      <button class="btn-outline btn-sm" onclick="openTransferModal(${inv.id},${inv.stockQty},${isSale ? (inv.freeQty||0) : inv.stockQty},'${escapeHtml(inv.productName)}','${inv.warehouse||'판매'}','${escapeHtml(inv.colorName||'')}','${escapeHtml(inv.sizeName||'')}')" style="color:#3182ce;border-color:#bee3f8;">이동</button>
                       <button class="btn-primary btn-sm" onclick="openInventoryAdjustModal(${inv.id},${inv.stockQty},'${escapeHtml(inv.productName)}')">조정</button>
                       <button class="btn-outline btn-sm" onclick="openInventoryHistory(${inv.id},'${escapeHtml(inv.productName)}')">이력</button>
                       <button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deleteInventory(${inv.id},'${escapeHtml(inv.productName)}')">삭제</button>
@@ -4251,8 +4265,8 @@
   async function renderInventoryLog(el) {
     try {
       const data = await api('/admin/inventory-log?limit=100');
-      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
-      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료' };
+      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매', transfer: '이동' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료', transfer: 'status-입금확인' };
 
       el.innerHTML = `
         <div class="fade-in">
@@ -4307,8 +4321,8 @@
 
     try {
       const data = await api('/admin/inventory-log?inventoryId=' + invId);
-      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매' };
-      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료' };
+      const typeLabels = { in: '입고', out: '출고', adjust: '조정', sale: '판매', transfer: '이동' };
+      const typeColors = { in: 'status-결제완료', out: 'status-취소', adjust: 'status-배송준비', sale: 'status-배송완료', transfer: 'status-입금확인' };
 
       document.querySelector('#inv-history-modal .overlay-content').innerHTML = `
         <div class="flex justify-between items-center mb-6">
@@ -4385,9 +4399,18 @@
               </select>
             </div>
           </div>
-          <div>
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유</label>
-            <input id="inv-reason" class="input-field" placeholder="사유 입력" />
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">창고</label>
+              <select id="inv-warehouse" class="input-field">
+                <option value="판매">판매</option>
+                <option value="보관">보관</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유</label>
+              <input id="inv-reason" class="input-field" placeholder="사유 입력" />
+            </div>
           </div>
           <button class="btn-primary w-full" onclick="saveInventory()">저장</button>
         </form>
@@ -4406,6 +4429,7 @@
       qty: parseInt(document.getElementById('inv-qty').value) || 0,
       type: document.getElementById('inv-type').value,
       reason: document.getElementById('inv-reason').value.trim(),
+      warehouse: document.getElementById('inv-warehouse').value,
     };
     if (body.qty === 0) { showToast('수량을 입력해주세요'); return; }
     try {
@@ -4583,6 +4607,56 @@
       document.getElementById('inv-adjust-modal').remove();
       renderInventory(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '조정에 실패했습니다'); }
+  }
+
+  // 재고 이동 모달
+  async function openTransferModal(invId, stockQty, maxQty, productName, warehouse, colorName, sizeName) {
+    const toWarehouse = warehouse === '판매' ? '보관' : '판매';
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'inv-transfer-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">재고 이동</h3>
+          <button onclick="document.getElementById('inv-transfer-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+        <div class="space-y-3 mb-5">
+          <p class="text-[13px]"><span class="font-semibold">${escapeHtml(productName)}</span>${colorName ? ' / ' + escapeHtml(colorName) : ''}${sizeName ? ' / ' + escapeHtml(sizeName) : ''}</p>
+          <p class="text-[13px]">현재고: <strong>${stockQty}</strong>개 · 이동 가능: <strong>${maxQty}</strong>개</p>
+          <p class="text-[13px]">
+            <span style="display:inline-block;background:${warehouse==='판매'?'#f0fff4':'#ebf8ff'};color:${warehouse==='판매'?'#38a169':'#3182ce'};border:1px solid ${warehouse==='판매'?'#c6f6d5':'#bee3f8'};border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600">${warehouse}</span>
+            <span style="margin:0 8px;">→</span>
+            <span style="display:inline-block;background:${toWarehouse==='판매'?'#f0fff4':'#ebf8ff'};color:${toWarehouse==='판매'?'#38a169':'#3182ce'};border:1px solid ${toWarehouse==='판매'?'#c6f6d5':'#bee3f8'};border-radius:4px;padding:1px 8px;font-size:11px;font-weight:600">${toWarehouse}</span>
+          </p>
+        </div>
+        <form onsubmit="return false;" class="space-y-4">
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">이동 수량 *</label>
+            <input id="inv-transfer-qty" type="number" class="input-field" min="1" max="${maxQty}" value="${maxQty}" />
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">사유</label>
+            <input id="inv-transfer-reason" class="input-field" placeholder="이동 사유 (선택)" />
+          </div>
+          <button class="btn-primary w-full" onclick="executeTransfer(${invId},${maxQty})">이동</button>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  async function executeTransfer(invId, maxQty) {
+    const qty = parseInt(document.getElementById('inv-transfer-qty').value) || 0;
+    if (qty <= 0) { showToast('이동 수량을 입력해주세요'); return; }
+    if (qty > maxQty) { showToast('이동 가능 수량을 초과했습니다'); return; }
+    const reason = document.getElementById('inv-transfer-reason').value.trim();
+    try {
+      await api('/admin/inventory/transfer', { method: 'POST', body: JSON.stringify({ inventoryId: invId, qty, reason }) });
+      showToast('재고가 이동되었습니다');
+      document.getElementById('inv-transfer-modal').remove();
+      renderInventory(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '이동에 실패했습니다'); }
   }
 
   // ============================================================

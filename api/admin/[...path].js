@@ -92,6 +92,7 @@ module.exports = async function handler(req, res) {
     case 'sales':    return handleSales(req, res);
     case 'inventory':
       if (resourceId === 'reconcile') return handleInventoryReconcile(req, res);
+      if (resourceId === 'transfer') return handleInventoryTransfer(req, res);
       return resourceId ? handleInventoryDetail(req, res, resourceId) : handleInventory(req, res);
     case 'inventory-log': return handleInventoryLog(req, res);
     case 'returns':  return resourceId ? handleReturnDetail(req, res, resourceId) : handleReturns(req, res);
@@ -1144,6 +1145,7 @@ async function deductInventory(orderId, action) {
         .eq('product_id', item.product_id)
         .eq('color_name', item.color || '')
         .eq('size_name', item.size || '')
+        .eq('warehouse', '판매')
         .single();
 
       if (inv) {
@@ -1172,6 +1174,7 @@ async function restoreInventoryForReturn(returnData) {
         .eq('product_id', item.product_id)
         .eq('color_name', item.color || '')
         .eq('size_name', item.size || '')
+        .eq('warehouse', '판매')
         .single();
 
       if (inv) {
@@ -1197,6 +1200,7 @@ async function deductInventoryForItem(item) {
       .eq('product_id', item.product_id)
       .eq('color_name', item.color || '')
       .eq('size_name', item.size || '')
+      .eq('warehouse', '판매')
       .single();
 
     if (inv) {
@@ -1322,7 +1326,7 @@ async function updateInventoryFromPO(poId) {
 
     // 배치 조회: 관련 재고 + 로그 한번에 가져오기
     const [{ data: allInv }, { data: allLogs }] = await Promise.all([
-      supabaseAdmin.from('inventory').select('id, product_id, color_name, size_name, stock_qty').in('product_id', productIds),
+      supabaseAdmin.from('inventory').select('id, product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
       supabaseAdmin.from('inventory_log').select('id, inventory_id, qty').eq('reason', poRef),
     ]);
 
@@ -1341,7 +1345,7 @@ async function updateInventoryFromPO(poId) {
 
       if (!inv && receivedQty > 0) {
         const { data: newInv } = await supabaseAdmin.from('inventory')
-          .insert({ product_id: item.product_id, color_name: item.color_name || '', size_name: item.size_name || '', stock_qty: 0 })
+          .insert({ product_id: item.product_id, color_name: item.color_name || '', size_name: item.size_name || '', stock_qty: 0, warehouse: '판매' })
           .select('id, stock_qty').single();
         inv = newInv;
         if (inv) invMap[key] = inv;
@@ -1402,7 +1406,7 @@ async function allocateReceivedToOrders(poId) {
 
     // 2) 배치 조회: 실재고, 결제완료 주문, 관련 주문품목 한번에
     const [{ data: allInventory }, { data: paidOrders }, { data: allAllocItemsRaw }] = await Promise.all([
-      supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds),
+      supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
       supabaseAdmin.from('orders').select('id').eq('status', '결제완료').order('created_at', { ascending: true }),
       supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).not('status', 'in', '("배송완료","결제취소")'),
     ]);
@@ -1500,7 +1504,7 @@ async function allocateByProduct(productId, colorName, sizeName) {
   try {
     const { data: inv } = await supabaseAdmin.from('inventory')
       .select('stock_qty').eq('product_id', productId)
-      .eq('color_name', colorName || '').eq('size_name', sizeName || '').single();
+      .eq('color_name', colorName || '').eq('size_name', sizeName || '').eq('warehouse', '판매').single();
     if (!inv || inv.stock_qty <= 0) return { allocated: 0 };
 
     // 이미 배정된 총량
@@ -1586,7 +1590,7 @@ async function deallocateExcessFromOrders(poId) {
 
     // 배치 조회: 실재고 + 배정된 주문품목 한번에
     const [{ data: allInventory }, { data: allAllocItemsRaw }] = await Promise.all([
-      supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds),
+      supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
       supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).gt('allocated_qty', 0).not('status', 'in', '("배송완료","결제취소")'),
     ]);
 
@@ -3626,7 +3630,7 @@ async function handleSales(req, res) {
 // ============================================================
 async function handleInventory(req, res) {
   if (req.method === 'GET') {
-    const { search, page = '1', limit = '30', hideZero } = req.query || {};
+    const { search, page = '1', limit = '30', hideZero, warehouse } = req.query || {};
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -3646,6 +3650,7 @@ async function handleInventory(req, res) {
         .order('id', { ascending: false });
     }
     if (hideZero === '1') query = query.gt('stock_qty', 0);
+    if (warehouse) query = query.eq('warehouse', warehouse);
     query = query.range(offset, offset + limitNum - 1);
 
     const { data, error, count } = await query;
@@ -3682,6 +3687,7 @@ async function handleInventory(req, res) {
         productName: inv.products ? inv.products.name : '',
         colorName: inv.color_name, sizeName: inv.size_name,
         stockQty: inv.stock_qty,
+        warehouse: inv.warehouse || '판매',
         allocatedQty: allocatedTotal,
         freeQty: Math.max(0, inv.stock_qty - allocatedTotal),
         allocations,
@@ -3691,7 +3697,8 @@ async function handleInventory(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { productId, colorName, sizeName, qty, type, reason } = req.body;
+    const { productId, colorName, sizeName, qty, type, reason, warehouse: wh } = req.body;
+    const warehouse = wh || '판매';
     if (!productId) return fail(res, '상품을 선택해주세요');
 
     // upsert inventory
@@ -3700,6 +3707,7 @@ async function handleInventory(req, res) {
       .eq('product_id', productId)
       .eq('color_name', colorName || '')
       .eq('size_name', sizeName || '')
+      .eq('warehouse', warehouse)
       .single();
 
     let invId;
@@ -3709,7 +3717,7 @@ async function handleInventory(req, res) {
       invId = existing.id;
     } else {
       const { data: newInv, error } = await supabaseAdmin.from('inventory')
-        .insert({ product_id: productId, color_name: colorName || '', size_name: sizeName || '', stock_qty: qty })
+        .insert({ product_id: productId, color_name: colorName || '', size_name: sizeName || '', stock_qty: qty, warehouse })
         .select('id').single();
       if (error) return fail(res, error.message, 500);
       invId = newInv.id;
@@ -3721,8 +3729,10 @@ async function handleInventory(req, res) {
       qty, reason: reason || '',
     });
 
-    // 수동 입고/조정 후 대기 주문 자동 배정
-    try { await allocateByProduct(productId, colorName || '', sizeName || ''); } catch (e) { /* 배정 실패해도 입고 유지 */ }
+    // 수동 입고/조정 후 대기 주문 자동 배정 (판매 창고만)
+    if (warehouse === '판매') {
+      try { await allocateByProduct(productId, colorName || '', sizeName || ''); } catch (e) { /* 배정 실패해도 입고 유지 */ }
+    }
 
     return ok(res, { id: invId }, 201);
   }
@@ -3734,7 +3744,7 @@ async function handleInventoryDetail(req, res, id) {
   if (req.method === 'PATCH') {
     const { stockQty, reason } = req.body;
 
-    const { data: inv } = await supabaseAdmin.from('inventory').select('product_id, stock_qty').eq('id', id).single();
+    const { data: inv } = await supabaseAdmin.from('inventory').select('product_id, stock_qty, warehouse').eq('id', id).single();
     if (!inv) return fail(res, '재고를 찾을 수 없습니다', 404);
 
     const diff = stockQty - inv.stock_qty;
@@ -3745,8 +3755,8 @@ async function handleInventoryDetail(req, res, id) {
       qty: diff, reason: reason || '재고 조정',
     });
 
-    // 재고 증가 시 대기 주문 자동 배정
-    if (diff > 0) {
+    // 재고 증가 시 대기 주문 자동 배정 (판매 창고만)
+    if (diff > 0 && inv.warehouse === '판매') {
       try {
         const { data: invDetail } = await supabaseAdmin.from('inventory').select('color_name, size_name').eq('id', id).single();
         if (invDetail) await allocateByProduct(inv.product_id, invDetail.color_name || '', invDetail.size_name || '');
@@ -3845,7 +3855,8 @@ async function handleInventoryReconcile(req, res) {
 
     // Step 2: 현재 inventory와 비교
     const { data: allInventory } = await supabaseAdmin.from('inventory')
-      .select('id, product_id, color_name, size_name, stock_qty');
+      .select('id, product_id, color_name, size_name, stock_qty')
+      .eq('warehouse', '판매');
 
     const invByKey = {};
     (allInventory || []).forEach(inv => {
@@ -3923,7 +3934,7 @@ async function handleInventoryReconcile(req, res) {
     // 신규 inventory 생성 (순차 — insert 후 ID 필요)
     for (const change of newInventoryIds) {
       const { data: newInv } = await supabaseAdmin.from('inventory')
-        .insert({ product_id: change.productId, color_name: change.colorName, size_name: change.sizeName, stock_qty: change.after })
+        .insert({ product_id: change.productId, color_name: change.colorName, size_name: change.sizeName, stock_qty: change.after, warehouse: '판매' })
         .select('id').single();
       if (newInv) {
         await supabaseAdmin.from('inventory_log').insert({
@@ -4010,6 +4021,79 @@ async function handleInventoryLog(req, res) {
   const { data, error } = await query;
   if (error) return fail(res, error.message, 500);
   return ok(res, { logs: data || [] });
+}
+
+// 재고 창고 이동 (판매↔보관)
+async function handleInventoryTransfer(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+  const { inventoryId, qty, reason } = req.body;
+  if (!inventoryId || !qty || qty <= 0) return fail(res, '이동할 재고와 수량을 입력해주세요');
+
+  const { data: srcInv } = await supabaseAdmin.from('inventory')
+    .select('id, product_id, color_name, size_name, stock_qty, warehouse')
+    .eq('id', inventoryId).single();
+  if (!srcInv) return fail(res, '재고를 찾을 수 없습니다', 404);
+
+  const fromWarehouse = srcInv.warehouse || '판매';
+  const toWarehouse = fromWarehouse === '판매' ? '보관' : '판매';
+
+  if (fromWarehouse === '판매') {
+    // 판매→보관: 미배정 재고만 이동 가능
+    const { data: allocItems } = await supabaseAdmin.from('order_items')
+      .select('allocated_qty')
+      .eq('product_id', srcInv.product_id)
+      .eq('color', srcInv.color_name || '')
+      .eq('size', srcInv.size_name || '')
+      .not('status', 'in', '("배송완료","결제취소")')
+      .gt('allocated_qty', 0);
+    const totalAlloc = (allocItems || []).reduce((s, i) => s + (i.allocated_qty || 0), 0);
+    const freeQty = Math.max(0, srcInv.stock_qty - totalAlloc);
+    if (qty > freeQty) return fail(res, `미배정 재고(${freeQty}개)를 초과하여 이동할 수 없습니다`);
+  } else {
+    if (qty > srcInv.stock_qty) return fail(res, `보관 재고(${srcInv.stock_qty}개)를 초과하여 이동할 수 없습니다`);
+  }
+
+  // 출발지 차감
+  const newSrcQty = srcInv.stock_qty - qty;
+  await supabaseAdmin.from('inventory')
+    .update({ stock_qty: newSrcQty, updated_at: new Date().toISOString() })
+    .eq('id', srcInv.id);
+
+  // 도착지 upsert
+  const { data: dstInv } = await supabaseAdmin.from('inventory')
+    .select('id, stock_qty')
+    .eq('product_id', srcInv.product_id)
+    .eq('color_name', srcInv.color_name || '')
+    .eq('size_name', srcInv.size_name || '')
+    .eq('warehouse', toWarehouse)
+    .single();
+
+  let dstId;
+  if (dstInv) {
+    await supabaseAdmin.from('inventory')
+      .update({ stock_qty: dstInv.stock_qty + qty, updated_at: new Date().toISOString() })
+      .eq('id', dstInv.id);
+    dstId = dstInv.id;
+  } else {
+    const { data: newDst } = await supabaseAdmin.from('inventory')
+      .insert({ product_id: srcInv.product_id, color_name: srcInv.color_name || '', size_name: srcInv.size_name || '', stock_qty: qty, warehouse: toWarehouse })
+      .select('id').single();
+    dstId = newDst?.id;
+  }
+
+  // 이동 이력 기록
+  const transferReason = reason || `${fromWarehouse}→${toWarehouse} 이동`;
+  await supabaseAdmin.from('inventory_log').insert([
+    { inventory_id: srcInv.id, product_id: srcInv.product_id, type: 'transfer', qty: -qty, reason: transferReason, warehouse: fromWarehouse },
+    { inventory_id: dstId, product_id: srcInv.product_id, type: 'transfer', qty: qty, reason: transferReason, warehouse: toWarehouse },
+  ]);
+
+  // 보관→판매 이동 시 대기 주문 자동 배정
+  if (toWarehouse === '판매') {
+    try { await allocateByProduct(srcInv.product_id, srcInv.color_name || '', srcInv.size_name || ''); } catch (e) { /* 배정 실패해도 이동 유지 */ }
+  }
+
+  return ok(res, { from: fromWarehouse, to: toWarehouse, qty, srcId: srcInv.id, dstId });
 }
 
 // ============================================================
