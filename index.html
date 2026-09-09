@@ -192,7 +192,7 @@
     </div>
     <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
     <p class="text-[10px] text-warm-300 tracking-wider mt-1">Developed by DK Studio</p>
-    <p class="text-[9px] text-warm-300 mt-1">Ver 2.6.2 &middot; Last Modified 2026.09.08 18:00</p>
+    <p class="text-[9px] text-warm-300 mt-1">Ver 2.7.1 &middot; Last Modified 2026.09.09 11:10</p>
   </footer>
 
   <!-- 오버레이: 로딩 -->
@@ -322,8 +322,9 @@
     okBtn.parentNode.replaceChild(newBtn, okBtn);
     newBtn.id = 'confirm-ok-btn';
     newBtn.addEventListener('click', async () => {
+      const cb = _confirmCallback;
       closeConfirmModal();
-      if (_confirmCallback) await _confirmCallback();
+      if (cb) await cb();
     });
     modal.classList.remove('hidden');
     requestAnimationFrame(() => modal.classList.add('show'));
@@ -336,14 +337,16 @@
   }
 
   // ============================================================
-  //  주문 취소
+  //  주문 취소 (주문조회 페이지 — 이름+전화번호 뒤4자리 인증)
   // ============================================================
-  async function cancelOrder(orderNo) {
+  async function cancelOrderGuest(orderNo) {
+    const name = document.getElementById('lk-name').value.trim();
+    const phoneLast4 = document.getElementById('lk-phone').value.trim();
     showConfirmModal('주문 취소', '정말 주문을 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.', async () => {
       try {
-        await api('/orders/' + orderNo, { method: 'PATCH', body: JSON.stringify({ action: 'cancel' }) });
+        await api('/orders/cancel', { method: 'POST', body: JSON.stringify({ orderNo, name, phoneLast4 }) });
         showToast('주문이 취소되었습니다');
-        renderMypage(document.getElementById('page-content'));
+        doLookup();
       } catch (e) {
         showToast(e.message || '취소 처리 중 오류가 발생했습니다');
       }
@@ -1325,6 +1328,7 @@
         const d = new Date(order.createdAt);
         const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         const statusClass = 'status-' + order.status;
+        const canCancel = order.status === '입금확인';
 
         return `
           <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4 slide-up">
@@ -1351,6 +1355,11 @@
               <p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">배송지</span> ${escapeHtml(order.address)}</p>
               ${order.memo ? `<p class="text-[11px] text-warm-400"><span class="font-semibold text-warm-500">요청사항</span> ${escapeHtml(order.memo)}</p>` : ''}
             </div>
+            ${canCancel ? `
+            <div class="border-t border-warm-100 mt-3 pt-3">
+              <button class="w-full py-2.5 rounded-lg text-[12px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors" onclick="cancelOrderGuest('${order.orderNo}')">주문 취소</button>
+            </div>
+            ` : ''}
           </div>
         `;
       }).join('');
@@ -1581,7 +1590,6 @@
               const d = new Date(order.createdAt);
               const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
               const statusClass = 'status-' + order.status;
-              const canCancel = order.status === '입금확인';
               return `
                 <div class="border border-warm-200 rounded-lg bg-white p-5 mb-4">
                   <div class="flex justify-between items-start mb-3">
@@ -1606,12 +1614,6 @@
                     </div>
                     <p class="text-[10px] text-warm-300 text-right mt-0.5">배송비 ${order.shippingFee === 0 ? '무료' : fmt(order.shippingFee)}</p>
                   </div>
-                  ${canCancel ? `
-                  <div class="border-t border-warm-100 mt-3 pt-3 flex gap-2">
-                    <button class="flex-1 py-2 rounded-lg text-[12px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors" onclick="cancelOrder('${order.orderNo}')">주문 취소</button>
-                    <button class="flex-1 py-2 rounded-lg text-[12px] font-semibold bg-warm-800 text-white hover:bg-warm-900 transition-colors" onclick="openModifyModal('${order.orderNo}')">주문 수정</button>
-                  </div>
-                  ` : ''}
                 </div>
               `;
             }).join('')}
