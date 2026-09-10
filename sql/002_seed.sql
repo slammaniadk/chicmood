@@ -80,7 +80,7 @@ INSERT INTO product_colors (product_id, name, hex_code, sort_order) VALUES
 (4, '화이트',  '#f8f4ef', 0),
 (4, '베이지',  '#d8c8a8', 1),
 (5, '네이비',  '#2c3e6b', 0),
-(5, '와인',    '#7b2d4a', 1),
+(5, '버건디',  '#800020', 1),
 (6, '블랙',    '#2c2c2c', 0),
 (6, '카키',    '#7a7d5a', 1),
 (7, '아이보리','#f0e8d8', 0),
