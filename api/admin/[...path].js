@@ -2854,11 +2854,11 @@ async function handleShippingImport(req, res) {
   const { rows } = req.body;
   if (!rows || !Array.isArray(rows) || rows.length === 0) return fail(res, '업로드할 데이터가 없습니다');
 
-  // 배송준비 또는 결제완료 상태 주문 대상
+  // 배송준비 상태 주문만 대상
   const { data: orders, error } = await supabaseAdmin
     .from('orders')
     .select('id, order_no, name, phone, status, tracking_no')
-    .in('status', ['배송준비', '결제완료']);
+    .eq('status', '배송준비');
   if (error) return fail(res, error.message, 500);
 
   let success = 0, skipped = 0, failed = 0;
@@ -2870,13 +2870,11 @@ async function handleShippingImport(req, res) {
   // 이름 정규화: 앞뒤 공백 제거
   const normalizeName = (n) => (n || '').trim();
 
-  // 동일주문자 복수 주문 감지: (이름+전화앞7) 그룹핑 — 배송준비 건수 별도 카운트
-  const orderGroups = {};
+  // 동일주문자 복수 주문 감지: (이름+전화앞7) 그룹핑
+  const orderGroupCount = {};
   for (const o of orders) {
     const gk = normalizeName(o.name) + '::' + normalizePhone(o.phone);
-    if (!orderGroups[gk]) orderGroups[gk] = { total: 0, shipReady: 0 };
-    orderGroups[gk].total++;
-    if (o.status === '배송준비') orderGroups[gk].shipReady++;
+    orderGroupCount[gk] = (orderGroupCount[gk] || 0) + 1;
   }
 
   for (const row of rows) {
@@ -2886,28 +2884,25 @@ async function handleShippingImport(req, res) {
 
     const rowPhone7 = normalizePhone(phone);
 
-    // 매칭: 이름(trim) + 전화 앞 7자리, 배송준비 우선 매칭
-    const matchFn = (o) => {
+    // 매칭: 이름(trim) + 전화 앞 7자리, 전화 없으면 이름만으로 매칭
+    const matched = orders.find(o => {
       if (normalizeName(o.name) !== name) return false;
       if (!rowPhone7 || !normalizePhone(o.phone)) return true;
       return normalizePhone(o.phone) === rowPhone7;
-    };
-    const matched = orders.find(o => matchFn(o) && o.status === '배송준비')
-                 || orders.find(o => matchFn(o));
+    });
 
     if (!matched) {
       skipped++;
-      details.push({ name, phone, reason: '매칭 주문 없음' });
+      details.push({ name, phone, reason: '매칭 주문 없음 (배송준비 상태만 대상)' });
       continue;
     }
 
-    // 동일주문자 복수 주문: 배송준비가 정확히 1개면 허용, 그 외 복수는 스킵
+    // 동일주문자 배송준비 복수 주문인 경우 스킵
     const matchedGk = normalizeName(matched.name) + '::' + normalizePhone(matched.phone);
-    const grp = orderGroups[matchedGk] || { total: 0, shipReady: 0 };
-    if (grp.total >= 2 && grp.shipReady !== 1) {
+    if (orderGroupCount[matchedGk] >= 2) {
       skipped++;
       if (!duplicateNames.includes(name)) duplicateNames.push(name);
-      details.push({ name, phone, reason: '동일주문자 복수 주문 — 수기 등록 필요' });
+      details.push({ name, phone, reason: '동일주문자 배송준비 복수 주문 — 수기 등록 필요' });
       continue;
     }
 
