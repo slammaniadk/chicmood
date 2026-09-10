@@ -2870,11 +2870,13 @@ async function handleShippingImport(req, res) {
   // 이름 정규화: 앞뒤 공백 제거
   const normalizeName = (n) => (n || '').trim();
 
-  // 동일주문자 복수 주문 감지: (이름+전화앞7) 그룹핑
-  const orderGroupCount = {};
+  // 동일주문자 복수 주문 감지: (이름+전화앞7) 그룹핑 — 배송준비 건수 별도 카운트
+  const orderGroups = {};
   for (const o of orders) {
     const gk = normalizeName(o.name) + '::' + normalizePhone(o.phone);
-    orderGroupCount[gk] = (orderGroupCount[gk] || 0) + 1;
+    if (!orderGroups[gk]) orderGroups[gk] = { total: 0, shipReady: 0 };
+    orderGroups[gk].total++;
+    if (o.status === '배송준비') orderGroups[gk].shipReady++;
   }
 
   for (const row of rows) {
@@ -2884,12 +2886,14 @@ async function handleShippingImport(req, res) {
 
     const rowPhone7 = normalizePhone(phone);
 
-    // 매칭: 이름(trim) + 전화 앞 7자리, 전화 없으면 이름만으로 매칭
-    const matched = orders.find(o => {
+    // 매칭: 이름(trim) + 전화 앞 7자리, 배송준비 우선 매칭
+    const matchFn = (o) => {
       if (normalizeName(o.name) !== name) return false;
       if (!rowPhone7 || !normalizePhone(o.phone)) return true;
       return normalizePhone(o.phone) === rowPhone7;
-    });
+    };
+    const matched = orders.find(o => matchFn(o) && o.status === '배송준비')
+                 || orders.find(o => matchFn(o));
 
     if (!matched) {
       skipped++;
@@ -2897,9 +2901,10 @@ async function handleShippingImport(req, res) {
       continue;
     }
 
-    // 동일주문자 복수 주문인 경우 스킵 (수기 등록 유도)
+    // 동일주문자 복수 주문: 배송준비가 정확히 1개면 허용, 그 외 복수는 스킵
     const matchedGk = normalizeName(matched.name) + '::' + normalizePhone(matched.phone);
-    if (orderGroupCount[matchedGk] >= 2) {
+    const grp = orderGroups[matchedGk] || { total: 0, shipReady: 0 };
+    if (grp.total >= 2 && grp.shipReady !== 1) {
       skipped++;
       if (!duplicateNames.includes(name)) duplicateNames.push(name);
       details.push({ name, phone, reason: '동일주문자 복수 주문 — 수기 등록 필요' });
