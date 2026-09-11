@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3022,14 +3022,15 @@
           </div>
           <div class="flex flex-col flex-1 min-h-0">
             <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1 flex-shrink-0">상품 선택</label>
-            <input type="text" class="input-field mb-2 flex-shrink-0" placeholder="상품번호 또는 상품명 검색" oninput="filterBMProducts(this.value)" />
+            <input type="text" class="input-field mb-2 flex-shrink-0" placeholder="상품번호, 상품명 또는 거래처명 검색" oninput="filterBMProducts(this.value)" />
             <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 overflow-y-auto space-y-2 flex-1 min-h-0">
               ${products.map(p => `
-                <label class="flex items-center gap-3 cursor-pointer text-[13px] bm-product-row" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}">
+                <label class="flex items-center gap-3 cursor-pointer text-[13px] bm-product-row" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
                   <input type="checkbox" class="bm-product" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
                   ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 60, 80)}" class="w-10 h-14 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-10 h-14 bg-warm-100 rounded flex-shrink-0"></div>'}
                   <span class="text-warm-400 text-[11px]">[${p.id}]</span>
                   <span class="text-warm-700">${escapeHtml(p.name)}</span>
+                  ${p.vendorName ? `<span class="text-blue-400 text-[10px]">${escapeHtml(p.vendorName)}</span>` : ''}
                   <span class="text-warm-400 text-[11px]">${fmt(p.price)}</span>
                 </label>
               `).join('')}
@@ -3048,7 +3049,8 @@
     document.querySelectorAll('.bm-product-row').forEach(row => {
       const id = row.dataset.id;
       const name = row.dataset.name;
-      row.style.display = (!q || id.includes(q) || name.includes(q)) ? '' : 'none';
+      const vendor = row.dataset.vendor || '';
+      row.style.display = (!q || id.includes(q) || name.includes(q) || vendor.includes(q)) ? '' : 'none';
     });
   }
 
