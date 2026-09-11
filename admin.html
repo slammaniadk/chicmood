@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11 16:22</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.5</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11 16:30</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3033,9 +3033,9 @@
                   <span class="text-warm-400 text-[10px] flex-shrink-0">[${p.id}]</span>
                   <span class="text-warm-700 truncate" style="min-width:80px;max-width:180px;">${escapeHtml(p.name)}</span>
                   <span class="text-warm-400 text-[10px] flex-shrink-0">${fmt(p.price)}</span>
-                  ${p.vendorName ? `<span class="text-blue-500 text-[10px] flex-shrink-0 bg-blue-50 px-1.5 py-0.5 rounded">${escapeHtml(p.vendorName)}</span>` : ''}
-                  ${p.size ? `<span class="text-warm-500 text-[10px] flex-shrink-0 bg-warm-100 px-1.5 py-0.5 rounded">${escapeHtml(p.size)}</span>` : ''}
                   ${colorStr ? `<span class="text-warm-400 text-[10px] truncate" style="max-width:150px;" title="${escapeHtml(colorStr)}">${escapeHtml(colorStr)}</span>` : ''}
+                  ${p.size ? `<span class="text-warm-500 text-[10px] flex-shrink-0 bg-warm-100 px-1.5 py-0.5 rounded">${escapeHtml(p.size)}</span>` : ''}
+                  ${p.vendorName ? `<span class="text-blue-500 text-[10px] flex-shrink-0 bg-blue-50 px-1.5 py-0.5 rounded">${escapeHtml(p.vendorName)}</span>` : ''}
                 </label>`;
               }).join('')}
               ${products.length === 0 ? '<p class="text-warm-400 text-[12px]">등록된 상품이 없습니다</p>' : ''}
