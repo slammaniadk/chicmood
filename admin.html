@@ -2497,7 +2497,7 @@
                 <input id="pm-vendor-search" class="input-field pr-7" placeholder="거래처 검색" autocomplete="off" value="${selectedVendor ? escapeHtml(selectedVendor.name) : ''}" />
                 <input type="hidden" id="pm-vendor" value="${p.vendorId || ''}" />
                 <button type="button" id="pm-vendor-clear" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 bg-transparent border-none cursor-pointer text-sm ${p.vendorId ? '' : 'hidden'}" title="선택해제">&times;</button>
-                <div id="pm-vendor-list" class="absolute z-50 w-full bg-white border border-warm-200 rounded-md shadow-lg max-h-36 overflow-y-auto hidden" style="top:100%;">
+                <div id="pm-vendor-list" class="absolute z-50 w-full bg-white border border-warm-200 rounded-md shadow-lg max-h-72 overflow-y-auto hidden" style="top:100%;">
                   ${vendors.map(v => `<div class="pm-vendor-opt px-3 py-1.5 text-[12px] cursor-pointer hover:bg-warm-100 text-warm-700" data-id="${v.id}">${escapeHtml(v.name)}</div>`).join('')}
                 </div>
               </div>
