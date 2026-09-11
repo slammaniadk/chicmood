@@ -2534,13 +2534,23 @@ async function handleProducts(req, res) {
     }
 
     if (searchParam) {
+      // 거래처명으로도 검색 가능하도록 vendor ID 조회
+      const { data: matchingVendors } = await supabaseAdmin
+        .from('vendors')
+        .select('id')
+        .ilike('name', `%${searchParam}%`);
+      const vendorIds = (matchingVendors || []).map(v => v.id);
+
       if (/^\d+$/.test(searchParam)) {
-        const filter = `name.ilike.%${searchParam}%,id.eq.${parseInt(searchParam)}`;
+        let filter = `name.ilike.%${searchParam}%,id.eq.${parseInt(searchParam)}`;
+        if (vendorIds.length > 0) filter += `,vendor_id.in.(${vendorIds.join(',')})`;
         countQuery = countQuery.or(filter);
         dataQuery = dataQuery.or(filter);
       } else {
-        countQuery = countQuery.ilike('name', `%${searchParam}%`);
-        dataQuery = dataQuery.ilike('name', `%${searchParam}%`);
+        let filter = `name.ilike.%${searchParam}%`;
+        if (vendorIds.length > 0) filter += `,vendor_id.in.(${vendorIds.join(',')})`;
+        countQuery = countQuery.or(filter);
+        dataQuery = dataQuery.or(filter);
       }
     }
 
