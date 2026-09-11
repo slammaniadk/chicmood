@@ -697,7 +697,8 @@
             ${featuredProducts.map((p, i) => `
               <a href="#product/${p.id}/${liveBroadcasts[0].id}" class="product-card slide-up" style="animation-delay:${i*0.08}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" ${p.soldOut ? 'style="filter:grayscale(100%) brightness(0.7)"' : ''} onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
+                  ${p.soldOut ? `<div class="absolute inset-0 flex items-center justify-center"><span class="text-red-500 text-lg font-bold tracking-wider drop-shadow-lg">품절</span></div>` : ''}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
@@ -780,10 +781,10 @@
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             ${products.map((p, i) => `
-              <a href="#product/${p.id}/${id}" class="product-card slide-up ${p.soldOut ? 'opacity-70' : ''}" style="animation-delay:${i*0.1}s">
+              <a href="#product/${p.id}/${id}" class="product-card slide-up" style="animation-delay:${i*0.1}s">
                 <div class="relative">
-                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
-                  ${p.soldOut ? `<div class="absolute inset-0 bg-black/50 flex items-center justify-center rounded-t-lg"><span class="text-white text-lg font-bold tracking-wider">품절</span></div>` : ''}
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0])}" alt="${p.name}" loading="lazy" decoding="async" ${p.soldOut ? 'style="filter:grayscale(100%) brightness(0.7)"' : ''} onerror="this.outerHTML='<div class=\\'aspect-[3/4] bg-warm-100 flex items-center justify-center\\'><span class=\\'text-[11px] text-warm-400\\'>사진없음</span></div>'" />` : `<div class="aspect-[3/4] bg-warm-100 flex items-center justify-center"><span class="text-[11px] text-warm-400">사진없음</span></div>`}
+                  ${p.soldOut ? `<div class="absolute inset-0 flex items-center justify-center"><span class="text-red-500 text-lg font-bold tracking-wider drop-shadow-lg">품절</span></div>` : ''}
                 </div>
                 <div class="p-3 sm:p-4">
                   <p class="text-[13px] font-semibold text-warm-800 mb-1 line-clamp-1">${p.name}</p>
