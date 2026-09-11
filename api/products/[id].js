@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
   const { data: p, error } = await supabase
     .from('products')
     .select(`
-      id, name, price, wholesale_price, original_price, discount, description, material, size, category, length_options,
+      id, name, price, wholesale_price, original_price, discount, description, material, size, category, length_options, available_qty,
       product_images ( image_url, sort_order ),
       product_colors ( name, hex_code, sort_order ),
       broadcast_products ( broadcast_id, broadcasts:broadcast_id ( id, status ) )
@@ -44,6 +44,7 @@ module.exports = async function handler(req, res) {
     category: p.category || '',
     lengthOptions: p.length_options || '',
     broadcastId: bestBp?.broadcast_id || null,
+    soldOut: p.available_qty !== null && p.available_qty <= 0,
   };
 
   return ok(res, result);

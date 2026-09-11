@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
       broadcast_products (
         sort_order,
         products:product_id (
-          id, name, price, wholesale_price, original_price, discount, size,
+          id, name, price, wholesale_price, original_price, discount, size, available_qty,
           product_images ( image_url, sort_order ),
           product_colors ( name, hex_code, sort_order )
         )
@@ -43,6 +43,7 @@ module.exports = async function handler(req, res) {
           .sort((a, b) => a.sort_order - b.sort_order)
           .map(c => ({ name: c.name, hex: c.hex_code })),
         size: p.size || '',
+        soldOut: p.available_qty !== null && p.available_qty <= 0,
       };
     })
     .filter(Boolean);
