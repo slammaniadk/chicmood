@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11 15:40</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.11</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2471,7 +2471,8 @@
     if (!vendorListCache) {
       try { vendorListCache = await api('/admin/vendors'); } catch(e) { vendorListCache = []; }
     }
-    const vendors = vendorListCache;
+    const vendors = [...vendorListCache].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+    const selectedVendor = vendors.find(v => v.id == p.vendorId);
 
     const modal = document.createElement('div');
     modal.className = 'overlay';
@@ -2492,10 +2493,14 @@
           <div class="grid grid-cols-4 gap-3">
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">거래처</label>
-              <select id="pm-vendor" class="input-field">
-                <option value="">선택안함</option>
-                ${vendors.map(v => `<option value="${v.id}" ${p.vendorId==v.id?'selected':''}>${escapeHtml(v.name)}</option>`).join('')}
-              </select>
+              <div class="relative" id="pm-vendor-wrap">
+                <input id="pm-vendor-search" class="input-field pr-7" placeholder="거래처 검색" autocomplete="off" value="${selectedVendor ? escapeHtml(selectedVendor.name) : ''}" />
+                <input type="hidden" id="pm-vendor" value="${p.vendorId || ''}" />
+                <button type="button" id="pm-vendor-clear" class="absolute right-1.5 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 bg-transparent border-none cursor-pointer text-sm ${p.vendorId ? '' : 'hidden'}" title="선택해제">&times;</button>
+                <div id="pm-vendor-list" class="absolute z-50 w-full bg-white border border-warm-200 rounded-md shadow-lg max-h-36 overflow-y-auto hidden" style="top:100%;">
+                  ${vendors.map(v => `<div class="pm-vendor-opt px-3 py-1.5 text-[12px] cursor-pointer hover:bg-warm-100 text-warm-700" data-id="${v.id}">${escapeHtml(v.name)}</div>`).join('')}
+                </div>
+              </div>
             </div>
             <div>
               <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1">매입가</label>
@@ -2576,6 +2581,58 @@
     document.body.appendChild(modal);
     renderImagePreviews();
     onPMCategoryChange();
+
+    // 거래처 검색 드롭다운 로직
+    const vInput = document.getElementById('pm-vendor-search');
+    const vHidden = document.getElementById('pm-vendor');
+    const vList = document.getElementById('pm-vendor-list');
+    const vClear = document.getElementById('pm-vendor-clear');
+    const vOpts = vList.querySelectorAll('.pm-vendor-opt');
+
+    function filterVendorList() {
+      const keyword = vInput.value.trim().toLowerCase();
+      let hasVisible = false;
+      vOpts.forEach(opt => {
+        const match = !keyword || opt.textContent.toLowerCase().includes(keyword);
+        opt.style.display = match ? '' : 'none';
+        if (match) hasVisible = true;
+      });
+      vList.classList.toggle('hidden', !hasVisible);
+    }
+
+    vInput.addEventListener('focus', () => { filterVendorList(); });
+    vInput.addEventListener('input', () => {
+      vHidden.value = '';
+      vClear.classList.add('hidden');
+      filterVendorList();
+    });
+
+    vOpts.forEach(opt => {
+      opt.addEventListener('click', () => {
+        vHidden.value = opt.dataset.id;
+        vInput.value = opt.textContent;
+        vList.classList.add('hidden');
+        vClear.classList.remove('hidden');
+      });
+    });
+
+    vClear.addEventListener('click', () => {
+      vHidden.value = '';
+      vInput.value = '';
+      vClear.classList.add('hidden');
+    });
+
+    document.addEventListener('click', function pmVendorOutside(e) {
+      if (!document.getElementById('pm-vendor-wrap')?.contains(e.target)) {
+        vList.classList.add('hidden');
+        if (!vHidden.value) vInput.value = '';
+        else {
+          const sel = [...vOpts].find(o => o.dataset.id === vHidden.value);
+          if (sel) vInput.value = sel.textContent;
+        }
+      }
+      if (!document.getElementById('product-modal')) document.removeEventListener('click', pmVendorOutside);
+    });
   }
 
   const PM_CATEGORY_SIZES = {
