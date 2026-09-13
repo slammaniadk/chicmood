@@ -1693,7 +1693,11 @@ async function deductPurchaseOrderQty(orderId) {
       .select('id, status, vendor_id')
       .in('vendor_id', vendorIds)
       .in('status', ['발주대기', '부분입고', '입고완료']);
-    if (order && order.broadcast_id) poQuery = poQuery.eq('broadcast_id', order.broadcast_id);
+    if (order && order.broadcast_id) {
+      poQuery = poQuery.eq('broadcast_id', order.broadcast_id);
+    } else {
+      poQuery = poQuery.is('broadcast_id', null);
+    }
     const { data: allPOs } = await poQuery;
     if (!allPOs || allPOs.length === 0) return;
 
@@ -1898,6 +1902,8 @@ async function addItemToPurchaseOrder(orderId, item) {
       .select('id').eq('vendor_id', product.vendor_id).eq('status', '발주대기');
     if (orderBroadcastId) {
       query = query.eq('broadcast_id', orderBroadcastId);
+    } else {
+      query = query.is('broadcast_id', null);
     }
     const { data: existingPOs } = await query.order('id', { ascending: false }).limit(1);
 
@@ -1992,6 +1998,8 @@ async function deductItemFromPurchaseOrder(orderId, item) {
       .select('id').eq('vendor_id', product.vendor_id).eq('status', '발주대기');
     if (order && order.broadcast_id) {
       query = query.eq('broadcast_id', order.broadcast_id);
+    } else {
+      query = query.is('broadcast_id', null);
     }
     const { data: pos } = await query;
     if (!pos || pos.length === 0) return;
@@ -2130,7 +2138,7 @@ async function createAutoPurchaseOrders(orderId) {
     for (const group of groupEntries) {
       const match = pendingPOs.find(po =>
         po.vendor_id === group.vendorId &&
-        (!group.broadcastId || po.broadcast_id === group.broadcastId)
+        po.broadcast_id === (group.broadcastId || null)
       );
       if (match) matchedPOIds.push(match.id);
     }
@@ -2152,7 +2160,7 @@ async function createAutoPurchaseOrders(orderId) {
     for (const group of groupEntries) {
       const existingPO = pendingPOs.find(po =>
         po.vendor_id === group.vendorId &&
-        (!group.broadcastId || po.broadcast_id === group.broadcastId)
+        po.broadcast_id === (group.broadcastId || null)
       );
 
       if (existingPO) {
