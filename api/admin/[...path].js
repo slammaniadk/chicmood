@@ -1383,6 +1383,11 @@ async function updateInventoryFromPO(poId) {
 // 입고 시 고객별 FIFO 배정
 async function allocateReceivedToOrders(poId) {
   try {
+    // 0) PO의 broadcast_id 조회 (방송별 배정 우선순위용)
+    const { data: poData } = await supabaseAdmin.from('purchase_orders')
+      .select('broadcast_id').eq('id', poId).single();
+    const poBroadcastId = poData ? poData.broadcast_id : null;
+
     // 1) PO 품목별 received_qty 조회
     const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
       .select('id, product_id, color_name, size_name, qty, received_qty')
@@ -1407,7 +1412,7 @@ async function allocateReceivedToOrders(poId) {
     // 2) 배치 조회: 실재고, 결제완료 주문, 관련 주문품목 한번에
     const [{ data: allInventory }, { data: paidOrders }, { data: allAllocItemsRaw }] = await Promise.all([
       supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
-      supabaseAdmin.from('orders').select('id').eq('status', '결제완료').order('created_at', { ascending: true }),
+      supabaseAdmin.from('orders').select('id, broadcast_id').eq('status', '결제완료').order('created_at', { ascending: true }),
       supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).not('status', 'in', '("배송완료","결제취소")'),
     ]);
 
@@ -1416,6 +1421,8 @@ async function allocateReceivedToOrders(poId) {
     const paidOrderSet = new Set(paidOrderIds);
     const orderIndexMap = {};
     paidOrderIds.forEach((oid, idx) => { orderIndexMap[oid] = idx; });
+    const orderBroadcastMap = {};
+    paidOrders.forEach(o => { orderBroadcastMap[o.id] = o.broadcast_id; });
 
     let totalAllocated = 0;
     const allocatedOrderIds = new Set();
@@ -1436,10 +1443,15 @@ async function allocateReceivedToOrders(poId) {
       let remaining = Math.max(0, stockQty - totalAlreadyAllocated);
       if (remaining <= 0) continue;
 
-      // 결제완료 주문의 매칭 품목 (메모리에서 필터 + FIFO 정렬)
+      // 결제완료 주문의 매칭 품목 (동일 방송 우선 + FIFO 정렬)
       const matchingItems = (allAllocItemsRaw || [])
         .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name && paidOrderSet.has(i.order_id))
-        .sort((a, b) => (orderIndexMap[a.order_id] || 0) - (orderIndexMap[b.order_id] || 0));
+        .sort((a, b) => {
+          const aSame = poBroadcastId && orderBroadcastMap[a.order_id] === poBroadcastId ? 0 : 1;
+          const bSame = poBroadcastId && orderBroadcastMap[b.order_id] === poBroadcastId ? 0 : 1;
+          if (aSame !== bSame) return aSame - bSame;
+          return (orderIndexMap[a.order_id] || 0) - (orderIndexMap[b.order_id] || 0);
+        });
 
       if (matchingItems.length === 0) continue;
 
