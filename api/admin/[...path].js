@@ -5338,24 +5338,25 @@ async function handleQtyAdjust(req, res) {
       poMap[key] += (item.qty || 0);
     }
 
-    // 4) 부족분 계산 (주문 > 발주)
+    // 4) 부족분 + 초과분 계산
     const deficits = [];
+    const excesses = [];
     for (const [key, om] of Object.entries(orderMap)) {
       const poQty = poMap[key] || 0;
-      const deficit = om.orderQty - poQty;
-      if (deficit > 0) {
-        deficits.push({ ...om, deficit });
+      const diff = om.orderQty - poQty;
+      if (diff > 0) deficits.push({ ...om, deficit: diff });
+      else if (diff < 0) excesses.push({ ...om, excess: Math.abs(diff) });
+    }
+    // 발주는 있지만 주문이 없는 항목 (전량 초과)
+    for (const [key, poQty] of Object.entries(poMap)) {
+      if (!orderMap[key] && poQty > 0) {
+        const [pid, color, size] = key.split('|');
+        const poItem = filteredPOItems.find(i => i.product_id === parseInt(pid) && (i.color_name || '') === color && (i.size_name || '') === size);
+        excesses.push({ product_id: parseInt(pid), name: poItem?.product_name || '', color, size, orderQty: 0, excess: poQty });
       }
     }
 
-    if (deficits.length === 0) return ok(res, { adjusted: 0, details: [], message: '부족분이 없습니다' });
-
-    // 5) 상품 정보 조회 (vendor_id, cost_price)
-    const productIds = [...new Set(deficits.map(d => d.product_id))];
-    const { data: products } = await supabaseAdmin.from('products')
-      .select('id, name, vendor_id, cost_price').in('id', productIds);
-    const productMap = {};
-    (products || []).forEach(p => { productMap[p.id] = p; });
+    if (deficits.length === 0 && excesses.length === 0) return ok(res, { adjusted: 0, details: [], message: '보정할 항목이 없습니다' });
 
     // 방송 정보
     const targetBroadcastId = broadcastId ? parseInt(broadcastId) : (orders.find(o => o.broadcast_id)?.broadcast_id || null);
@@ -5369,24 +5370,32 @@ async function handleQtyAdjust(req, res) {
     const details = [];
     let adjusted = 0;
 
-    // 거래처별 그룹핑
+    // 부족분 처리
     const groups = {};
-    for (const d of deficits) {
-      const prod = productMap[d.product_id];
-      if (!prod) continue;
-      const vendorId = prod.vendor_id || 0;
-      const groupKey = `${vendorId}_${targetBroadcastId || 0}`;
-      if (!groups[groupKey]) {
-        groups[groupKey] = { vendorId, broadcastId: targetBroadcastId, items: [] };
+    if (deficits.length > 0) {
+      const productIds = [...new Set(deficits.map(d => d.product_id))];
+      const { data: products } = await supabaseAdmin.from('products')
+        .select('id, name, vendor_id, cost_price').in('id', productIds);
+      const productMap = {};
+      (products || []).forEach(p => { productMap[p.id] = p; });
+
+      for (const d of deficits) {
+        const prod = productMap[d.product_id];
+        if (!prod) continue;
+        const vendorId = prod.vendor_id || 0;
+        const groupKey = `${vendorId}_${targetBroadcastId || 0}`;
+        if (!groups[groupKey]) {
+          groups[groupKey] = { vendorId, broadcastId: targetBroadcastId, items: [] };
+        }
+        groups[groupKey].items.push({
+          product_id: d.product_id,
+          product_name: d.name || prod.name,
+          color_name: d.color,
+          size_name: d.size,
+          qty: d.deficit,
+          cost_price: prod.cost_price || 0,
+        });
       }
-      groups[groupKey].items.push({
-        product_id: d.product_id,
-        product_name: d.name || prod.name,
-        color_name: d.color,
-        size_name: d.size,
-        qty: d.deficit,
-        cost_price: prod.cost_price || 0,
-      });
     }
 
     // PO 번호 생성 준비
@@ -5475,6 +5484,71 @@ async function handleQtyAdjust(req, res) {
         for (const i of group.items) {
           details.push({ productName: i.product_name, color: i.color_name, size: i.size_name, addedQty: i.qty, action: '새 발주서 생성' });
           adjusted++;
+        }
+      }
+    }
+
+    // 7) 초과분 감소 처리
+    for (const ex of excesses) {
+      let remaining = ex.excess;
+      // 해당 상품의 PO items 조회 (발주대기 우선, 최신 순)
+      const matchingPOItems = filteredPOItems
+        .filter(i => i.product_id === ex.product_id && (i.color_name || '') === ex.color && (i.size_name || '') === ex.size)
+        .map(i => i.purchase_order_id);
+      const uniquePOIds = [...new Set(matchingPOItems)];
+      if (uniquePOIds.length === 0) continue;
+
+      // PO 상태 조회해서 발주대기 우선 정렬
+      const { data: poInfos } = await supabaseAdmin.from('purchase_orders')
+        .select('id, status').in('id', uniquePOIds);
+      const poStatusMap = {};
+      (poInfos || []).forEach(p => { poStatusMap[p.id] = p.status; });
+      const sortedPOIds = uniquePOIds.sort((a, b) => {
+        const aWait = poStatusMap[a] === '발주대기' ? 0 : 1;
+        const bWait = poStatusMap[b] === '발주대기' ? 0 : 1;
+        return aWait - bWait || b - a; // 발주대기 우선, 같으면 최신(id 큰 것) 우선
+      });
+
+      for (const poId of sortedPOIds) {
+        if (remaining <= 0) break;
+        const { data: items } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, qty, cost_price, received_qty')
+          .eq('purchase_order_id', poId)
+          .eq('product_id', ex.product_id)
+          .eq('color_name', ex.color)
+          .eq('size_name', ex.size);
+        if (!items || items.length === 0) continue;
+
+        for (const item of items) {
+          if (remaining <= 0) break;
+          const receivedQty = item.received_qty || 0;
+          const reducible = Math.max(0, item.qty - receivedQty); // 이미 입고된 수량은 보호
+          const reduceAmt = Math.min(remaining, reducible);
+          if (reduceAmt <= 0) continue;
+
+          const newQty = item.qty - reduceAmt;
+          if (newQty <= 0) {
+            await supabaseAdmin.from('purchase_order_items').delete().eq('id', item.id);
+          } else {
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, subtotal: newQty * (item.cost_price || 0) }).eq('id', item.id);
+          }
+          remaining -= reduceAmt;
+          details.push({ productName: ex.name, color: ex.color, size: ex.size, addedQty: -reduceAmt, action: newQty <= 0 ? '발주 품목 삭제' : '발주 수량 감소' });
+          adjusted++;
+        }
+
+        // PO total_amount 재계산
+        const { data: remainItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('subtotal').eq('purchase_order_id', poId);
+        if (!remainItems || remainItems.length === 0) {
+          // PO에 품목이 없으면 PO 삭제
+          await supabaseAdmin.from('purchase_orders').delete().eq('id', poId);
+        } else {
+          const newTotal = remainItems.reduce((s, i) => s + (i.subtotal || 0), 0);
+          await supabaseAdmin.from('purchase_orders').update({
+            total_amount: newTotal, updated_at: new Date().toISOString()
+          }).eq('id', poId);
         }
       }
     }

@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:57</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 16:58</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3994,7 +3994,7 @@
             </table>
           </div>
           ${summary.mismatchCount > 0 ? `<div class="flex justify-end mt-3">
-            <button class="btn-primary btn-sm" onclick="adjustQtyCompare()">불일치 ${summary.mismatchCount}건 발주 보정</button>
+            <button class="btn-primary btn-sm" onclick="adjustQtyCompare()">불일치 ${summary.mismatchCount}건 발주 보정 (부족↑ 초과↓)</button>
           </div>` : ''}
           <p class="text-[10px] text-warm-400 mt-3">* 행을 클릭하면 고객별 주문 상세를 확인할 수 있습니다. 차이 양수(+): 주문 > 발주, 음수(-): 발주 > 주문</p>
         </div>`;
@@ -4043,7 +4043,7 @@
   async function adjustQtyCompare() {
     const mismatchEl = document.querySelector('#qty-compare-modal .text-red-600, #qty-compare-modal .text-emerald-700');
     const count = mismatchEl ? mismatchEl.textContent : '?';
-    if (!confirm(`불일치 ${count}건의 부족분을 발주에 반영합니다. 진행하시겠습니까?`)) return;
+    if (!confirm(`불일치 ${count}건을 보정합니다.\n- 부족분: 발주 수량 증가\n- 초과분: 발주 수량 감소 (입고 완료분 제외)\n\n진행하시겠습니까?`)) return;
     try {
       const body = {};
       if (_qtyCompareBroadcastId) body.broadcastId = _qtyCompareBroadcastId;
@@ -4053,7 +4053,10 @@
         body: JSON.stringify(body)
       });
       if (data.adjusted > 0) {
-        const detailMsg = (data.details || []).map(d => `${d.productName} ${d.color} ${d.size}: +${d.addedQty} (${d.action})`).join('\n');
+        const detailMsg = (data.details || []).map(d => {
+          const sign = d.addedQty > 0 ? '+' : '';
+          return `${d.productName} ${d.color} ${d.size}: ${sign}${d.addedQty} (${d.action})`;
+        }).join('\n');
         showToast(`발주 보정 완료: ${data.adjusted}건 반영\n${detailMsg}`);
       } else {
         showToast(data.message || '보정할 항목이 없습니다');
