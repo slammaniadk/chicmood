@@ -3391,6 +3391,7 @@ async function handlePurchaseOrders(req, res) {
 
     // search가 거래처명/품목명일 수 있으므로 po_no로 못찾으면 재검색
     let filtered = data || [];
+    let totalCount = count;
     if (search && filtered.length === 0) {
       // 1) vendor name으로 재검색
       let retryQuery = supabaseAdmin
@@ -3404,7 +3405,7 @@ async function handlePurchaseOrders(req, res) {
       else if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) retryQuery = retryQuery.in('broadcast_id', liveBroadcastIds);
       else if (liveBroadcastIds !== null) retryQuery = retryQuery.eq('broadcast_id', -1);
       const retry = await retryQuery;
-      if (!retry.error && retry.data && retry.data.length > 0) { filtered = retry.data; }
+      if (!retry.error && retry.data && retry.data.length > 0) { filtered = retry.data; totalCount = retry.count; }
     }
     if (search && filtered.length === 0) {
       // 2) 품목명으로 재검색
@@ -3419,7 +3420,7 @@ async function handlePurchaseOrders(req, res) {
       else if (liveBroadcastIds !== null && liveBroadcastIds.length > 0) itemQuery = itemQuery.in('broadcast_id', liveBroadcastIds);
       else if (liveBroadcastIds !== null) itemQuery = itemQuery.eq('broadcast_id', -1);
       const itemRetry = await itemQuery;
-      if (!itemRetry.error && itemRetry.data && itemRetry.data.length > 0) { filtered = itemRetry.data; }
+      if (!itemRetry.error && itemRetry.data && itemRetry.data.length > 0) { filtered = itemRetry.data; totalCount = itemRetry.count; }
     }
 
     const result = filtered.map(po => {
@@ -3441,7 +3442,7 @@ async function handlePurchaseOrders(req, res) {
         itemsSummary, totalQty, totalReceivedQty,
       };
     });
-    return ok(res, { purchaseOrders: result, total: count, page: pageNum, limit: limitNum });
+    return ok(res, { purchaseOrders: result, total: totalCount, page: pageNum, limit: limitNum });
   }
 
   if (req.method === 'POST') {
