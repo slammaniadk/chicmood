@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:19</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:26</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3400,8 +3400,8 @@
                   const qtyLabel = `${po.totalQty||0} / ${po.totalReceivedQty||0}`;
                   const qtyDone = (po.totalQty||0) > 0 && (po.totalReceivedQty||0) >= (po.totalQty||0);
                   return `
-                    <tr>
-                      <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="openPODetailModal(${po.id})">${escapeHtml(po.poNo)}</td>
+                    <tr class="cursor-pointer hover:bg-warm-50" onclick="togglePOListSources(this,${po.id})">
+                      <td class="font-semibold text-warm-700 text-[12px] cursor-pointer hover:text-warm-900 hover:underline" onclick="event.stopPropagation();openPODetailModal(${po.id})">${escapeHtml(po.poNo)}</td>
                       <td>${escapeHtml(po.vendorName||'')}</td>
                       <td class="text-[12px] text-warm-500 max-w-[200px]">${itemsHtml}</td>
                       <td class="text-[13px] font-semibold">${qtyDone ? '<span class="text-green-600">'+qtyLabel+' ✓</span>' : qtyLabel}</td>
@@ -3409,7 +3409,7 @@
                       <td class="font-semibold">${fmt(po.totalAmount||0)}</td>
                       <td class="text-[12px] text-warm-400 max-w-[120px] truncate">${escapeHtml(po.memo||'')}</td>
                       <td class="text-warm-400 text-[12px]">${ds}</td>
-                      <td class="flex gap-1"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId}, event)">${isCopied('po:'+po.vendorId+':'+poBroadcastId)?'<span style="color:#e53e3e">●</span> ':''}발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
+                      <td class="flex gap-1" onclick="event.stopPropagation()"><button class="btn-primary btn-sm" onclick="openPODetailModal(${po.id})">상세</button>${(po.status==='발주대기'||po.status==='부분입고') ? `<button class="btn-outline btn-sm" style="font-size:10px;padding:2px 8px;color:#4a86e8;border-color:#4a86e8;" onclick="copyVendorPOText(${po.vendorId}, event)">${isCopied('po:'+po.vendorId+':'+poBroadcastId)?'<span style="color:#e53e3e">●</span> ':''}발주문구</button>` : ''}<button class="btn-outline btn-sm text-red-500 border-red-300 hover:bg-red-50" onclick="deletePO(${po.id},'${escapeHtml(po.poNo)}')">삭제</button></td>
                     </tr>
                   `;
                 }).join('')}
@@ -3427,6 +3427,42 @@
       `;
     } catch (e) {
       el.innerHTML = '<p class="py-20 text-center text-warm-400">발주 목록을 불러오는 중 오류가 발생했습니다.</p>';
+    }
+  }
+
+  async function togglePOListSources(row, poId) {
+    const nextRow = row.nextElementSibling;
+    if (nextRow && nextRow.classList.contains('po-source-row')) {
+      nextRow.remove();
+      return;
+    }
+    document.querySelectorAll('.po-source-row').forEach(r => r.remove());
+    const detailRow = document.createElement('tr');
+    detailRow.className = 'po-source-row';
+    detailRow.innerHTML = `<td colspan="9" style="padding:8px 16px;background:#fefcfa;border-bottom:1px solid #f0e6db;"><span class="text-warm-400 text-[11px]">불러오는 중...</span></td>`;
+    row.parentNode.insertBefore(detailRow, row.nextSibling);
+    try {
+      const data = await api('/admin/purchase-orders/' + poId);
+      const po = data.purchaseOrder;
+      const items = po.items || [];
+      const hasLinks = items.some(i => i.orderSources && i.orderSources.length > 0);
+      if (!hasLinks) {
+        detailRow.innerHTML = `<td colspan="9" style="padding:10px 16px;background:#fefcfa;border-bottom:1px solid #f0e6db;"><span class="text-warm-400 text-[11px]">연결된 주문 정보가 없습니다 (미연결)</span></td>`;
+        return;
+      }
+      let html = '<td colspan="9" style="padding:0;border-bottom:1px solid #f0e6db;"><div style="padding:8px 16px;background:#fefcfa;"><table style="width:100%;border-collapse:collapse;">';
+      html += '<thead><tr style="background:#f9f0e6;"><th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">품목</th><th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">색상/사이즈</th><th style="padding:5px 8px;font-size:10px;text-align:right;border-bottom:1px solid #f0dcc8;">발주수량</th><th style="padding:5px 8px;font-size:10px;text-align:left;border-bottom:1px solid #f0dcc8;">주문 출처</th></tr></thead><tbody>';
+      for (const item of items) {
+        const sources = item.orderSources || [];
+        const srcHtml = sources.length > 0
+          ? sources.map(s => `<span style="display:inline-block;font-size:10px;padding:1px 6px;margin:1px 2px;border-radius:4px;background:#eff6ff;border:1px solid #bfdbfe;">${escapeHtml(s.orderNo||'')} ${escapeHtml(s.nickname||s.customerName||'')} x${s.qty}</span>`).join('')
+          : '<span style="color:#a8967e;font-size:10px;">미연결</span>';
+        html += `<tr><td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${escapeHtml(item.productName||'')}</td><td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${escapeHtml([item.colorName,item.sizeName].filter(Boolean).join('/') || '-')}</td><td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;text-align:right;">${item.qty}</td><td style="padding:4px 8px;font-size:11px;border-bottom:1px solid #f5ece3;">${srcHtml}</td></tr>`;
+      }
+      html += '</tbody></table></div></td>';
+      detailRow.innerHTML = html;
+    } catch(e) {
+      detailRow.innerHTML = `<td colspan="9" style="padding:10px 16px;background:#fef2f2;border-bottom:1px solid #f0e6db;"><span class="text-red-500 text-[11px]">주문 출처 조회 실패</span></td>`;
     }
   }
 
@@ -3894,6 +3930,16 @@
         const rowBg = hasDiff ? 'background:#fef2f2;' : '';
         const diffColor = item.diff > 0 ? 'color:#dc2626;font-weight:700;' : item.diff < 0 ? 'color:#2563eb;font-weight:700;' : 'color:#6b7280;';
         const custJson = encodeURIComponent(JSON.stringify(item.customers || []));
+        const reasonTags = (item.reasons || []).map(r => {
+          let tagColor = '#f97316'; // orange default
+          if (r.includes('미발주')) tagColor = '#dc2626';
+          else if (r.includes('거래처')) tagColor = '#7c3aed';
+          else if (r.includes('방송')) tagColor = '#2563eb';
+          else if (r.includes('취소')) tagColor = '#d97706';
+          else if (r.includes('초과')) tagColor = '#2563eb';
+          else if (r.includes('부족')) tagColor = '#dc2626';
+          return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:${tagColor}15;color:${tagColor};border:1px solid ${tagColor}30;margin:1px 2px;">${escapeHtml(r)}</span>`;
+        }).join('');
         tableRows += `
           <tr style="${rowBg}cursor:pointer;" onclick="toggleQtyCompareDetail(this,${idx},'${custJson}')">
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;">${escapeHtml(item.productName||'')}</td>
@@ -3902,6 +3948,7 @@
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.orderQty}</td>
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.poQty}</td>
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;${diffColor}">${item.diff > 0 ? '+' : ''}${item.diff}</td>
+            <td style="padding:4px 6px;font-size:12px;border-bottom:1px solid #f0e6db;">${reasonTags}</td>
           </tr>`;
       });
 
@@ -3942,9 +3989,10 @@
                   <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">주문수량</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">발주수량</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">차이</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">원인</th>
                 </tr>
               </thead>
-              <tbody>${tableRows || '<tr><td colspan="6" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
+              <tbody>${tableRows || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
             </table>
           </div>
           ${summary.mismatchCount > 0 ? `<div class="flex justify-end mt-3">
@@ -3971,7 +4019,7 @@
 
     const detailRow = document.createElement('tr');
     detailRow.className = 'qty-detail-row';
-    detailRow.innerHTML = `<td colspan="6" style="padding:0;border-bottom:1px solid #f0e6db;">
+    detailRow.innerHTML = `<td colspan="7" style="padding:0;border-bottom:1px solid #f0e6db;">
       <div style="padding:8px 16px;background:#fefcfa;">
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr style="background:#f9f0e6;">
