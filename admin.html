@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:26</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:31</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3931,13 +3931,11 @@
         const diffColor = item.diff > 0 ? 'color:#dc2626;font-weight:700;' : item.diff < 0 ? 'color:#2563eb;font-weight:700;' : 'color:#6b7280;';
         const custJson = encodeURIComponent(JSON.stringify(item.customers || []));
         const reasonTags = (item.reasons || []).map(r => {
-          let tagColor = '#f97316'; // orange default
+          let tagColor = '#f97316';
           if (r.includes('미발주')) tagColor = '#dc2626';
-          else if (r.includes('거래처')) tagColor = '#7c3aed';
-          else if (r.includes('방송')) tagColor = '#2563eb';
-          else if (r.includes('취소')) tagColor = '#d97706';
+          else if (r.includes('부족')) tagColor = '#f97316';
           else if (r.includes('초과')) tagColor = '#2563eb';
-          else if (r.includes('부족')) tagColor = '#dc2626';
+          else if (r.includes('거래처')) tagColor = '#7c3aed';
           return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:${tagColor}15;color:${tagColor};border:1px solid ${tagColor}30;margin:1px 2px;">${escapeHtml(r)}</span>`;
         }).join('');
         tableRows += `

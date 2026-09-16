@@ -5213,21 +5213,7 @@ async function handleQtyCompare(req, res) {
       poMap[key].qty += (item.qty || 0);
     }
 
-    // 5) 불일치 원인 분석을 위한 추가 데이터 조회
-    //    - 취소된 주문 아이템 (차감 누락 가능성)
-    //    - vendor_id=null 상품
-    //    - 방송 혼합 여부
-    const cancelledMap = {};
-    const { data: cancelledItems } = await supabaseAdmin.from('order_items')
-      .select('product_id, color, size, qty, order_id')
-      .in('order_id', orderIds).eq('status', '결제취소');
-    (cancelledItems || []).forEach(item => {
-      if (!item.product_id) return;
-      const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
-      cancelledMap[key] = (cancelledMap[key] || 0) + (item.qty || 0);
-    });
-
-    // 상품 vendor_id 조회
+    // 5) 불일치 원인 분석: 거래처 미지정 상품 조회
     const allProductIds = [...new Set([
       ...Object.values(orderMap).map(om => om.product_id),
       ...filteredPOItems.map(i => i.product_id),
@@ -5238,34 +5224,6 @@ async function handleQtyCompare(req, res) {
         .select('id, vendor_id').in('id', allProductIds);
       (prods || []).forEach(p => { if (!p.vendor_id) vendorNullSet.add(p.id); });
     }
-
-    // 방송별 PO 수량 분포 (방송 혼합 감지)
-    const poBroadcastMap = {}; // key → { broadcastId → qty }
-    if (filteredPOItems.length > 0) {
-      const poIds = [...new Set(filteredPOItems.map(i => i.purchase_order_id))];
-      const { data: poList } = await supabaseAdmin.from('purchase_orders')
-        .select('id, broadcast_id').in('id', poIds);
-      const poBcLookup = {};
-      (poList || []).forEach(p => { poBcLookup[p.id] = p.broadcast_id; });
-      for (const item of filteredPOItems) {
-        if (!item.product_id) continue;
-        const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
-        if (!poBroadcastMap[key]) poBroadcastMap[key] = {};
-        const bcId = poBcLookup[item.purchase_order_id] || 0;
-        poBroadcastMap[key][bcId] = (poBroadcastMap[key][bcId] || 0) + (item.qty || 0);
-      }
-    }
-
-    // 주문 방송 분포
-    const orderBroadcastMap = {};
-    (itemsResult.data || []).forEach(item => {
-      if (item.status === '결제취소' || !item.product_id) return;
-      const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
-      const order = orderLookup[item.order_id];
-      const bcId = order?.broadcast_id || 0;
-      if (!orderBroadcastMap[key]) orderBroadcastMap[key] = {};
-      orderBroadcastMap[key][bcId] = (orderBroadcastMap[key][bcId] || 0) + (item.qty || 0);
-    });
 
     // 6) 양쪽 merge → diff 계산 + 원인 분석
     const allKeys = new Set([...Object.keys(orderMap), ...Object.keys(poMap)]);
@@ -5288,26 +5246,9 @@ async function handleQtyCompare(req, res) {
         mismatchCount++;
         const pid = om ? om.product_id : parseInt(key.split('|')[0]);
 
-        // 1) 거래처 미지정 상품
         if (vendorNullSet.has(pid)) {
           reasons.push('거래처 미지정');
         }
-
-        // 2) 취소 주문 차감 누락 가능성
-        if (diff < 0 && cancelledMap[key]) {
-          reasons.push(`취소 ${cancelledMap[key]}개 미반영 가능`);
-        }
-
-        // 3) 방송 혼합 (같은 상품이 여러 방송에 걸쳐 있고, PO는 하나의 방송만)
-        const orderBcs = Object.keys(orderBroadcastMap[key] || {});
-        const poBcs = Object.keys(poBroadcastMap[key] || {});
-        if (orderBcs.length > 1 || poBcs.length > 1) {
-          reasons.push('다중 방송');
-        } else if (orderBcs.length === 1 && poBcs.length === 1 && orderBcs[0] !== poBcs[0]) {
-          reasons.push('방송 불일치');
-        }
-
-        // 4) 발주 없음
         if (diff > 0 && pQty === 0) {
           reasons.push('미발주');
         } else if (diff > 0) {
