@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.13 15:50</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.8.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.16 14:19</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3643,11 +3643,21 @@
   function renderPODetailItemsView(items, statusOverride) {
     const poStatus = statusOverride || document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
     const showReceived = poStatus === '입고완료' || poStatus === '부분입고';
+    const hasAnySources = (items||[]).some(it => it.orderSources && it.orderSources.length > 0);
     return `<table>
-      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th><th>잔량</th>' : ''}<th>매입가</th><th>소계</th></tr></thead>
+      <thead><tr><th>상품명</th><th>색상</th><th>사이즈</th><th>수량</th>${showReceived ? '<th>입고수량</th><th>잔량</th>' : ''}<th>매입가</th><th>소계</th>${hasAnySources ? '<th>출처</th>' : ''}</tr></thead>
       <tbody>
         ${(items||[]).map((it, idx) => {
           const remaining = (it.qty||0) - (it.receivedQty||0);
+          const sources = it.orderSources || [];
+          const sourceLabel = sources.length > 0
+            ? `<span class="text-blue-600 cursor-pointer text-[11px] underline" onclick="togglePOSourceDetail(this)">${sources.length}건</span>`
+            : '<span class="text-warm-400 text-[11px]">미연결</span>';
+          const sourceDetail = sources.length > 0
+            ? `<div class="po-source-detail hidden mt-1 text-[11px] bg-warm-50 rounded p-1 border border-warm-200" style="min-width:160px">${sources.map(s =>
+                `<div class="flex justify-between gap-2"><span>${escapeHtml(s.orderNo||'')} ${escapeHtml(s.nickname||s.customerName||'')}</span><span class="font-semibold">${s.qty}개</span></div>`
+              ).join('')}</div>`
+            : '';
           return `
           <tr>
             <td>${escapeHtml(it.productName)}</td>
@@ -3657,10 +3667,16 @@
             ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0;this.closest('tr').querySelector('.remaining-qty').textContent=${it.qty}-(parseInt(this.value)||0)" /></td><td class="remaining-qty ${remaining > 0 ? 'text-red-500 font-semibold' : 'text-green-600'}">${remaining}</td>` : ''}
             <td>${fmt(it.costPrice)}</td>
             <td class="font-semibold">${fmt(it.subtotal || (it.qty||0) * (it.costPrice||0))}</td>
+            ${hasAnySources ? `<td>${sourceLabel}${sourceDetail}</td>` : ''}
           </tr>
         `}).join('')}
       </tbody>
     </table>`;
+  }
+
+  function togglePOSourceDetail(el) {
+    const detail = el.parentElement.querySelector('.po-source-detail');
+    if (detail) detail.classList.toggle('hidden');
   }
 
   function onPOStatusChange(newStatus) {
