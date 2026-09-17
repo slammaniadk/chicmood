@@ -1221,6 +1221,28 @@ async function deductInventoryForItem(item) {
   } catch (e) { /* 재고 차감 실패해도 처리 유지 */ }
 }
 
+// 품목 1개 재고 복원 헬퍼 (deductInventoryForItem 역연산)
+async function restoreInventoryForItem(item) {
+  try {
+    const { data: inv } = await supabaseAdmin.from('inventory')
+      .select('id, stock_qty')
+      .eq('product_id', item.product_id)
+      .eq('color_name', item.color || '')
+      .eq('size_name', item.size || '')
+      .eq('warehouse', '판매')
+      .single();
+
+    if (inv) {
+      await supabaseAdmin.from('inventory').update({ stock_qty: inv.stock_qty + item.qty, updated_at: new Date().toISOString() }).eq('id', inv.id);
+      await supabaseAdmin.from('inventory_log').insert({
+        inventory_id: inv.id, product_id: item.product_id,
+        type: 'in', qty: item.qty,
+        reason: '배송완료 취소 재고 복원',
+      });
+    }
+  } catch (e) { /* 재고 복원 실패해도 처리 유지 */ }
+}
+
 // 주문 상태 자동 재계산 — 품목 상태 중 가장 낮은 단계를 주문 상태로 반영
 async function recalcOrderStatus(orderId) {
   try {
@@ -1283,6 +1305,22 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
       .eq('id', itemId);
   }
 
+  // 배송완료 품목의 송장번호 삭제 시 → 배송준비로 복원 + 재고 원복 + 배정 복원
+  if (prevStatus === '배송완료' && trackingNo === '' && !status) {
+    await restoreInventoryForItem(item);
+    update.allocated_qty = item.qty;
+    update.status = '배송준비';
+    update.tracking_carrier = '';
+  }
+
+  // 배송완료 → 비-배송완료 상태로 명시적 변경 시 재고 복원
+  if (prevStatus === '배송완료' && status && status !== '배송완료' && status !== '결제취소') {
+    await restoreInventoryForItem(item);
+    update.allocated_qty = item.qty;
+    update.tracking_no = '';
+    update.tracking_carrier = '';
+  }
+
   // 결제취소 시: 배송준비 이후 불가 + 배정 수량 초기화
   if (status === '결제취소') {
     if (['배송준비', '배송완료'].includes(prevStatus)) {
@@ -1315,10 +1353,15 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   const { data: orderInfo } = await supabaseAdmin.from('orders').select('order_no').eq('id', orderId).single();
   const orderNo = orderInfo?.order_no || orderId;
   const productName = item.product_name || item.product_id;
+  const finalStatus = update.status || status;
   if (status) await writeLog(req._admin, 'STATUS_CHANGE', 'order', orderNo, { from: prevStatus, to: status, item: productName });
   if (trackingNo !== undefined) await writeLog(req._admin, 'UPDATE', 'order', orderNo, { trackingNo, trackingCarrier, item: productName });
+  // 송장 삭제로 인한 자동 상태 복원 로그
+  if (prevStatus === '배송완료' && !status && update.status) {
+    await writeLog(req._admin, 'STATUS_CHANGE', 'order', orderNo, { from: prevStatus, to: update.status, item: productName, reason: '송장번호 삭제로 자동 복원' });
+  }
 
-  return ok(res, { id: parseInt(itemId), status: status || prevStatus });
+  return ok(res, { id: parseInt(itemId), status: finalStatus || prevStatus });
 }
 
 // ============================================================
