@@ -1004,6 +1004,9 @@ async function handleOrderDetail(req, res, id) {
   if (req.method === 'DELETE') {
     const { data: order } = await supabaseAdmin.from('orders').select('id, status, broadcast_id').eq('id', id).single();
     if (!order) return fail(res, '주문을 찾을 수 없습니다', 404);
+    if (['결제완료', '배송준비'].includes(order.status)) {
+      return fail(res, `${order.status} 상태의 주문은 삭제할 수 없습니다`);
+    }
     // 배송완료 상태 삭제 시 재고 복원 (이미 차감된 stock_qty 되돌리기)
     if (order.status === '배송완료') {
       await deductInventory(id, 'restore');
