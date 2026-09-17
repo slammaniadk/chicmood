@@ -160,11 +160,10 @@ function extractVideoId(url) {
 /**
  * 주문 알림 메시지 조합
  */
-function formatOrderMessage(nickname, items, total) {
-  const formattedTotal = total.toLocaleString('ko-KR');
+function formatOrderMessage(nickname, items) {
   const name = items[0] ? items[0].name : '';
   const suffix = items.length > 1 ? ` 외 ${items.length - 1}품목` : '';
-  return `🛍 ${nickname}님 주문완료! ${name}${suffix}(주문금액: ${formattedTotal}원)`;
+  return `🛍 ${nickname}님 주문완료! ${name}${suffix}`;
 }
 
 /**
@@ -194,7 +193,7 @@ async function sendOrderNotification(broadcastId, nickname, orderItems, total) {
   if (!liveChatId) return;
 
   // 4. 메시지 전송
-  const message = formatOrderMessage(nickname, orderItems, total);
+  const message = formatOrderMessage(nickname, orderItems);
   await sendChatMessage(liveChatId, message, auth);
 }
 
