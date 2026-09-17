@@ -5492,6 +5492,7 @@ async function handleQtyAdjust(req, res) {
     }
 
     // 7) 초과분 감소 처리
+    const affectedPOIds = new Set();
     for (const ex of excesses) {
       let remaining = ex.excess;
       // 해당 상품의 PO items 조회 (발주대기 우선, 최신 순)
@@ -5539,6 +5540,7 @@ async function handleQtyAdjust(req, res) {
           remaining -= reduceAmt;
           details.push({ productName: ex.name, color: ex.color, size: ex.size, addedQty: -reduceAmt, action: newQty <= 0 ? '발주 품목 삭제' : '발주 수량 감소' });
           adjusted++;
+          affectedPOIds.add(poId);
         }
 
         // PO total_amount 재계산
@@ -5554,6 +5556,13 @@ async function handleQtyAdjust(req, res) {
           }).eq('id', poId);
         }
       }
+    }
+
+    // 8) 영향받은 PO 재고/배정 재계산
+    for (const poId of affectedPOIds) {
+      await updateInventoryFromPO(poId);
+      await deallocateExcessFromOrders(poId);
+      await allocateReceivedToOrders(poId);
     }
 
     return ok(res, { adjusted, details });
