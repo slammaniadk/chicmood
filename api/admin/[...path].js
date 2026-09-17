@@ -1303,6 +1303,11 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   // 주문 상태 자동 재계산
   await recalcOrderStatus(orderId);
 
+  // 결제취소로 배정 해제된 재고 → 다른 대기 주문에 재배정
+  if (status === '결제취소' && (item.allocated_qty || 0) > 0) {
+    await allocateByProduct(item.product_id, item.color, item.size);
+  }
+
   // 활동 로그
   const { data: orderInfo } = await supabaseAdmin.from('orders').select('order_no').eq('id', orderId).single();
   const orderNo = orderInfo?.order_no || orderId;
@@ -1415,7 +1420,7 @@ async function allocateReceivedToOrders(poId) {
     // 2) 배치 조회: 실재고, 결제완료 주문, 관련 주문품목 한번에
     const [{ data: allInventory }, { data: paidOrders }, { data: allAllocItemsRaw }] = await Promise.all([
       supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
-      supabaseAdmin.from('orders').select('id, broadcast_id').eq('status', '결제완료').order('created_at', { ascending: true }),
+      supabaseAdmin.from('orders').select('id, broadcast_id').in('status', ['결제완료', '배송준비']).order('created_at', { ascending: true }),
       supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).not('status', 'in', '("배송완료","결제취소")'),
     ]);
 
@@ -1531,9 +1536,9 @@ async function allocateByProduct(productId, colorName, sizeName) {
     let remaining = Math.max(0, inv.stock_qty - totalAlloc);
     if (remaining <= 0) return { allocated: 0 };
 
-    // 결제완료 주문 (FIFO)
+    // 결제완료/배송준비 주문 (FIFO)
     const { data: paidOrders } = await supabaseAdmin.from('orders')
-      .select('id').eq('status', '결제완료').order('created_at', { ascending: true });
+      .select('id').in('status', ['결제완료', '배송준비']).order('created_at', { ascending: true });
     if (!paidOrders || paidOrders.length === 0) return { allocated: 0 };
 
     const paidSet = new Set(paidOrders.map(o => o.id));
@@ -1543,7 +1548,7 @@ async function allocateByProduct(productId, colorName, sizeName) {
     const { data: pending } = await supabaseAdmin.from('order_items')
       .select('id, order_id, qty, allocated_qty')
       .eq('product_id', productId).eq('color', colorName || '').eq('size', sizeName || '')
-      .eq('status', '결제완료');
+      .in('status', ['결제완료', '배송준비']);
     const matched = (pending || []).filter(i => paidSet.has(i.order_id))
       .sort((a, b) => (orderIdx[a.order_id] || 0) - (orderIdx[b.order_id] || 0));
     if (matched.length === 0) return { allocated: 0 };
@@ -3623,11 +3628,16 @@ async function handlePurchaseOrderDetail(req, res, id) {
     const { error } = await supabaseAdmin.from('purchase_orders').update(update).eq('id', id);
     if (error) return fail(res, error.message, 500);
 
-    // 입고수량 변경 시: 상태와 무관하게 항상 재고 반영 → 초과 해제 → 재배정 (순차 실행)
+    // 입고수량 변경 또는 아이템 편집 시: 재고 반영 → 초과 해제 → 재배정 (순차 실행)
     let allocationResult = null;
     let deallocationResult = null;
     let inventoryResult = null;
-    if (receivedItems || update.status === '부분입고' || update.status === '입고완료') {
+    let needRealloc = !!receivedItems || update.status === '부분입고' || update.status === '입고완료';
+    if (!needRealloc && items) {
+      const { data: poCheck } = await supabaseAdmin.from('purchase_orders').select('status').eq('id', id).single();
+      if (poCheck && (poCheck.status === '부분입고' || poCheck.status === '입고완료')) needRealloc = true;
+    }
+    if (needRealloc) {
       // 1) 재고 반영 (inventory.stock_qty 갱신)
       inventoryResult = await updateInventoryFromPO(parseInt(id));
       // 2) 초과 배정 해제 (갱신된 stock_qty 기준)
