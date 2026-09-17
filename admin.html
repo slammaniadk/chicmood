@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.3</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.17 14:34</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.4</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.17 14:50</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1058,8 +1058,9 @@
                         ${itemStatuses.map(s => `<option value="${s}">${s}</option>`).join('')}
                       </select>
                     </td>
-                    <td style="padding:6px 8px;">
+                    <td style="padding:6px 8px;white-space:nowrap;">
                       <button class="btn-primary btn-sm" style="padding:3px 8px;font-size:10px;" onclick="updateSingleItem('${id}',${idx})">저장</button>
+                      ${(item.allocatedQty || 0) > 0 && !['배송완료','결제취소'].includes(item.status) ? `<button class="btn-outline btn-sm" style="padding:3px 8px;font-size:10px;color:#7c3aed;border-color:#7c3aed;margin-left:2px;" onclick="openTransferModal('${id}','${orderNo}',${idx})">양도</button>` : ''}
                     </td>
                   </tr>
                 `).join('')}
@@ -1126,6 +1127,191 @@
       renderOrders(document.getElementById('page-content'));
     } catch (e) {
       showToast(e.message || '변경에 실패했습니다');
+    }
+  }
+
+  // ============================================================
+  //  배정양도 모달
+  // ============================================================
+  function openTransferModal(orderId, orderNo, idx) {
+    const item = _orderModalItems[idx];
+    if (!item) { showToast('품목 정보가 없습니다'); return; }
+
+    // 기존 주문 모달 닫기
+    const existing = document.getElementById('order-modal');
+    if (existing) existing.remove();
+
+    const maxQty = item.allocatedQty || 0;
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'transfer-modal';
+    modal.innerHTML = `
+      <div class="overlay-content p-6" style="max-width:640px;">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-serif text-lg font-semibold text-warm-800 italic">배정양도</h3>
+          <button onclick="document.getElementById('transfer-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
+        </div>
+
+        <!-- 원본 품목 정보 -->
+        <div class="card mb-4 p-4" style="background:#fdf8f4;">
+          <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">원본 품목 (주문 ${escapeHtml(orderNo)})</label>
+          <p class="text-[13px] font-semibold text-warm-800">${escapeHtml(item.name)} <span class="text-warm-400">${escapeHtml(item.color||'')}/${escapeHtml(item.size||'')}</span></p>
+          <p class="text-[12px] text-warm-500 mt-1">현재 배정량: <span class="font-semibold text-warm-800">${maxQty}개</span> / 주문수량 ${item.qty}개</p>
+        </div>
+
+        <!-- 양도 수량 -->
+        <div class="card mb-4 p-4" style="background:#fdf8f4;">
+          <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">양도 수량</label>
+          <input id="transfer-qty" type="number" class="input-field" value="${maxQty}" min="1" max="${maxQty}" style="width:120px;" />
+        </div>
+
+        <!-- 대상 주문 검색 -->
+        <div class="card mb-4 p-4" style="background:#fdf8f4;">
+          <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-2">대상 주문 검색 (이름/주문번호/닉네임)</label>
+          <div class="flex gap-2 mb-3">
+            <input id="transfer-search" type="text" class="input-field" placeholder="검색어 입력..." style="flex:1;" />
+            <button class="btn-primary btn-sm" onclick="searchTransferTarget('${orderId}','${item.productId}','${escapeHtml(item.color||'')}','${escapeHtml(item.size||'')}')">검색</button>
+          </div>
+          <div id="transfer-results" style="max-height:250px;overflow-y:auto;">
+            <p class="text-[12px] text-warm-400 text-center py-4">검색어를 입력하고 검색 버튼을 눌러주세요</p>
+          </div>
+        </div>
+
+        <!-- 선택된 대상 + 실행 -->
+        <div id="transfer-selected" style="display:none;" class="card mb-4 p-4 border-2" style="border-color:#7c3aed;">
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button class="btn-outline btn-sm" onclick="document.getElementById('transfer-modal').remove()">취소</button>
+          <button id="transfer-exec-btn" class="btn-primary btn-sm" style="background:#7c3aed;" disabled onclick="executeTransfer('${orderId}','${item.id}')">양도 실행</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Enter 키로 검색
+    document.getElementById('transfer-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.querySelector('#transfer-modal .btn-primary.btn-sm').click();
+    });
+  }
+
+  let _transferTarget = null;
+
+  async function searchTransferTarget(srcOrderId, productId, color, size) {
+    const keyword = document.getElementById('transfer-search').value.trim();
+    if (!keyword) { showToast('검색어를 입력해주세요'); return; }
+
+    const resultsEl = document.getElementById('transfer-results');
+    resultsEl.innerHTML = '<div class="flex justify-center py-4"><div class="spinner"></div></div>';
+
+    try {
+      const data = await api('/admin/orders?search=' + encodeURIComponent(keyword) + '&limit=50');
+      const orders = data.orders || [];
+
+      // 동일 상품/색상/사이즈이면서 미배정 품목이 있는 주문만 필터
+      const candidates = [];
+      for (const o of orders) {
+        if (o.id === srcOrderId) continue; // 자기 자신 제외
+        if (['배송완료', '결제취소'].includes(o.status)) continue;
+        for (const item of o.items) {
+          if (item.productId == productId && (item.color||'') === color && (item.size||'') === size) {
+            const unalloc = item.qty - (item.allocatedQty || 0);
+            if (unalloc > 0 && !['배송완료','결제취소'].includes(item.status)) {
+              candidates.push({
+                orderId: o.id,
+                orderNo: o.orderNo,
+                name: o.name,
+                nickname: o.nickname,
+                itemId: item.id,
+                itemName: item.name,
+                color: item.color,
+                size: item.size,
+                qty: item.qty,
+                allocatedQty: item.allocatedQty || 0,
+                unalloc: unalloc,
+              });
+            }
+          }
+        }
+      }
+
+      if (candidates.length === 0) {
+        resultsEl.innerHTML = '<p class="text-[12px] text-warm-400 text-center py-4">동일 상품의 미배정 품목이 있는 주문이 없습니다</p>';
+        return;
+      }
+
+      resultsEl.innerHTML = candidates.map((c, i) => `
+        <div class="flex items-center justify-between py-2 px-3 rounded-lg cursor-pointer hover:bg-warm-50 border-b border-warm-100 transfer-candidate" data-idx="${i}"
+             onclick="selectTransferTarget(${i})">
+          <div>
+            <span class="text-[12px] font-semibold text-warm-800">${escapeHtml(c.orderNo)}</span>
+            <span class="text-[11px] text-warm-500 ml-2">${escapeHtml(c.name)}${c.nickname ? ' ('+escapeHtml(c.nickname)+')' : ''}</span>
+          </div>
+          <div class="text-[11px]">
+            <span class="text-warm-500">${escapeHtml(c.itemName)} ${escapeHtml(c.color||'')}/${escapeHtml(c.size||'')}</span>
+            <span class="font-semibold text-warm-800 ml-1">미배정 ${c.unalloc}개</span>
+          </div>
+        </div>
+      `).join('');
+
+      window._transferCandidates = candidates;
+    } catch (e) {
+      resultsEl.innerHTML = `<p class="text-[12px] text-red-500 text-center py-4">${e.message || '검색 실패'}</p>`;
+    }
+  }
+
+  function selectTransferTarget(idx) {
+    const c = window._transferCandidates[idx];
+    if (!c) return;
+    _transferTarget = c;
+
+    // 하이라이트 선택된 항목
+    document.querySelectorAll('.transfer-candidate').forEach(el => {
+      el.style.background = el.dataset.idx == idx ? '#f0e6ff' : '';
+    });
+
+    // 선택 정보 표시
+    const selectedEl = document.getElementById('transfer-selected');
+    selectedEl.style.display = 'block';
+    selectedEl.style.borderColor = '#7c3aed';
+    selectedEl.innerHTML = `
+      <label class="text-[11px] font-semibold tracking-wider" style="color:#7c3aed;">양도 대상 선택됨</label>
+      <p class="text-[13px] font-semibold text-warm-800 mt-1">${escapeHtml(c.orderNo)} - ${escapeHtml(c.name)}</p>
+      <p class="text-[12px] text-warm-500">${escapeHtml(c.itemName)} ${escapeHtml(c.color||'')}/${escapeHtml(c.size||'')} (미배정 ${c.unalloc}개)</p>
+    `;
+
+    // 양도 수량 max를 대상의 미배정 수량과 원본 배정량 중 작은 값으로 제한
+    const qtyInput = document.getElementById('transfer-qty');
+    const maxQty = Math.min(parseInt(qtyInput.max), c.unalloc);
+    qtyInput.max = maxQty;
+    if (parseInt(qtyInput.value) > maxQty) qtyInput.value = maxQty;
+
+    document.getElementById('transfer-exec-btn').disabled = false;
+  }
+
+  async function executeTransfer(srcOrderId, srcItemId) {
+    if (!_transferTarget) { showToast('대상 주문을 선택해주세요'); return; }
+    const qty = parseInt(document.getElementById('transfer-qty').value);
+    if (!qty || qty <= 0) { showToast('양도 수량을 입력해주세요'); return; }
+
+    const msg = `${_transferTarget.orderNo} (${_transferTarget.name}) 에게 ${qty}개를 양도하시겠습니까?`;
+    if (!confirm(msg)) return;
+
+    try {
+      await api(`/admin/orders/${srcOrderId}/items/${srcItemId}/transfer-allocation`, {
+        method: 'POST',
+        body: JSON.stringify({
+          targetOrderId: _transferTarget.orderId,
+          targetItemId: _transferTarget.itemId,
+          qty: qty,
+        }),
+      });
+      showToast(`${qty}개 배정양도 완료`);
+      document.getElementById('transfer-modal').remove();
+      _transferTarget = null;
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '양도 실패');
     }
   }
 

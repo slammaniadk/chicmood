@@ -73,6 +73,9 @@ module.exports = async function handler(req, res) {
       if (resourceId === 'unmerge') return handleOrderUnmerge(req, res);
       if (resourceId === 'split') return handleOrderSplit(req, res);
       if (resourceId && pathSegments[2] === 'modify') return handleOrderModify(req, res, resourceId);
+      if (resourceId && pathSegments[2] === 'items' && pathSegments[3] && pathSegments[4] === 'transfer-allocation') {
+        return handleTransferAllocation(req, res, resourceId, pathSegments[3]);
+      }
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3]) {
         return handleOrderItemDetail(req, res, resourceId, pathSegments[3]);
       }
@@ -1316,6 +1319,85 @@ async function handleOrderItemDetail(req, res, orderId, itemId) {
   if (trackingNo !== undefined) await writeLog(req._admin, 'UPDATE', 'order', orderNo, { trackingNo, trackingCarrier, item: productName });
 
   return ok(res, { id: parseInt(itemId), status: status || prevStatus });
+}
+
+// ============================================================
+//  TRANSFER ALLOCATION (배정양도)
+// ============================================================
+async function handleTransferAllocation(req, res, orderId, itemId) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  const { targetOrderId, targetItemId, qty } = req.body || {};
+  if (!targetOrderId || !targetItemId || !qty || qty <= 0) {
+    return fail(res, '대상 주문, 품목, 양도 수량을 입력해주세요', 400);
+  }
+
+  // 1. source 품목 조회
+  const { data: srcItem, error: srcErr } = await supabaseAdmin.from('order_items')
+    .select('*').eq('id', itemId).eq('order_id', orderId).single();
+  if (srcErr || !srcItem) return fail(res, '원본 품목을 찾을 수 없습니다', 404);
+
+  // 2. target 품목 조회
+  const { data: tgtItem, error: tgtErr } = await supabaseAdmin.from('order_items')
+    .select('*').eq('id', targetItemId).eq('order_id', targetOrderId).single();
+  if (tgtErr || !tgtItem) return fail(res, '대상 품목을 찾을 수 없습니다', 404);
+
+  // 3. 같은 상품/색상/사이즈 확인
+  if (srcItem.product_id !== tgtItem.product_id || srcItem.color !== tgtItem.color || srcItem.size !== tgtItem.size) {
+    return fail(res, '동일한 상품/색상/사이즈만 양도할 수 있습니다', 400);
+  }
+
+  // 4. source 상태 검증
+  if (['배송완료', '결제취소'].includes(srcItem.status)) {
+    return fail(res, '배송완료 또는 결제취소 품목은 양도할 수 없습니다', 400);
+  }
+  if ((srcItem.allocated_qty || 0) < qty) {
+    return fail(res, `원본 배정 수량(${srcItem.allocated_qty || 0})이 양도 수량(${qty})보다 부족합니다`, 400);
+  }
+
+  // 5. target 상태 검증
+  if (['배송완료', '결제취소'].includes(tgtItem.status)) {
+    return fail(res, '대상 품목이 배송완료 또는 결제취소 상태입니다', 400);
+  }
+  const tgtUnalloc = tgtItem.qty - (tgtItem.allocated_qty || 0);
+  if (tgtUnalloc < qty) {
+    return fail(res, `대상 미배정 수량(${tgtUnalloc})이 양도 수량(${qty})보다 부족합니다`, 400);
+  }
+
+  // 6. source 업데이트
+  const newSrcAlloc = (srcItem.allocated_qty || 0) - qty;
+  const srcUpdate = { allocated_qty: newSrcAlloc };
+  if (newSrcAlloc === 0) srcUpdate.status = '결제완료';
+  const { error: srcUpErr } = await supabaseAdmin.from('order_items').update(srcUpdate).eq('id', itemId);
+  if (srcUpErr) return fail(res, '원본 품목 업데이트 실패: ' + srcUpErr.message, 500);
+
+  // 7. target 업데이트
+  const newTgtAlloc = (tgtItem.allocated_qty || 0) + qty;
+  const tgtUpdate = { allocated_qty: newTgtAlloc };
+  if (newTgtAlloc >= tgtItem.qty) tgtUpdate.status = '배송준비';
+  const { error: tgtUpErr } = await supabaseAdmin.from('order_items').update(tgtUpdate).eq('id', targetItemId);
+  if (tgtUpErr) return fail(res, '대상 품목 업데이트 실패: ' + tgtUpErr.message, 500);
+
+  // 8. 양쪽 주문 상태 재계산
+  await recalcOrderStatus(orderId);
+  await recalcOrderStatus(targetOrderId);
+
+  // 9. 로그 기록
+  const [{ data: srcOrder }, { data: tgtOrder }] = await Promise.all([
+    supabaseAdmin.from('orders').select('order_no').eq('id', orderId).single(),
+    supabaseAdmin.from('orders').select('order_no').eq('id', targetOrderId).single(),
+  ]);
+  const srcOrderNo = srcOrder?.order_no || orderId;
+  const tgtOrderNo = tgtOrder?.order_no || targetOrderId;
+  const productName = srcItem.product_name || srcItem.name || srcItem.product_id;
+  await writeLog(req._admin, 'UPDATE', 'order', srcOrderNo, {
+    name: `배정양도 ${qty}개: ${srcOrderNo} → ${tgtOrderNo}`,
+    item: productName,
+    transferQty: qty,
+    targetOrderNo: tgtOrderNo,
+  });
+
+  return ok(res, { success: true, sourceAllocated: newSrcAlloc, targetAllocated: newTgtAlloc });
 }
 
 // 입고 시 재고(inventory) 반영 — received_qty 기준으로 재고 upsert (부분입고 → 추가입고 지원)
