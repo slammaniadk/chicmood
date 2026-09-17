@@ -2816,6 +2816,14 @@ async function handleProductDetail(req, res, id) {
   }
 
   if (req.method === 'DELETE') {
+    // 활성 주문(배송완료/결제취소 제외)에서 참조 중이면 삭제 차단
+    const { count: activeRefCount } = await supabaseAdmin.from('order_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', id)
+      .not('status', 'in', '("배송완료","결제취소")');
+    if (activeRefCount > 0) {
+      return fail(res, `활성 주문 ${activeRefCount}건에서 사용 중입니다. 삭제 대신 "미사용" 전환을 이용해주세요.`, 400);
+    }
     const { data: delProd } = await supabaseAdmin.from('products').select('name').eq('id', id).single();
     const { error } = await supabaseAdmin.from('products').delete().eq('id', id);
     if (error) return fail(res, error.message, 500);

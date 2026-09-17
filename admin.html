@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.1</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.17 14:05</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.2</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.17 14:24</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2832,7 +2832,7 @@
   }
 
   async function deleteProduct(id) {
-    if (!confirm('이 상품을 삭제하시겠습니까?')) return;
+    if (!confirm('이 상품을 완전히 삭제하시겠습니까?\n\n※ 활성 주문이 있으면 삭제가 차단됩니다.\n※ 일반적으로는 "미사용" 전환을 권장합니다.')) return;
     try {
       await api('/admin/products/' + id, { method: 'DELETE' });
       showToast('상품이 삭제되었습니다');
