@@ -2278,13 +2278,13 @@ async function createAutoPurchaseOrders(orderId) {
       });
     }
 
-    // 기존 발주대기 발주서 + PO번호 max 병렬 조회
+    // 기존 발주대기/부분입고 발주서 + PO번호 max 병렬 조회
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
     const [pendingPOsResult, maxPOsResult] = await Promise.all([
       supabaseAdmin.from('purchase_orders')
         .select('id, vendor_id, broadcast_id, memo')
-        .eq('status', '발주대기'),
+        .in('status', ['발주대기', '부분입고']),
       supabaseAdmin.from('purchase_orders')
         .select('po_no').ilike('po_no', `PO-${dateStr}%`).order('po_no', { ascending: false }).limit(1),
     ]);
@@ -2692,10 +2692,10 @@ async function handlePORegenerate(req, res) {
       }
 
       for (const [groupKey, group] of Object.entries(groups)) {
-        // 기존 발주대기 발주서 확인
+        // 기존 발주대기/부분입고 발주서 확인
         let existingPO = null;
         let query = supabaseAdmin.from('purchase_orders')
-          .select('id').eq('status', '발주대기');
+          .select('id').in('status', ['발주대기', '부분입고']);
         if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
         else { query = query.is('vendor_id', null); }
         if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
