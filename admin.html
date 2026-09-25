@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.6</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:19</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:38</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1356,21 +1356,38 @@
       orderId,
       broadcastId: broadcastId || '',
       items: orderItems.map(item => ({ ...item })),
-      catalog: []
+      catalog: [],
+      allProducts: [],
+      productSearch: ''
     };
-    // 방송 상품 카탈로그 로드
+    // 방송 상품 + 전체 상품 병렬 로드
+    const promises = [
+      api('/admin/products?isActive=true&pageSize=200').catch(() => null)
+    ];
     if (broadcastId) {
-      try {
-        const bc = await api('/broadcasts/' + broadcastId);
-        _adminModifyState.catalog = (bc.broadcast && bc.broadcast.products) || bc.products || [];
-      } catch (_) {}
+      promises.push(api('/broadcasts/' + broadcastId).catch(() => null));
     }
+    const [allProdResult, bcResult] = await Promise.all(promises);
+    const bcProducts = bcResult ? ((bcResult.broadcast && bcResult.broadcast.products) || bcResult.products || []) : [];
+    _adminModifyState.catalog = bcProducts;
+    // 전체 상품을 카탈로그 형식으로 변환
+    const allProds = (allProdResult?.products || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.wholesale_price || p.price || 0,
+      colors: (p.product_colors || []).map(c => ({ name: c.name })),
+      size: p.size || 'FREE',
+      _isBroadcast: bcProducts.some(bp => bp.id === p.id)
+    }));
+    _adminModifyState.allProducts = allProds;
     renderAdminModifyModal();
   }
 
   function _getAdminCatalogProduct(productId) {
     if (!_adminModifyState) return null;
-    return _adminModifyState.catalog.find(p => p.id === productId) || null;
+    return _adminModifyState.catalog.find(p => p.id === productId)
+      || _adminModifyState.allProducts.find(p => p.id === productId)
+      || null;
   }
 
   function renderAdminModifyModal() {
@@ -1417,12 +1434,18 @@
         </div>`;
     }).join('');
 
-    const addProductHtml = catalog.length > 0 ? `
+    const allProds = _adminModifyState.allProducts || [];
+    const searchVal = _adminModifyState.productSearch || '';
+    const filteredProducts = searchVal.length > 0
+      ? allProds.filter(p => p.name.toLowerCase().includes(searchVal.toLowerCase()))
+      : catalog;
+    const addProductHtml = `
       <div style="border-top:2px solid #e4c5a5;margin-top:8px;padding-top:10px;">
         <p style="font-size:11px;font-weight:600;color:#7c6a56;margin-bottom:6px;">상품 추가</p>
-        <select id="admin-mod-add-product" onchange="onAdminModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;">
-          <option value="">상품을 선택하세요</option>
-          ${catalog.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
+        <input type="text" id="admin-mod-product-search" placeholder="상품명 검색 (전체 상품에서 검색)" value="${escapeHtml(searchVal)}" oninput="_adminModifyState.productSearch=this.value;_rerenderAddProductList()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;margin-bottom:4px;box-sizing:border-box;" />
+        <select id="admin-mod-add-product" onchange="onAdminModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;" size="${Math.min(6, filteredProducts.length + 1)}">
+          <option value="">상품을 선택하세요 (${filteredProducts.length}개)</option>
+          ${filteredProducts.map(p => `<option value="${p.id}">${p._isBroadcast ? '★ ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
         </select>
         <div id="admin-mod-add-options" style="display:none;margin-top:6px;">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
@@ -1431,7 +1454,7 @@
             <button onclick="addAdminModifyProduct()" style="padding:5px 12px;border:none;border-radius:6px;background:#6b4220;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">추가</button>
           </div>
         </div>
-      </div>` : '';
+      </div>`;
 
     modal.innerHTML = `
       <div class="overlay-content p-6" style="max-width:460px;text-align:left;">
@@ -1479,13 +1502,30 @@
     renderAdminModifyModal();
   }
 
+  function _rerenderAddProductList() {
+    if (!_adminModifyState) return;
+    const searchVal = _adminModifyState.productSearch || '';
+    const allProds = _adminModifyState.allProducts || [];
+    const catalog = _adminModifyState.catalog || [];
+    const filtered = searchVal.length > 0
+      ? allProds.filter(p => p.name.toLowerCase().includes(searchVal.toLowerCase()))
+      : catalog;
+    const sel = document.getElementById('admin-mod-add-product');
+    if (!sel) return;
+    sel.size = Math.min(6, filtered.length + 1);
+    sel.innerHTML = `<option value="">상품을 선택하세요 (${filtered.length}개)</option>`
+      + filtered.map(p => `<option value="${p.id}">${p._isBroadcast ? '★ ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('');
+    const optDiv = document.getElementById('admin-mod-add-options');
+    if (optDiv) optDiv.style.display = 'none';
+  }
+
   function onAdminModifyAddProductChange() {
     const sel = document.getElementById('admin-mod-add-product');
     const optDiv = document.getElementById('admin-mod-add-options');
     const pid = parseInt(sel.value);
     if (!pid) { optDiv.style.display = 'none'; return; }
     const cp = _getAdminCatalogProduct(pid);
-    if (!cp) return;
+    if (!cp) { optDiv.style.display = 'none'; return; }
     optDiv.style.display = 'block';
     const colorSel = document.getElementById('admin-mod-add-color');
     const sizeSel = document.getElementById('admin-mod-add-size');
