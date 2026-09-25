@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:38</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:41</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1371,11 +1371,11 @@
     const bcProducts = bcResult ? ((bcResult.broadcast && bcResult.broadcast.products) || bcResult.products || []) : [];
     _adminModifyState.catalog = bcProducts;
     // 전체 상품을 카탈로그 형식으로 변환
-    const allProds = (allProdResult?.products || []).map(p => ({
+    const allProds = (allProdResult?.items || []).map(p => ({
       id: p.id,
       name: p.name,
-      price: p.wholesale_price || p.price || 0,
-      colors: (p.product_colors || []).map(c => ({ name: c.name })),
+      price: p.wholesalePrice || p.price || 0,
+      colors: p.colors || [],
       size: p.size || 'FREE',
       _isBroadcast: bcProducts.some(bp => bp.id === p.id)
     }));
