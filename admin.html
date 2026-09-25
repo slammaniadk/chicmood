@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:41</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:45</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1361,17 +1361,19 @@
       productSearch: ''
     };
     // 방송 상품 + 전체 상품 병렬 로드
-    const promises = [
-      api('/admin/products?isActive=true&pageSize=200').catch(() => null)
-    ];
+    const promises = [];
+    promises.push(api('/admin/products?isActive=true&pageSize=200').catch(e => { console.error('상품 로드 실패:', e); return null; }));
     if (broadcastId) {
       promises.push(api('/broadcasts/' + broadcastId).catch(() => null));
     }
-    const [allProdResult, bcResult] = await Promise.all(promises);
+    const results = await Promise.all(promises);
+    const allProdResult = results[0];
+    const bcResult = results.length > 1 ? results[1] : null;
     const bcProducts = bcResult ? ((bcResult.broadcast && bcResult.broadcast.products) || bcResult.products || []) : [];
     _adminModifyState.catalog = bcProducts;
     // 전체 상품을 카탈로그 형식으로 변환
-    const allProds = (allProdResult?.items || []).map(p => ({
+    const rawItems = (allProdResult && allProdResult.items) ? allProdResult.items : [];
+    const allProds = rawItems.map(p => ({
       id: p.id,
       name: p.name,
       price: p.wholesalePrice || p.price || 0,
@@ -1380,6 +1382,7 @@
       _isBroadcast: bcProducts.some(bp => bp.id === p.id)
     }));
     _adminModifyState.allProducts = allProds;
+    console.log('[상품수정] 전체상품:', allProds.length, '방송상품:', bcProducts.length);
     renderAdminModifyModal();
   }
 
@@ -1437,15 +1440,15 @@
     const allProds = _adminModifyState.allProducts || [];
     const searchVal = _adminModifyState.productSearch || '';
     const filteredProducts = searchVal.length > 0
-      ? allProds.filter(p => p.name.toLowerCase().includes(searchVal.toLowerCase()))
-      : catalog;
+      ? allProds.filter(p => p.name.includes(searchVal) || p.name.toLowerCase().includes(searchVal.toLowerCase()))
+      : allProds;
     const addProductHtml = `
       <div style="border-top:2px solid #e4c5a5;margin-top:8px;padding-top:10px;">
-        <p style="font-size:11px;font-weight:600;color:#7c6a56;margin-bottom:6px;">상품 추가</p>
-        <input type="text" id="admin-mod-product-search" placeholder="상품명 검색 (전체 상품에서 검색)" value="${escapeHtml(searchVal)}" oninput="_adminModifyState.productSearch=this.value;_rerenderAddProductList()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;margin-bottom:4px;box-sizing:border-box;" />
-        <select id="admin-mod-add-product" onchange="onAdminModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;" size="${Math.min(6, filteredProducts.length + 1)}">
+        <p style="font-size:11px;font-weight:600;color:#7c6a56;margin-bottom:6px;">상품 추가 (전체 ${allProds.length}개)</p>
+        <input type="text" id="admin-mod-product-search" placeholder="상품명으로 검색..." value="${escapeHtml(searchVal)}" oninput="_adminModifyState.productSearch=this.value;_rerenderAddProductList()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;margin-bottom:4px;box-sizing:border-box;" />
+        <select id="admin-mod-add-product" onchange="onAdminModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;" size="${Math.min(8, filteredProducts.length + 1)}">
           <option value="">상품을 선택하세요 (${filteredProducts.length}개)</option>
-          ${filteredProducts.map(p => `<option value="${p.id}">${p._isBroadcast ? '★ ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
+          ${filteredProducts.map(p => `<option value="${p.id}">${p._isBroadcast ? '\u2605 ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
         </select>
         <div id="admin-mod-add-options" style="display:none;margin-top:6px;">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
@@ -1506,15 +1509,14 @@
     if (!_adminModifyState) return;
     const searchVal = _adminModifyState.productSearch || '';
     const allProds = _adminModifyState.allProducts || [];
-    const catalog = _adminModifyState.catalog || [];
     const filtered = searchVal.length > 0
-      ? allProds.filter(p => p.name.toLowerCase().includes(searchVal.toLowerCase()))
-      : catalog;
+      ? allProds.filter(p => p.name.includes(searchVal) || p.name.toLowerCase().includes(searchVal.toLowerCase()))
+      : allProds;
     const sel = document.getElementById('admin-mod-add-product');
     if (!sel) return;
-    sel.size = Math.min(6, filtered.length + 1);
+    sel.size = Math.min(8, filtered.length + 1);
     sel.innerHTML = `<option value="">상품을 선택하세요 (${filtered.length}개)</option>`
-      + filtered.map(p => `<option value="${p.id}">${p._isBroadcast ? '★ ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('');
+      + filtered.map(p => `<option value="${p.id}">${p._isBroadcast ? '\u2605 ' : ''}${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('');
     const optDiv = document.getElementById('admin-mod-add-options');
     if (optDiv) optDiv.style.display = 'none';
   }
