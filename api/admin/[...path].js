@@ -2791,7 +2791,7 @@ async function handleProducts(req, res) {
     const isActiveParam = req.query.isActive || null;
     const searchParam = (req.query.search || '').trim();
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const pageSize = Math.min(200, Math.max(1, parseInt(req.query.pageSize) || 50));
+    const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize) || 50));
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 

@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.25 18:45</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 08:17</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1362,7 +1362,7 @@
     };
     // 방송 상품 + 전체 상품 병렬 로드
     const promises = [];
-    promises.push(api('/admin/products?isActive=true&pageSize=200').catch(e => { console.error('상품 로드 실패:', e); return null; }));
+    promises.push(api('/admin/products?isActive=true&pageSize=500').catch(e => { console.error('상품 로드 실패:', e); return null; }));
     if (broadcastId) {
       promises.push(api('/broadcasts/' + broadcastId).catch(() => null));
     }
@@ -3085,7 +3085,7 @@
       if (bcFilter !== 'all') params.set('status', bcFilter);
       const [broadcasts, rawProducts] = await Promise.all([
         api('/admin/broadcasts?' + params.toString()),
-        allProducts || api('/admin/products?pageSize=200').then(r => r.items || r),
+        allProducts || api('/admin/products?pageSize=500').then(r => r.items || r),
       ]);
       allProducts = rawProducts;
 
@@ -3213,7 +3213,7 @@
     const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'live', description: '', productIds: [], youtubeVideoId: null };
     b.youtubeUrl = b.youtubeVideoId ? ('https://www.youtube.com/watch?v=' + b.youtubeVideoId) : '';
     // 항상 최신 사용중 상품 목록 로드
-    try { const r = await api('/admin/products?isActive=true&pageSize=200'); allProducts = r.items || r; } catch(e) { /* keep cached */ }
+    try { const r = await api('/admin/products?isActive=true&pageSize=500'); allProducts = r.items || r; } catch(e) { /* keep cached */ }
     const products = allProducts || [];
 
     const modal = document.createElement('div');
@@ -3701,7 +3701,7 @@
     poItems = [{ productId:null, productName:'', colorName:'', sizeName:'', qty:1, costPrice:0 }];
     let vendors = [];
     try { vendors = await api('/admin/vendors'); } catch(e) {}
-    try { const r = await api('/admin/products?pageSize=200'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
+    try { const r = await api('/admin/products?pageSize=500'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'po-modal';
@@ -3861,7 +3861,7 @@
         receivedQty: it.receivedQty || 0,
       }));
       // 편집용 상품 목록 로드
-      try { const r = await api('/admin/products?pageSize=200'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
+      try { const r = await api('/admin/products?pageSize=500'); poAllProducts = r.items || r; } catch(e) { poAllProducts = []; }
       const modal = document.createElement('div');
       modal.className = 'overlay';
       modal.id = 'po-detail-modal';
@@ -4718,7 +4718,7 @@
 
   async function openInventoryModal() {
     let products = [];
-    try { const r = await api('/admin/products?pageSize=200'); products = r.items || r; } catch(e) {}
+    try { const r = await api('/admin/products?pageSize=500'); products = r.items || r; } catch(e) {}
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'inv-modal';
