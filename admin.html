@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 08:17</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 09:09</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3212,9 +3212,24 @@
     const isEdit = !!broadcast;
     const b = broadcast || { title: '', date: '', scheduledAt: '', status: 'live', description: '', productIds: [], youtubeVideoId: null };
     b.youtubeUrl = b.youtubeVideoId ? ('https://www.youtube.com/watch?v=' + b.youtubeVideoId) : '';
-    // 항상 최신 사용중 상품 목록 로드
+    // 항상 최신 사용중 상품 목록 로드 + 수정 시 최신 방송 데이터 재조회
     try { const r = await api('/admin/products?isActive=true&pageSize=500'); allProducts = r.items || r; } catch(e) { /* keep cached */ }
+    if (isEdit && b.id) {
+      try {
+        const fresh = await api('/broadcasts/' + b.id);
+        const fb = fresh.broadcast || fresh;
+        b.productIds = (fb.products || []).map(p => p.id);
+      } catch(_) {}
+    }
     const products = allProducts || [];
+    // 체크된 상품(이 방송에 등록된) 상단 정렬
+    const checkedSet = new Set(b.productIds || []);
+    const sortedProducts = [...products].sort((a, _b) => {
+      const aChecked = checkedSet.has(a.id) ? 0 : 1;
+      const bChecked = checkedSet.has(_b.id) ? 0 : 1;
+      return aChecked - bChecked;
+    });
+    const checkedCount = sortedProducts.filter(p => checkedSet.has(p.id)).length;
 
     const modal = document.createElement('div');
     modal.className = 'overlay';
@@ -3249,14 +3264,16 @@
             <p class="text-[10px] text-warm-400 mt-1">라이브 방송 URL을 입력하면 주문 시 채팅 알림이 자동 발송됩니다</p>
           </div>
           <div class="flex flex-col flex-1 min-h-0">
-            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1 flex-shrink-0">상품 선택</label>
+            <label class="text-[11px] font-semibold tracking-wider text-warm-500 block mb-1 flex-shrink-0">상품 선택 <span class="text-blue-500 font-normal">(등록 ${checkedCount}개 / 전체 ${products.length}개)</span></label>
             <input type="text" class="input-field mb-2 flex-shrink-0" placeholder="상품번호, 상품명 또는 거래처명 검색" oninput="filterBMProducts(this.value)" />
             <div id="bm-product-list" class="border border-warm-200 rounded-lg p-3 overflow-y-auto space-y-1.5 flex-1 min-h-0">
-              ${products.map(p => {
+              ${sortedProducts.map((p, idx) => {
+                const isChecked = checkedSet.has(p.id);
                 const colorStr = (p.colors || []).map(c => c.name).join(', ');
-                return `
-                <label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
-                  <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${b.productIds.includes(p.id) ? 'checked' : ''} />
+                const separator = idx > 0 && isChecked === false && checkedSet.has(sortedProducts[idx-1].id) ? '<div style="border-top:2px solid #d4a574;margin:8px 0;"></div>' : '';
+                return `${separator}
+                <label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50 ${isChecked ? 'bg-amber-50' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
+                  <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} />
                   ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 60, 80)}" class="w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
                   <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
                   <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
