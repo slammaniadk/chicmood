@@ -982,7 +982,8 @@
     }
 
     const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-    const shippingFee = subtotal >= 100000 ? 0 : 4000;
+    const isJeju = (currentUser?.addrBase || '').includes('제주');
+    const shippingFee = subtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
     const total = subtotal + shippingFee;
 
     el.innerHTML = `
@@ -1070,7 +1071,8 @@
     }
 
     const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-    const shippingFee = subtotal >= 100000 ? 0 : 4000;
+    const isJeju = (currentUser.addrBase || '').includes('제주');
+    const shippingFee = subtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
     const total = subtotal + shippingFee;
 
     const userName = currentUser.name || '';
@@ -1149,13 +1151,14 @@
     // 동일방송 재주문 배송비 자동 체크
     const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
     if (broadcastId && currentUser) {
-      checkShippingFee(broadcastId, subtotal);
+      checkShippingFee(broadcastId, subtotal, userAddrBase);
     }
   }
 
-  async function checkShippingFee(broadcastId, subtotal) {
+  async function checkShippingFee(broadcastId, subtotal, address) {
     try {
-      const result = await api(`/orders?broadcastId=${broadcastId}&subtotal=${subtotal}`);
+      const addr = address || document.getElementById('co-address')?.value || '';
+      const result = await api(`/orders?broadcastId=${broadcastId}&subtotal=${subtotal}&address=${encodeURIComponent(addr)}`);
 
       const feeEl = document.getElementById('co-shipping-fee');
       const refundEl = document.getElementById('co-shipping-refund');
@@ -1183,10 +1186,33 @@
     new daum.Postcode({
       oncomplete: function(data) {
         document.getElementById('co-zipcode').value = data.zonecode;
-        document.getElementById('co-address').value = data.roadAddress || data.jibunAddress;
+        const addr = data.roadAddress || data.jibunAddress;
+        document.getElementById('co-address').value = addr;
         document.getElementById('co-address-detail').focus();
+        updateCheckoutShipping(addr);
       }
     }).open();
+  }
+
+  function updateCheckoutShipping(address) {
+    const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+    const isJeju = (address || '').includes('제주');
+    const shippingFee = subtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
+    const total = subtotal + shippingFee;
+
+    const feeEl = document.getElementById('co-shipping-fee');
+    const totalEl = document.getElementById('co-total');
+    const btnEl = document.getElementById('co-submit-btn');
+
+    if (feeEl) feeEl.innerHTML = shippingFee === 0 ? '<span class="text-green-600">무료</span>' : fmt(shippingFee);
+    if (totalEl) totalEl.textContent = fmt(total);
+    if (btnEl) btnEl.textContent = '구매하기 · ' + fmt(total);
+
+    // 동일방송 재주문이면 서버에서 재계산
+    const broadcastId = cart.find(i => i.broadcastId)?.broadcastId || null;
+    if (broadcastId && currentUser) {
+      checkShippingFee(broadcastId, subtotal, address);
+    }
   }
 
   async function submitCheckout() {

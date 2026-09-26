@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   // 주문 조회
   const { data: order, error: oErr } = await supabaseAdmin
     .from('orders')
-    .select('id, status, user_id, broadcast_id, name, phone')
+    .select('id, status, user_id, broadcast_id, name, phone, address')
     .eq('order_no', orderNo)
     .single();
 
@@ -113,8 +113,9 @@ module.exports = async function handler(req, res) {
 
   const newSubtotal = newOrderItems.reduce((s, i) => s + i.subtotal, 0);
 
-  // 배송비 재계산 (동일방송 동일회원 기준)
-  let shippingFee = newSubtotal >= 100000 ? 0 : 4000;
+  // 배송비 재계산 (동일방송 동일회원 기준, 제주 지역 추가 배송비)
+  const isJeju = (order.address || '').includes('제주');
+  let shippingFee = newSubtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
   let shippingRefund = 0;
 
   if (order.broadcast_id) {

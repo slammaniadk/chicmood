@@ -12,9 +12,11 @@ module.exports = async function handler(req, res) {
 
     const broadcastId = req.query.broadcastId;
     const subtotal = parseInt(req.query.subtotal) || 0;
+    const address = req.query.address || '';
     if (!broadcastId || !subtotal) return fail(res, '필수 정보가 누락되었습니다');
 
-    let shippingFee = subtotal >= 100000 ? 0 : 4000;
+    const isJeju = address.includes('제주');
+    let shippingFee = subtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
     let shippingRefund = 0;
     let cumulativeSubtotal = subtotal;
 
@@ -123,8 +125,9 @@ module.exports = async function handler(req, res) {
 
   const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0);
 
-  // 동일방송 동일회원 누적 배송비 로직
-  let shippingFee = subtotal >= 100000 ? 0 : 4000;
+  // 동일방송 동일회원 누적 배송비 로직 (제주 지역 추가 배송비)
+  const isJeju = (address || '').includes('제주');
+  let shippingFee = subtotal >= 100000 ? (isJeju ? 3000 : 0) : (isJeju ? 7000 : 4000);
   let shippingRefund = 0;
 
   if (parseInt(broadcastId)) {

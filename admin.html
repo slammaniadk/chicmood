@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 09:09</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 2.9.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 15:31</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -5454,6 +5454,12 @@
                 <form onsubmit="return false;" class="space-y-3">
                   <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">기본 택배사</label><input id="sys-carrier" class="input-field" value="${escapeHtml(shipping.carrier||'')}" /></div>
                   <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">배송비</label><input id="sys-fee" type="number" class="input-field" value="${shipping.fee||0}" /></div>
+                  <div class="bg-warm-100/60 border border-warm-200 rounded p-3 text-[11px] text-warm-600 leading-relaxed">
+                    <p class="font-semibold text-warm-700 mb-1">배송비 자동 적용 안내</p>
+                    <p>일반지역: 10만원 미만 4,000원 / 10만원 이상 무료</p>
+                    <p>제주/산간: 10만원 미만 7,000원 / 10만원 이상 3,000원</p>
+                    <p class="text-warm-400 mt-1">* 주소에 "제주" 포함 시 자동 적용</p>
+                  </div>
                   <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">무료배송 기준</label><input id="sys-free" type="number" class="input-field" value="${shipping.freeThreshold||0}" /></div>
                   <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">코드</label><input id="sys-code" class="input-field" value="${escapeHtml(shipping.code||'')}" /></div>
                   <button class="btn-primary w-full" onclick="saveShippingSettings()">저장</button>
