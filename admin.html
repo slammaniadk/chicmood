@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.26 15:33</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.0</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.27 17:34</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1379,6 +1379,7 @@
       price: p.wholesalePrice || p.price || 0,
       colors: p.colors || [],
       size: p.size || 'FREE',
+      lengthOptions: p.lengthOptions || '',
       _isBroadcast: bcProducts.some(bp => bp.id === p.id)
     }));
     _adminModifyState.allProducts = allProds;
@@ -1410,6 +1411,10 @@
       const cp = _getAdminCatalogProduct(item.productId);
       const colors = cp ? cp.colors : [];
       const sizes = cp ? (cp.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean) : [];
+      const lengths = cp && cp.lengthOptions ? cp.lengthOptions.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const sizeParts = (item.size || '').split(' / ');
+      const baseSize = sizeParts[0] || '';
+      const curLength = sizeParts[1] || '';
       return `
         <div style="padding:10px 0;${idx > 0 ? 'border-top:1px solid #f0dcc8;' : ''}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -1423,10 +1428,16 @@
               </select>
             ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.color || '')}</span>`}
             ${sizes.length > 0 ? `
-              <select onchange="adminModifyItemOption(${idx},'size',this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
-                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === item.size ? 'selected' : ''}>${s}</option>`).join('')}
+              <select onchange="adminModifyItemSize(${idx},this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === baseSize ? 'selected' : ''}>${s}</option>`).join('')}
               </select>
-            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.size || '')}</span>`}
+            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(baseSize || '')}</span>`}
+            ${lengths.length > 0 ? `
+              <select onchange="adminModifyItemLength(${idx},this.value)" style="flex:1;min-width:60px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                <option value="" ${!curLength ? 'selected' : ''}>기장</option>
+                ${lengths.map(l => `<option value="${escapeHtml(l)}" ${l === curLength ? 'selected' : ''}>${l}</option>`).join('')}
+              </select>
+            ` : ''}
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <button onclick="adminModifyItemQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">−</button>
               <span style="width:22px;text-align:center;font-size:13px;font-weight:600;">${item.qty}</span>
@@ -1488,6 +1499,20 @@
   function adminModifyItemOption(idx, field, value) {
     if (!_adminModifyState) return;
     _adminModifyState.items[idx][field] = value;
+  }
+
+  function adminModifyItemSize(idx, baseSize) {
+    if (!_adminModifyState) return;
+    const cur = _adminModifyState.items[idx].size || '';
+    const lengthPart = cur.includes(' / ') ? cur.split(' / ')[1] : '';
+    _adminModifyState.items[idx].size = lengthPart ? baseSize + ' / ' + lengthPart : baseSize;
+  }
+
+  function adminModifyItemLength(idx, lengthVal) {
+    if (!_adminModifyState) return;
+    const cur = _adminModifyState.items[idx].size || '';
+    const baseSize = cur.split(' / ')[0];
+    _adminModifyState.items[idx].size = lengthVal ? baseSize + ' / ' + lengthVal : baseSize;
   }
 
   function adminModifyItemQty(idx, delta) {

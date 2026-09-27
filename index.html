@@ -400,6 +400,11 @@
       const cp = _getCatalogProduct(item.productId);
       const colors = cp ? cp.colors : [];
       const sizes = cp ? (cp.size || 'FREE').split(',').map(s => s.trim()).filter(Boolean) : [];
+      const lengths = cp && cp.lengthOptions ? cp.lengthOptions.split(',').map(s => s.trim()).filter(Boolean) : [];
+      // 현재 사이즈에서 기장 분리 (예: "M / Short" → baseSize="M", curLength="Short")
+      const sizeParts = item.size.split(' / ');
+      const baseSize = sizeParts[0] || '';
+      const curLength = sizeParts[1] || '';
       return `
         <div style="padding:10px 0;${idx > 0 ? 'border-top:1px solid #f3ebe0;' : ''}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -413,10 +418,16 @@
               </select>
             ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.color)}</span>`}
             ${sizes.length > 0 ? `
-              <select onchange="modifyItemOption(${idx},'size',this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
-                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === item.size ? 'selected' : ''}>${s}</option>`).join('')}
+              <select onchange="modifyItemSize(${idx},this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === baseSize ? 'selected' : ''}>${s}</option>`).join('')}
               </select>
-            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.size)}</span>`}
+            ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(baseSize)}</span>`}
+            ${lengths.length > 0 ? `
+              <select onchange="modifyItemLength(${idx},this.value)" style="flex:1;min-width:60px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
+                <option value="" ${!curLength ? 'selected' : ''}>기장</option>
+                ${lengths.map(l => `<option value="${escapeHtml(l)}" ${l === curLength ? 'selected' : ''}>${l}</option>`).join('')}
+              </select>
+            ` : ''}
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
               <button onclick="modifyItemQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">−</button>
               <span style="width:22px;text-align:center;font-size:13px;font-weight:600;">${item.qty}</span>
@@ -471,6 +482,20 @@
   function modifyItemOption(index, field, value) {
     if (!_modifyState) return;
     _modifyState.items[index][field] = value;
+  }
+
+  function modifyItemSize(index, baseSize) {
+    if (!_modifyState) return;
+    const cur = _modifyState.items[index].size;
+    const lengthPart = cur.includes(' / ') ? cur.split(' / ')[1] : '';
+    _modifyState.items[index].size = lengthPart ? baseSize + ' / ' + lengthPart : baseSize;
+  }
+
+  function modifyItemLength(index, lengthVal) {
+    if (!_modifyState) return;
+    const cur = _modifyState.items[index].size;
+    const baseSize = cur.split(' / ')[0];
+    _modifyState.items[index].size = lengthVal ? baseSize + ' / ' + lengthVal : baseSize;
   }
 
   function modifyItemQty(index, delta) {
