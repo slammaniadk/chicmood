@@ -1026,6 +1026,19 @@ async function handleOrderModify(req, res, orderId) {
   if (order.status === '결제완료') postTasks.push(createAutoPurchaseOrders(orderId));
   await Promise.all(postTasks);
 
+  // 8-1. 입고된 재고가 있으면 배정 재실행 (주문 수정 시 allocated_qty 초기화 보완)
+  if (order.status === '결제완료') {
+    const allocCombos = new Set();
+    const allocTasks = [];
+    for (const item of newOrderItems) {
+      const key = `${item.product_id}|${item.color}|${item.size}`;
+      if (allocCombos.has(key)) continue;
+      allocCombos.add(key);
+      allocTasks.push(allocateByProduct(item.product_id, item.color, item.size));
+    }
+    if (allocTasks.length > 0) await Promise.all(allocTasks);
+  }
+
   return ok(res, {
     orderId,
     subtotal: newSubtotal,
