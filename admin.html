@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.7</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.28 14:14</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.8</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.28 14:47</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -1978,6 +1978,7 @@
           <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
             <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">배송관리</h2>
             <div class="flex gap-2">
+              <button onclick="mergeShippingOrders()" class="btn-outline btn-sm" style="color:#6b4220;border-color:#6b4220;">주문 병합 <span id="ship-merge-counter" class="text-warm-500"></span></button>
               <button onclick="downloadShippingExcel()" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="renderShipping(document.getElementById('page-content'))">🔄 새로고침</button>
               <button class="btn-primary flex items-center gap-2" onclick="downloadLozenExcel()">
@@ -2038,12 +2039,52 @@
     if (checked) shippingChecked.add(key); else shippingChecked.delete(key);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
+    const mc = document.getElementById('ship-merge-counter');
+    if (mc) mc.textContent = shippingChecked.size > 0 ? `(${shippingChecked.size})` : '';
   }
   function toggleAllShipping(checked) {
     _shippingOrderKeys.forEach(key => { if (checked) shippingChecked.add(key); else shippingChecked.delete(key); });
     document.querySelectorAll('.ship-chk').forEach(cb => cb.checked = checked);
     const cnt = document.getElementById('ship-count');
     if (cnt) cnt.textContent = shippingChecked.size;
+    const mc = document.getElementById('ship-merge-counter');
+    if (mc) mc.textContent = shippingChecked.size > 0 ? `(${shippingChecked.size})` : '';
+  }
+
+  async function mergeShippingOrders() {
+    if (shippingChecked.size < 2) {
+      showToast('병합할 주문을 2건 이상 선택해주세요');
+      return;
+    }
+    const ids = [...shippingChecked];
+    const selected = _shippingOrders.filter(o => ids.includes(o.id));
+    const nonReady = selected.filter(o => o.status !== '배송준비');
+    if (nonReady.length > 0) {
+      showToast('배송준비 상태의 주문만 병합할 수 있습니다');
+      return;
+    }
+    const firstName = selected[0]?.name;
+    const firstPhone = selected[0]?.phone;
+    if (!selected.every(o => o.name === firstName && o.phone === firstPhone)) {
+      showToast('같은 수취인(이름+연락처)의 주문만 병합할 수 있습니다');
+      return;
+    }
+    if (!confirm(`${firstName}(${firstPhone})님의 주문 ${ids.length}건을 병합하시겠습니까?\n첫 번째 주문에 나머지 품목이 합쳐지고, 나머지 주문은 삭제됩니다.`)) return;
+    suppressOrderNoti = true;
+    try {
+      await api('/admin/orders/merge', {
+        method: 'POST',
+        body: JSON.stringify({ targetId: ids[0], sourceIds: ids.slice(1) })
+      });
+      ids.forEach(id => notifiedOrderIds.add(id));
+      orderLastTimestamp = new Date().toISOString();
+      showToast(`${ids.length}건의 주문이 병합되었습니다`);
+      shippingChecked.clear();
+      renderShipping(document.getElementById('page-content'));
+    } catch (e) {
+      showToast(e.message || '주문 병합에 실패했습니다');
+    }
+    suppressOrderNoti = false;
   }
 
   async function saveTrackingNo(orderId) {
