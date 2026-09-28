@@ -524,6 +524,21 @@ async function handleOrderMerge(req, res) {
     name: target.name,
   });
 
+  // 11) 전량배정 시 자동 배송준비 승격
+  if (target.status === '결제완료') {
+    const { data: mergedItems } = await supabaseAdmin.from('order_items')
+      .select('qty, allocated_qty, status').eq('order_id', targetId);
+    const active = (mergedItems || []).filter(i => i.status !== '결제취소');
+    if (active.length > 0 && active.every(i => (i.allocated_qty || 0) >= i.qty)) {
+      await supabaseAdmin.from('order_items')
+        .update({ status: '배송준비' })
+        .eq('order_id', targetId).eq('status', '결제완료');
+      await supabaseAdmin.from('orders')
+        .update({ status: '배송준비' })
+        .eq('id', targetId).eq('status', '결제완료');
+    }
+  }
+
   return ok(res, { merged: true, targetId, mergedCount: sourceIds.length });
 }
 
