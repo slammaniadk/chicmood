@@ -3806,9 +3806,7 @@
   }
 
   function getVendorProducts() {
-    const vendorId = document.getElementById('po-vendor')?.value;
-    if (!vendorId) return poAllProducts;
-    return poAllProducts.filter(p => String(p.vendorId) === String(vendorId));
+    return poAllProducts;
   }
 
   function onPOProductSelect(idx) {
