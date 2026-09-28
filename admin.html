@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.9</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.28 14:59</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.10</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.28 15:05</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3994,6 +3994,9 @@
             <h4 class="font-semibold text-warm-800 text-[13px]">발주 품목</h4>
             <button class="btn-outline btn-sm" id="po-edit-toggle" onclick="togglePOEdit()">수정</button>
           </div>
+          <div id="po-edit-search-wrap" style="display:none" class="mb-2">
+            <input type="text" id="po-edit-search-input" class="input-field" placeholder="상품명 또는 거래처명 검색" oninput="filterPOEditProducts(this.value)" />
+          </div>
           <div id="po-detail-items-area" class="overflow-x-auto mb-4">
             ${renderPODetailItemsView(po.items, po.status)}
           </div>
@@ -4067,10 +4070,18 @@
     }
   }
 
+  let poProductFilter = '';
   function togglePOEdit() {
     poEditMode = !poEditMode;
+    poProductFilter = '';
     const btn = document.getElementById('po-edit-toggle');
     if (btn) btn.textContent = poEditMode ? '편집 취소' : '수정';
+    const searchWrap = document.getElementById('po-edit-search-wrap');
+    if (searchWrap) { searchWrap.style.display = poEditMode ? '' : 'none'; const inp = document.getElementById('po-edit-search-input'); if (inp) inp.value = ''; }
+    renderPODetailItemsEdit();
+  }
+  function filterPOEditProducts(keyword) {
+    poProductFilter = keyword.trim().toLowerCase();
     renderPODetailItemsEdit();
   }
 
@@ -4100,10 +4111,17 @@
     }
     // 현재 발주에 등록된 상품 ID
     const poProductIds = new Set(poEditItems.map(it => it.productId).filter(Boolean));
-    const registeredProducts = poAllProducts.filter(p => poProductIds.has(p.id));
-    const otherProducts = poAllProducts.filter(p => !poProductIds.has(p.id));
+    const sortByName = (a, b) => (a.name || '').localeCompare(b.name || '', 'ko');
+    const registeredProducts = poAllProducts.filter(p => poProductIds.has(p.id)).sort(sortByName);
+    const allSorted = poAllProducts.filter(p => !poProductIds.has(p.id)).sort(sortByName);
+    // 검색 필터 적용
+    const q = poProductFilter;
+    const matchFilter = p => !q || p.name.toLowerCase().includes(q) || (p.vendorName||'').toLowerCase().includes(q) || String(p.id).includes(q);
+    const filteredRegistered = registeredProducts.filter(matchFilter);
+    const filteredOther = allSorted.filter(matchFilter);
+    const optLabel = p => escapeHtml(p.name) + (p.vendorName ? ' ['+escapeHtml(p.vendorName)+']' : '') + (p.costPrice ? ' ('+fmt(p.costPrice)+')' : '');
     area.innerHTML = `
-      <p class="text-[11px] text-warm-500 mb-2">상품 <span class="text-blue-500 font-semibold">등록 ${registeredProducts.length}개</span> / 전체 ${poAllProducts.length}개</p>
+      <p class="text-[11px] text-warm-500 mb-2">상품 <span class="text-blue-500 font-semibold">등록 ${registeredProducts.length}개</span> / 전체 ${poAllProducts.length}개${q ? ' · 검색결과 '+(filteredRegistered.length+filteredOther.length)+'개' : ''}</p>
       <div id="po-edit-items-list" onclick="event.stopPropagation()">
         ${poEditItems.map((item,i) => {
           const selectedProd = poAllProducts.find(p => p.id === item.productId);
@@ -4111,17 +4129,19 @@
           const sizes = getPOSizesWithLength(selectedProd);
           // 상품 옵션: 현재 발주 등록 상품 → 삭제/미확인 상품 → 기타 전체 상품
           let productOpts = '<option value="">상품 선택</option>';
-          if (registeredProducts.length > 0) {
-            productOpts += '<optgroup label="── 현재 발주 상품 ──">';
-            productOpts += registeredProducts.map(p => '<option value="'+p.id+'" '+(p.id===item.productId?'selected':'')+'>'+escapeHtml(p.name)+(p.costPrice?' ('+fmt(p.costPrice)+')':'')+'</option>').join('');
+          if (filteredRegistered.length > 0) {
+            productOpts += '<optgroup label="── 현재 발주 상품 ('+registeredProducts.length+'개) ──">';
+            productOpts += filteredRegistered.map(p => '<option value="'+p.id+'" '+(p.id===item.productId?'selected':'')+'>'+optLabel(p)+'</option>').join('');
             productOpts += '</optgroup>';
           }
           if (item.productId && !selectedProd && item.productName) {
             productOpts += '<optgroup label="── 삭제/미확인 상품 ──"><option value="'+item.productId+'" selected>'+escapeHtml(item.productName)+'</option></optgroup>';
           }
-          productOpts += '<optgroup label="── 전체 상품 ──">';
-          productOpts += otherProducts.map(p => '<option value="'+p.id+'" '+(p.id===item.productId?'selected':'')+'>'+escapeHtml(p.name)+(p.costPrice?' ('+fmt(p.costPrice)+')':'')+'</option>').join('');
-          productOpts += '</optgroup>';
+          if (filteredOther.length > 0) {
+            productOpts += '<optgroup label="── 전체 상품 ('+allSorted.length+'개) ──">';
+            productOpts += filteredOther.map(p => '<option value="'+p.id+'" '+(p.id===item.productId?'selected':'')+'>'+optLabel(p)+'</option>').join('');
+            productOpts += '</optgroup>';
+          }
           return `
           <div class="border border-warm-200 rounded p-3 mb-2 relative">
             ${poEditItems.length > 1 ? `<button type="button" onclick="removePOEditItem(${i})" class="absolute top-1 right-2 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">&times;</button>` : ''}
