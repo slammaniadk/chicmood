@@ -1118,12 +1118,26 @@ async function handleOrderDetail(req, res, id) {
   if (error) return fail(res, error.message, 500);
   if (!data) return fail(res, '주문을 찾을 수 없습니다', 404);
 
-  // 결제완료 전환 시 자동 발주 생성 + 모든 품목 status = '결제완료'
+  // 결제완료 전환 시 자동 발주 생성 + 모든 품목 status = '결제완료' + 배정 재실행
   if (status === '결제완료' && prevStatus && prevStatus !== '결제완료') {
     await createAutoPurchaseOrders(id);
     await supabaseAdmin.from('order_items')
       .update({ status: '결제완료' })
       .eq('order_id', id);
+    // 입고된 재고가 있으면 배정 재실행 (배송준비→결제완료 되돌리기 시 자동 승격 보장)
+    const { data: newItems } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size').eq('order_id', id);
+    if (newItems && newItems.length > 0) {
+      const combos = new Set();
+      const tasks = [];
+      for (const item of newItems) {
+        const key = `${item.product_id}|${item.color}|${item.size}`;
+        if (combos.has(key)) continue;
+        combos.add(key);
+        tasks.push(allocateByProduct(item.product_id, item.color, item.size));
+      }
+      if (tasks.length > 0) await Promise.all(tasks);
+    }
   }
   // 결제완료에서 다른 상태로 변경 시 발주 수량 차감
   if (prevStatus === '결제완료' && status !== '결제완료') {
