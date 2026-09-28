@@ -72,6 +72,7 @@ module.exports = async function handler(req, res) {
       if (resourceId === 'merge') return handleOrderMerge(req, res);
       if (resourceId === 'unmerge') return handleOrderUnmerge(req, res);
       if (resourceId === 'split') return handleOrderSplit(req, res);
+      if (resourceId === 'bulk-delete') return handleOrderBulkDelete(req, res);
       if (resourceId && pathSegments[2] === 'modify') return handleOrderModify(req, res, resourceId);
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3] && pathSegments[4] === 'transfer-allocation') {
         return handleTransferAllocation(req, res, resourceId, pathSegments[3]);
@@ -366,6 +367,48 @@ async function handleOrders(req, res) {
   }));
 
   return ok(res, { orders: result, total: count, page: pageNum, limit: limitNum });
+}
+
+// ============================================================
+//  ORDER BULK DELETE (결제취소 일괄삭제)
+// ============================================================
+async function handleOrderBulkDelete(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return fail(res, '삭제할 주문 ID가 필요합니다');
+  }
+
+  // 모든 주문 조회
+  const { data: orders, error: fetchErr } = await supabaseAdmin
+    .from('orders').select('id, status, order_no').in('id', ids);
+  if (fetchErr) return fail(res, fetchErr.message, 500);
+  if (!orders || orders.length !== ids.length) {
+    return fail(res, '일부 주문을 찾을 수 없습니다');
+  }
+
+  // 모든 주문이 결제취소 상태인지 검증
+  const nonCancelled = orders.filter(o => o.status !== '결제취소');
+  if (nonCancelled.length > 0) {
+    const nos = nonCancelled.map(o => o.order_no).join(', ');
+    return fail(res, `결제취소 상태가 아닌 주문이 포함되어 있습니다: ${nos}`);
+  }
+
+  // 개별 삭제 로직 (기존 DELETE 로직 재사용)
+  let deletedCount = 0;
+  for (const order of orders) {
+    await deductPurchaseOrderQty(order.id);
+    await restoreAvailableQty(order.id);
+    await supabaseAdmin.from('order_items').delete().eq('order_id', order.id);
+    const { error } = await supabaseAdmin.from('orders').delete().eq('id', order.id);
+    if (!error) {
+      await writeLog(req._admin, 'DELETE', 'order', order.id, { status: order.status, bulk: true });
+      deletedCount++;
+    }
+  }
+
+  return ok(res, { deleted: true, deletedCount });
 }
 
 // ============================================================
