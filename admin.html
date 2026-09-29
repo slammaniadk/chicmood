@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.12</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.28 16:13</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.14</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.29</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4049,7 +4049,7 @@
             <td>${escapeHtml(it.colorName||'')}</td>
             <td>${escapeHtml(it.sizeName||'')}</td>
             <td>${it.qty}</td>
-            ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" onchange="poEditItems[${idx}].receivedQty=parseInt(this.value)||0;this.closest('tr').querySelector('.remaining-qty').textContent=${it.qty}-(parseInt(this.value)||0)" /></td><td class="remaining-qty ${remaining > 0 ? 'text-red-500 font-semibold' : 'text-green-600'}">${remaining}</td>` : ''}
+            ${showReceived ? `<td><input type="number" class="input-field" style="width:70px;padding:4px 6px;text-align:center" value="${it.receivedQty || 0}" min="0" max="${it.qty}" oninput="poEditItems[${idx}].receivedQty=Math.max(0,parseInt(this.value)||0);this.closest('tr').querySelector('.remaining-qty').textContent=${it.qty}-poEditItems[${idx}].receivedQty" /></td><td class="remaining-qty ${remaining > 0 ? 'text-red-500 font-semibold' : 'text-green-600'}">${remaining}</td>` : ''}
             <td>${fmt(it.costPrice)}</td>
             <td class="font-semibold">${fmt(it.subtotal || (it.qty||0) * (it.costPrice||0))}</td>
             ${hasAnySources ? `<td>${sourceLabel}${sourceDetail}</td>` : ''}
@@ -4185,7 +4185,7 @@
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-[10px] text-warm-400 block mb-1">수량</label>
-                <input type="number" class="input-field" placeholder="수량" value="${item.qty}" min="1" onblur="poEditItems[${i}].qty=parseInt(this.value)||1;updatePOEditTotal();validatePOEditCostPrice(${i})" />
+                <input type="number" class="input-field" placeholder="수량" value="${item.qty}" min="0" onblur="poEditItems[${i}].qty=Math.max(0,parseInt(this.value)||0);this.value=poEditItems[${i}].qty;updatePOEditTotal();validatePOEditCostPrice(${i})" />
               </div>
               <div>
                 <label class="text-[10px] text-warm-400 block mb-1">매입가</label>
@@ -4224,7 +4224,7 @@
     const memo = document.getElementById('po-detail-memo').value.trim();
     const body = { status, memo };
     if (poEditMode) {
-      body.items = poEditItems.filter(i => i.productName);
+      body.items = poEditItems.filter(i => i.productName && i.qty > 0);
       if (body.items.length === 0) { showToast('품목을 최소 1개 입력해주세요'); return; }
       const invalidIdx = body.items.findIndex(i => !i.costPrice || i.costPrice <= 0);
       if (invalidIdx >= 0) {
