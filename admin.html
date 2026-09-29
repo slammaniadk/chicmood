@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.15</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.29 09:38</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.16</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.29 10:06</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -830,6 +830,7 @@
             <div class="flex items-center gap-2">
               <span id="merge-counter" class="text-[12px] text-warm-500">${mergeChecked.size > 0 ? mergeChecked.size + '건 선택' : ''}</span>
               <button class="btn-outline btn-sm" style="color:#6366f1;border-color:#6366f1" onclick="mergeOrders()">주문 병합</button>
+              <button class="btn-outline btn-sm" style="color:#059669;border-color:#059669" onclick="reallocateAll()">전체 재배정</button>
               <button class="btn-outline btn-sm" style="color:#e53e3e;border-color:#e53e3e" onclick="bulkDeleteCancelledOrders()">결제취소 일괄삭제</button>
               <button onclick="downloadOrderExcel()" class="btn-outline btn-sm flex items-center gap-1" title="엑셀 다운로드"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>엑셀</button>
               <button class="btn-outline btn-sm" onclick="mergeChecked.clear();renderOrders(document.getElementById('page-content'))">🔄 새로고침</button>
@@ -1732,6 +1733,16 @@
       showToast('주문이 삭제되었습니다');
       renderOrders(document.getElementById('page-content'));
     } catch (e) { showToast(e.message || '삭제에 실패했습니다'); }
+  }
+
+  async function reallocateAll() {
+    if (!confirm('결제완료 주문에 대해 재고 기반 전체 재배정을 실행하시겠습니까?')) return;
+    try {
+      showToast('재배정 실행 중...');
+      const result = await api('/admin/orders/reallocate-all', { method: 'POST' });
+      showToast(`재배정 완료: ${result.allocated}건 배정, ${result.orders}건 주문 영향`);
+      renderOrders(document.getElementById('page-content'));
+    } catch (e) { showToast(e.message || '재배정에 실패했습니다'); }
   }
 
   async function bulkDeleteCancelledOrders() {

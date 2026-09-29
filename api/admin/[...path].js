@@ -73,6 +73,7 @@ module.exports = async function handler(req, res) {
       if (resourceId === 'unmerge') return handleOrderUnmerge(req, res);
       if (resourceId === 'split') return handleOrderSplit(req, res);
       if (resourceId === 'bulk-delete') return handleOrderBulkDelete(req, res);
+      if (resourceId === 'reallocate-all') return handleReallocateAll(req, res);
       if (resourceId && pathSegments[2] === 'modify') return handleOrderModify(req, res, resourceId);
       if (resourceId && pathSegments[2] === 'items' && pathSegments[3] && pathSegments[4] === 'transfer-allocation') {
         return handleTransferAllocation(req, res, resourceId, pathSegments[3]);
@@ -228,7 +229,8 @@ async function handleOrders(req, res) {
     const { data: candidates } = await supabaseAdmin
       .from('orders')
       .select('id, broadcast_id, name, phone')
-      .not('status', 'in', '("배송완료","결제취소")');
+      .not('status', 'in', '("배송완료","결제취소")')
+      .limit(5000);
     if (candidates && candidates.length > 0) {
       const groups = {};
       for (const c of candidates) {
@@ -1619,7 +1621,7 @@ async function allocateReceivedToOrders(poId) {
     const processedCombos = new Set();
     const uniqueCombos = [];
     for (const poItem of validItems) {
-      const comboKey = `${poItem.product_id}|${poItem.color_name}|${poItem.size_name}`;
+      const comboKey = `${poItem.product_id}|${poItem.color_name || ''}|${poItem.size_name || ''}`;
       if (processedCombos.has(comboKey)) continue;
       processedCombos.add(comboKey);
       uniqueCombos.push(poItem);
@@ -1647,23 +1649,23 @@ async function allocateReceivedToOrders(poId) {
     const allocOps = [];
 
     for (const poItem of uniqueCombos) {
-      // 실재고 조회 (inventory 테이블)
+      // 실재고 조회 (inventory 테이블) — null-safe 비교
       const invRecord = (allInventory || [])
-        .find(i => i.product_id === poItem.product_id && i.color_name === poItem.color_name && i.size_name === poItem.size_name);
+        .find(i => i.product_id === poItem.product_id && (i.color_name || '') === (poItem.color_name || '') && (i.size_name || '') === (poItem.size_name || ''));
       const stockQty = invRecord ? (invRecord.stock_qty || 0) : 0;
       if (stockQty <= 0) continue;
 
-      // 이미 배정된 총량 (배송완료/결제취소 제외)
+      // 이미 배정된 총량 (배송완료/결제취소 제외) — null-safe 비교
       const totalAlreadyAllocated = (allAllocItemsRaw || [])
-        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name && (i.allocated_qty || 0) > 0)
+        .filter(i => i.product_id === poItem.product_id && (i.color || '') === (poItem.color_name || '') && (i.size || '') === (poItem.size_name || '') && (i.allocated_qty || 0) > 0)
         .reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
 
       let remaining = Math.max(0, stockQty - totalAlreadyAllocated);
       if (remaining <= 0) continue;
 
-      // 결제완료 주문의 매칭 품목 (동일 방송 우선 + FIFO 정렬)
+      // 결제완료 주문의 매칭 품목 (동일 방송 우선 + FIFO 정렬) — null-safe 비교
       const matchingItems = (allAllocItemsRaw || [])
-        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name && paidOrderSet.has(i.order_id))
+        .filter(i => i.product_id === poItem.product_id && (i.color || '') === (poItem.color_name || '') && (i.size || '') === (poItem.size_name || '') && paidOrderSet.has(i.order_id))
         .sort((a, b) => {
           const aSame = poBroadcastId && orderBroadcastMap[a.order_id] === poBroadcastId ? 0 : 1;
           const bSame = poBroadcastId && orderBroadcastMap[b.order_id] === poBroadcastId ? 0 : 1;
@@ -1796,6 +1798,50 @@ async function allocateByProduct(productId, colorName, sizeName) {
   } catch (e) { return { allocated: 0, error: e.message }; }
 }
 
+// 전체 재배정: 결제완료 주문의 미배정 품목에 대해 재고 기반 FIFO 배정 실행
+async function handleReallocateAll(req, res) {
+  if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
+  try {
+    // 1) 결제완료 주문의 미배정 품목 조회
+    const { data: paidOrders } = await supabaseAdmin.from('orders')
+      .select('id').eq('status', '결제완료').order('created_at', { ascending: true }).limit(5000);
+    if (!paidOrders || paidOrders.length === 0) return ok(res, { message: '결제완료 주문이 없습니다', allocated: 0, orders: 0 });
+
+    const paidIds = paidOrders.map(o => o.id);
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size')
+      .in('order_id', paidIds)
+      .eq('status', '결제완료')
+      .limit(5000);
+    if (!items || items.length === 0) return ok(res, { message: '미배정 품목이 없습니다', allocated: 0, orders: 0 });
+
+    // 2) 고유 상품/색상/사이즈 조합 추출
+    const combos = new Set();
+    const uniqueItems = [];
+    for (const item of items) {
+      if (!item.product_id) continue;
+      const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
+      if (combos.has(key)) continue;
+      combos.add(key);
+      uniqueItems.push(item);
+    }
+
+    // 3) 각 조합에 대해 allocateByProduct 실행
+    let totalAllocated = 0;
+    let totalOrders = 0;
+    for (const item of uniqueItems) {
+      const result = await allocateByProduct(item.product_id, item.color || '', item.size || '');
+      totalAllocated += result.allocated || 0;
+      totalOrders += result.orders || 0;
+    }
+
+    await writeLog(req._admin, 'UPDATE', 'order', null, { action: '전체재배정', allocated: totalAllocated, orders: totalOrders });
+    return ok(res, { message: `재배정 완료`, allocated: totalAllocated, orders: totalOrders });
+  } catch (e) {
+    return fail(res, e.message || '재배정 오류', 500);
+  }
+}
+
 // 입고수량 감소 시 초과 배정 해제 (LIFO: 최근 배정부터 해제)
 async function deallocateExcessFromOrders(poId) {
   try {
@@ -1810,7 +1856,7 @@ async function deallocateExcessFromOrders(poId) {
     const processedCombos = new Set();
     const uniqueCombos = [];
     for (const item of validItems) {
-      const key = `${item.product_id}|${item.color_name}|${item.size_name}`;
+      const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
       if (processedCombos.has(key)) continue;
       processedCombos.add(key);
       uniqueCombos.push(item);
@@ -1829,13 +1875,13 @@ async function deallocateExcessFromOrders(poId) {
     const deallocOps = [];
 
     for (const poItem of uniqueCombos) {
-      // 실재고 조회 (inventory 테이블)
+      // 실재고 조회 (inventory 테이블) — null-safe 비교
       const invRecord = (allInventory || [])
-        .find(i => i.product_id === poItem.product_id && i.color_name === poItem.color_name && i.size_name === poItem.size_name);
+        .find(i => i.product_id === poItem.product_id && (i.color_name || '') === (poItem.color_name || '') && (i.size_name || '') === (poItem.size_name || ''));
       const stockQty = invRecord ? (invRecord.stock_qty || 0) : 0;
 
       const allocItems = (allAllocItemsRaw || [])
-        .filter(i => i.product_id === poItem.product_id && i.color === poItem.color_name && i.size === poItem.size_name);
+        .filter(i => i.product_id === poItem.product_id && (i.color || '') === (poItem.color_name || '') && (i.size || '') === (poItem.size_name || ''));
       const totalAllocated = allocItems.reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
 
       let excess = totalAllocated - stockQty;
