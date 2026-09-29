@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.14</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.29</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.15</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.09.29 09:38</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3723,8 +3723,8 @@
           <div class="flex flex-wrap items-center gap-3 mb-4">
             <div class="flex flex-wrap gap-2 items-center">
               <select class="input-field" style="max-width:240px;padding:4px 8px;font-size:13px;" onchange="poBroadcastId=this.value;poPage=1;renderPurchaseOrders(document.getElementById('page-content'))">
-                <option value="live" ${poBroadcastId==='live'?'selected':''}>방송중 전체</option>
                 <option value="all" ${poBroadcastId==='all'?'selected':''}>전체</option>
+                <option value="live" ${poBroadcastId==='live'?'selected':''}>방송중 전체</option>
                 ${(allBroadcasts||[]).map(b => `<option value="${b.id}" ${String(poBroadcastId)===String(b.id)?'selected':''}>${escapeHtml(b.title||b.date||'방송 #'+b.id)}${b.status==='live'?' (방송중)':''}</option>`).join('')}
               </select>
               <span class="text-warm-300 mx-1">|</span>
@@ -4234,9 +4234,11 @@
       }
     }
     // 입고 수량 전달 (입고완료 또는 부분입고 상태일 때)
+    const originalStatus = document.getElementById('po-detail-modal')?.getAttribute('data-po-status') || '';
     if (status === '입고완료' || status === '부분입고') {
       const totalReceived = poEditItems.reduce((s, i) => s + (i.receivedQty || 0), 0);
-      if (status === '입고완료' && totalReceived === 0) {
+      // 상태를 새로 입고완료로 변경하는 경우에만 전량입고 확인 (기존 입고완료/부분입고에서는 스킵)
+      if (status === '입고완료' && totalReceived === 0 && originalStatus !== '입고완료' && originalStatus !== '부분입고') {
         if (!confirm('입고수량이 모두 0입니다. 전량 입고로 처리할까요?')) return;
         poEditItems.forEach(i => { i.receivedQty = i.qty || 0; });
       }
