@@ -5645,10 +5645,11 @@ async function handleQtyAdjust(req, res) {
       // 기존 발주서 찾기
       let existingPO = null;
       let query = supabaseAdmin.from('purchase_orders')
-        .select('id').eq('status', '발주대기');
+        .select('id').in('status', ['발주대기', '부분입고']);
       if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
       else { query = query.is('vendor_id', null); }
       if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
+      else query = query.is('broadcast_id', null);
       const { data: candidatePOs } = await query.order('id', { ascending: false }).limit(1);
       if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
 
