@@ -372,7 +372,7 @@ async function handleOrders(req, res) {
 }
 
 // ============================================================
-//  ORDER BULK DELETE (결제취소 일괄삭제)
+//  ORDER BULK DELETE (선택 삭제)
 // ============================================================
 async function handleOrderBulkDelete(req, res) {
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
@@ -390,16 +390,20 @@ async function handleOrderBulkDelete(req, res) {
     return fail(res, '일부 주문을 찾을 수 없습니다');
   }
 
-  // 모든 주문이 결제취소 상태인지 검증
-  const nonCancelled = orders.filter(o => o.status !== '결제취소');
-  if (nonCancelled.length > 0) {
-    const nos = nonCancelled.map(o => o.order_no).join(', ');
-    return fail(res, `결제취소 상태가 아닌 주문이 포함되어 있습니다: ${nos}`);
+  // 삭제 불가 상태 검증 (결제완료, 배송준비)
+  const blocked = orders.filter(o => ['결제완료', '배송준비'].includes(o.status));
+  if (blocked.length > 0) {
+    const nos = blocked.map(o => o.order_no).join(', ');
+    return fail(res, `결제완료/배송준비 상태의 주문은 삭제할 수 없습니다: ${nos}`);
   }
 
   // 개별 삭제 로직 (기존 DELETE 로직 재사용)
   let deletedCount = 0;
   for (const order of orders) {
+    // 배송완료 상태 삭제 시 재고 복원
+    if (order.status === '배송완료') {
+      await deductInventory(order.id, 'restore');
+    }
     await deductPurchaseOrderQty(order.id);
     await restoreAvailableQty(order.id);
     await supabaseAdmin.from('order_items').delete().eq('order_id', order.id);
