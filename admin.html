@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.17</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.02 20:47</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.18</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.02 20:59</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4300,15 +4300,10 @@
   // ============================================================
   //  QTY COMPARE (주문/발주 수량 대조)
   // ============================================================
-  let _qtyCompareBroadcastId = undefined;
-
-  async function openQtyCompareModal(broadcastId) {
+  async function openQtyCompareModal() {
     try {
-      _qtyCompareBroadcastId = broadcastId;
-      let url = '/admin/purchase-orders/qty-compare';
-      if (broadcastId) url += '?broadcastId=' + broadcastId;
-      const data = await api(url);
-      const { comparison, broadcasts, summary } = data;
+      const data = await api('/admin/purchase-orders/qty-compare');
+      const { comparison, summary } = data;
 
       const existing = document.getElementById('qty-compare-modal');
       if (existing) existing.remove();
@@ -4318,15 +4313,12 @@
       modal.id = 'qty-compare-modal';
       modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
-      const bcOptions = (broadcasts || []).map(b =>
-        `<option value="${b.id}" ${broadcastId && parseInt(broadcastId)===b.id?'selected':''}>${escapeHtml(b.title||('방송 #'+b.id))}</option>`
-      ).join('');
-
       let tableRows = '';
       (comparison || []).forEach((item, idx) => {
         const hasDiff = item.diff !== 0;
         const rowBg = hasDiff ? 'background:#fef2f2;' : '';
         const diffColor = item.diff > 0 ? 'color:#dc2626;font-weight:700;' : item.diff < 0 ? 'color:#2563eb;font-weight:700;' : 'color:#6b7280;';
+        const rcvColor = item.receivedQty >= item.poQty && item.poQty > 0 ? 'color:#059669;font-weight:700;' : item.receivedQty > 0 ? 'color:#d97706;' : 'color:#6b7280;';
         const custJson = encodeURIComponent(JSON.stringify(item.customers || []));
         const reasonTags = (item.reasons || []).map(r => {
           let tagColor = '#f97316';
@@ -4343,35 +4335,33 @@
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;">${escapeHtml(item.size||'-')}</td>
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.orderQty}</td>
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;">${item.poQty}</td>
+            <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;${rcvColor}">${item.receivedQty}</td>
             <td style="padding:8px 10px;font-size:12px;border-bottom:1px solid #f0e6db;text-align:right;${diffColor}">${item.diff > 0 ? '+' : ''}${item.diff}</td>
             <td style="padding:4px 6px;font-size:12px;border-bottom:1px solid #f0e6db;">${reasonTags}</td>
           </tr>`;
       });
 
       modal.innerHTML = `
-        <div class="overlay-content p-6" style="max-width:860px;">
+        <div class="overlay-content p-6" style="max-width:940px;">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문/발주 수량 대조</h3>
+            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문/발주 수량 대조 (전체)</h3>
             <button onclick="document.getElementById('qty-compare-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
           </div>
-          <div class="flex items-center gap-3 mb-4">
-            <label class="text-[11px] font-semibold text-warm-500">방송 선택</label>
-            <select class="input-field" style="max-width:240px;font-size:12px;" onchange="openQtyCompareModal(this.value||undefined)">
-              <option value="">전체</option>
-              ${bcOptions}
-            </select>
-          </div>
-          <div class="flex gap-4 mb-4">
+          <div class="flex gap-3 mb-4">
             <div class="card p-3 flex-1 text-center" style="background:#f0fdf4;">
-              <div class="text-[10px] text-warm-500 mb-1">총 주문수량</div>
+              <div class="text-[10px] text-warm-500 mb-1">주문수량</div>
               <div class="text-lg font-bold text-emerald-700">${summary.totalOrderQty}</div>
             </div>
             <div class="card p-3 flex-1 text-center" style="background:#eff6ff;">
-              <div class="text-[10px] text-warm-500 mb-1">총 발주수량</div>
+              <div class="text-[10px] text-warm-500 mb-1">발주수량</div>
               <div class="text-lg font-bold text-blue-700">${summary.totalPOQty}</div>
             </div>
+            <div class="card p-3 flex-1 text-center" style="background:#fffbeb;">
+              <div class="text-[10px] text-warm-500 mb-1">입고수량</div>
+              <div class="text-lg font-bold text-amber-700">${summary.totalReceivedQty}</div>
+            </div>
             <div class="card p-3 flex-1 text-center" style="background:${summary.mismatchCount>0?'#fef2f2':'#f0fdf4'};">
-              <div class="text-[10px] text-warm-500 mb-1">불일치 건수</div>
+              <div class="text-[10px] text-warm-500 mb-1">불일치</div>
               <div class="text-lg font-bold ${summary.mismatchCount>0?'text-red-600':'text-emerald-700'}">${summary.mismatchCount}</div>
             </div>
           </div>
@@ -4382,19 +4372,20 @@
                   <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">상품명</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">색상</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">사이즈</th>
-                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">주문수량</th>
-                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">발주수량</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">주문</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">발주</th>
+                  <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">입고</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:right;border-bottom:2px solid #f0dcc8;">차이</th>
                   <th style="padding:8px 10px;font-size:11px;text-align:left;border-bottom:2px solid #f0dcc8;">원인</th>
                 </tr>
               </thead>
-              <tbody>${tableRows || '<tr><td colspan="7" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
+              <tbody>${tableRows || '<tr><td colspan="8" style="padding:20px;text-align:center;color:#a8967e;font-size:13px;">데이터가 없습니다</td></tr>'}</tbody>
             </table>
           </div>
           ${summary.mismatchCount > 0 ? `<div class="flex justify-end mt-3">
             <button class="btn-primary btn-sm" onclick="adjustQtyCompare()">불일치 ${summary.mismatchCount}건 발주 보정 (부족↑ 초과↓)</button>
           </div>` : ''}
-          <p class="text-[10px] text-warm-400 mt-3">* 행을 클릭하면 고객별 주문 상세를 확인할 수 있습니다. 차이 양수(+): 주문 > 발주, 음수(-): 발주 > 주문</p>
+          <p class="text-[10px] text-warm-400 mt-3">* 행을 클릭하면 고객별 주문 상세를 확인할 수 있습니다. 차이 = 주문 - 발주 (양수: 부족, 음수: 초과)</p>
         </div>`;
       document.body.appendChild(modal);
     } catch (e) { showToast(e.message || '수량 대조 조회에 실패했습니다'); }
@@ -4415,7 +4406,7 @@
 
     const detailRow = document.createElement('tr');
     detailRow.className = 'qty-detail-row';
-    detailRow.innerHTML = `<td colspan="7" style="padding:0;border-bottom:1px solid #f0e6db;">
+    detailRow.innerHTML = `<td colspan="8" style="padding:0;border-bottom:1px solid #f0e6db;">
       <div style="padding:8px 16px;background:#fefcfa;">
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr style="background:#f9f0e6;">
@@ -4443,12 +4434,10 @@
     const count = mismatchEl ? mismatchEl.textContent : '?';
     if (!confirm(`불일치 ${count}건을 보정합니다.\n- 부족분: 발주 수량 증가\n- 초과분: 발주 수량 감소 (입고 완료분 제외)\n\n진행하시겠습니까?`)) return;
     try {
-      const body = {};
-      if (_qtyCompareBroadcastId) body.broadcastId = _qtyCompareBroadcastId;
       const data = await api('/admin/purchase-orders/qty-adjust', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify({})
       });
       if (data.adjusted > 0) {
         const detailMsg = (data.details || []).map(d => {
@@ -4459,7 +4448,7 @@
       } else {
         showToast(data.message || '보정할 항목이 없습니다');
       }
-      openQtyCompareModal(_qtyCompareBroadcastId);
+      openQtyCompareModal();
     } catch (e) { showToast(e.message || '발주 보정에 실패했습니다'); }
   }
 

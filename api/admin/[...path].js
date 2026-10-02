@@ -5417,44 +5417,32 @@ async function handleAfterServiceDetail(req, res, id) {
 async function handleQtyCompare(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
   try {
-    const { broadcastId } = req.query || {};
-
-    // 1) 방송 목록 + 주문 조회 (병렬)
-    let orderQuery = supabaseAdmin.from('orders')
+    // 전체 기준 조회 (방송 필터 없음)
+    const { data: orders } = await supabaseAdmin.from('orders')
       .select('id, order_no, name, social, created_at, broadcast_id')
       .in('status', ['결제완료', '배송준비', '배송완료']);
-    if (broadcastId) orderQuery = orderQuery.eq('broadcast_id', parseInt(broadcastId));
 
-    const [bcResult, orderResult] = await Promise.all([
-      supabaseAdmin.from('broadcasts').select('id, title').order('id', { ascending: false }),
-      orderQuery,
-    ]);
-    const broadcasts = bcResult.data || [];
-    const orders = orderResult.data || [];
-
-    if (orders.length === 0) {
+    if (!orders || orders.length === 0) {
       return ok(res, {
-        comparison: [], broadcasts,
-        summary: { totalOrderQty: 0, totalPOQty: 0, mismatchCount: 0 }
+        comparison: [],
+        summary: { totalOrderQty: 0, totalPOQty: 0, totalReceivedQty: 0, mismatchCount: 0 }
       });
     }
 
-    // 2) 주문 아이템 + 발주 아이템 배치 조회 (병렬)
+    // 주문 아이템 + 발주 아이템 배치 조회 (병렬)
     const orderIds = orders.map(o => o.id);
     const orderLookup = {};
     orders.forEach(o => { orderLookup[o.id] = o; });
-
-    let poItemQuery = supabaseAdmin.from('purchase_order_items')
-      .select('product_id, product_name, color_name, size_name, qty, purchase_order_id');
 
     const [itemsResult, poItemsResult] = await Promise.all([
       supabaseAdmin.from('order_items')
         .select('product_id, name, color, size, qty, status, order_id')
         .in('order_id', orderIds),
-      poItemQuery,
+      supabaseAdmin.from('purchase_order_items')
+        .select('product_id, product_name, color_name, size_name, qty, received_qty, purchase_order_id'),
     ]);
 
-    // 3) 주문 아이템 집계
+    // 주문 아이템 집계
     const orderMap = {};
     (itemsResult.data || []).forEach(item => {
       if (item.status === '결제취소' || !item.product_id) return;
@@ -5477,28 +5465,21 @@ async function handleQtyCompare(req, res) {
       }
     });
 
-    // 4) 발주 아이템 집계
-    let filteredPOItems = poItemsResult.data || [];
-    if (broadcastId && filteredPOItems.length > 0) {
-      const poIds = [...new Set(filteredPOItems.map(i => i.purchase_order_id))];
-      const { data: pos } = await supabaseAdmin.from('purchase_orders')
-        .select('id, broadcast_id').in('id', poIds);
-      const validPOIds = new Set((pos || []).filter(p => p.broadcast_id === parseInt(broadcastId)).map(p => p.id));
-      filteredPOItems = filteredPOItems.filter(i => validPOIds.has(i.purchase_order_id));
-    }
-
+    // 발주 아이템 집계 (전체)
     const poMap = {};
-    for (const item of filteredPOItems) {
+    const allPOItems = poItemsResult.data || [];
+    for (const item of allPOItems) {
       if (!item.product_id) continue;
       const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
-      if (!poMap[key]) poMap[key] = { qty: 0, productName: item.product_name };
+      if (!poMap[key]) poMap[key] = { qty: 0, receivedQty: 0, productName: item.product_name };
       poMap[key].qty += (item.qty || 0);
+      poMap[key].receivedQty += (item.received_qty || 0);
     }
 
-    // 5) 불일치 원인 분석: 거래처 미지정 상품 조회
+    // 불일치 원인 분석: 거래처 미지정 상품 조회
     const allProductIds = [...new Set([
       ...Object.values(orderMap).map(om => om.product_id),
-      ...filteredPOItems.map(i => i.product_id),
+      ...allPOItems.map(i => i.product_id),
     ].filter(Boolean))];
     let vendorNullSet = new Set();
     if (allProductIds.length > 0) {
@@ -5507,20 +5488,22 @@ async function handleQtyCompare(req, res) {
       (prods || []).forEach(p => { if (!p.vendor_id) vendorNullSet.add(p.id); });
     }
 
-    // 6) 양쪽 merge → diff 계산 + 원인 분석
+    // 양쪽 merge → diff 계산 + 원인 분석
     const allKeys = new Set([...Object.keys(orderMap), ...Object.keys(poMap)]);
     const comparison = [];
-    let totalOrderQty = 0, totalPOQty = 0, mismatchCount = 0;
+    let totalOrderQty = 0, totalPOQty = 0, totalReceivedQty = 0, mismatchCount = 0;
 
     for (const key of allKeys) {
       const om = orderMap[key];
       const pm = poMap[key];
       const oQty = om ? om.orderQty : 0;
       const pQty = pm ? pm.qty : 0;
+      const rQty = pm ? pm.receivedQty : 0;
       const diff = oQty - pQty;
 
       totalOrderQty += oQty;
       totalPOQty += pQty;
+      totalReceivedQty += rQty;
 
       // 불일치 원인 분석
       const reasons = [];
@@ -5545,7 +5528,7 @@ async function handleQtyCompare(req, res) {
         productName: om ? om.productName : (pm ? pm.productName : ''),
         color: om ? om.color : key.split('|')[1],
         size: om ? om.size : key.split('|')[2],
-        orderQty: oQty, poQty: pQty, diff,
+        orderQty: oQty, poQty: pQty, receivedQty: rQty, diff,
         reasons,
         customers: om ? om.customers : []
       });
@@ -5559,8 +5542,8 @@ async function handleQtyCompare(req, res) {
     });
 
     return ok(res, {
-      comparison, broadcasts,
-      summary: { totalOrderQty, totalPOQty, mismatchCount }
+      comparison,
+      summary: { totalOrderQty, totalPOQty, totalReceivedQty, mismatchCount }
     });
   } catch (e) {
     return fail(res, e.message, 500);
@@ -5573,17 +5556,13 @@ async function handleQtyCompare(req, res) {
 async function handleQtyAdjust(req, res) {
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
   try {
-    const { broadcastId } = req.body || {};
-
-    // 1) 주문 조회
-    let orderQuery = supabaseAdmin.from('orders')
+    // 전체 기준 조회 (방송 필터 없음)
+    const { data: orders } = await supabaseAdmin.from('orders')
       .select('id, broadcast_id')
       .in('status', ['결제완료', '배송준비', '배송완료']);
-    if (broadcastId) orderQuery = orderQuery.eq('broadcast_id', parseInt(broadcastId));
-    const { data: orders } = await orderQuery;
     if (!orders || orders.length === 0) return ok(res, { adjusted: 0, details: [], message: '해당 주문이 없습니다' });
 
-    // 2) 주문 아이템 배치 조회 + 집계
+    // 주문 아이템 배치 조회 + 집계
     const orderIds = orders.map(o => o.id);
     const { data: allOrderItems } = await supabaseAdmin.from('order_items')
       .select('product_id, name, color, size, qty, status')
@@ -5598,28 +5577,20 @@ async function handleQtyAdjust(req, res) {
       orderMap[key].orderQty += (item.qty || 0);
     });
 
-    // 3) 발주 아이템 집계
+    // 발주 아이템 집계 (전체)
     const poMap = {};
     const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
       .select('product_id, product_name, color_name, size_name, qty, purchase_order_id');
+    const poItems = allPOItems || [];
 
-    let filteredPOItems = allPOItems || [];
-    if (broadcastId && filteredPOItems.length > 0) {
-      const poIds = [...new Set(filteredPOItems.map(i => i.purchase_order_id))];
-      const { data: pos } = await supabaseAdmin.from('purchase_orders')
-        .select('id, broadcast_id').in('id', poIds);
-      const validPOIds = new Set((pos || []).filter(p => p.broadcast_id === parseInt(broadcastId)).map(p => p.id));
-      filteredPOItems = filteredPOItems.filter(i => validPOIds.has(i.purchase_order_id));
-    }
-
-    for (const item of filteredPOItems) {
+    for (const item of poItems) {
       if (!item.product_id) continue;
       const key = `${item.product_id}|${item.color_name || ''}|${item.size_name || ''}`;
       if (!poMap[key]) poMap[key] = 0;
       poMap[key] += (item.qty || 0);
     }
 
-    // 4) 부족분 + 초과분 계산
+    // 부족분 + 초과분 계산
     const deficits = [];
     const excesses = [];
     for (const [key, om] of Object.entries(orderMap)) {
@@ -5632,22 +5603,22 @@ async function handleQtyAdjust(req, res) {
     for (const [key, poQty] of Object.entries(poMap)) {
       if (!orderMap[key] && poQty > 0) {
         const [pid, color, size] = key.split('|');
-        const poItem = filteredPOItems.find(i => i.product_id === parseInt(pid) && (i.color_name || '') === color && (i.size_name || '') === size);
+        const poItem = poItems.find(i => i.product_id === parseInt(pid) && (i.color_name || '') === color && (i.size_name || '') === size);
         excesses.push({ product_id: parseInt(pid), name: poItem?.product_name || '', color, size, orderQty: 0, excess: poQty });
       }
     }
 
     if (deficits.length === 0 && excesses.length === 0) return ok(res, { adjusted: 0, details: [], message: '보정할 항목이 없습니다' });
 
-    // 방송 정보
-    const targetBroadcastId = broadcastId ? parseInt(broadcastId) : (orders.find(o => o.broadcast_id)?.broadcast_id || null);
+    // 방송 정보 (새 발주서 생성 시 참조용)
+    const targetBroadcastId = orders.find(o => o.broadcast_id)?.broadcast_id || null;
     let broadcastTitle = '';
     if (targetBroadcastId) {
       const { data: bc } = await supabaseAdmin.from('broadcasts').select('title').eq('id', targetBroadcastId).single();
       broadcastTitle = bc?.title || '';
     }
 
-    // 6) 보정 처리
+    // 보정 처리
     const details = [];
     let adjusted = 0;
 
@@ -5770,12 +5741,12 @@ async function handleQtyAdjust(req, res) {
       }
     }
 
-    // 7) 초과분 감소 처리
+    // 초과분 감소 처리
     const affectedPOIds = new Set();
     for (const ex of excesses) {
       let remaining = ex.excess;
       // 해당 상품의 PO items 조회 (발주대기 우선, 최신 순)
-      const matchingPOItems = filteredPOItems
+      const matchingPOItems = poItems
         .filter(i => i.product_id === ex.product_id && (i.color_name || '') === ex.color && (i.size_name || '') === ex.size)
         .map(i => i.purchase_order_id);
       const uniquePOIds = [...new Set(matchingPOItems)];
@@ -5789,7 +5760,7 @@ async function handleQtyAdjust(req, res) {
       const sortedPOIds = uniquePOIds.sort((a, b) => {
         const aWait = poStatusMap[a] === '발주대기' ? 0 : 1;
         const bWait = poStatusMap[b] === '발주대기' ? 0 : 1;
-        return aWait - bWait || b - a; // 발주대기 우선, 같으면 최신(id 큰 것) 우선
+        return aWait - bWait || b - a;
       });
 
       for (const poId of sortedPOIds) {
@@ -5805,7 +5776,7 @@ async function handleQtyAdjust(req, res) {
         for (const item of items) {
           if (remaining <= 0) break;
           const receivedQty = item.received_qty || 0;
-          const reducible = Math.max(0, item.qty - receivedQty); // 이미 입고된 수량은 보호
+          const reducible = Math.max(0, item.qty - receivedQty);
           const reduceAmt = Math.min(remaining, reducible);
           if (reduceAmt <= 0) continue;
 
@@ -5826,7 +5797,6 @@ async function handleQtyAdjust(req, res) {
         const { data: remainItems } = await supabaseAdmin.from('purchase_order_items')
           .select('subtotal').eq('purchase_order_id', poId);
         if (!remainItems || remainItems.length === 0) {
-          // PO에 품목이 없으면 PO 삭제
           await supabaseAdmin.from('purchase_orders').delete().eq('id', poId);
         } else {
           const newTotal = remainItems.reduce((s, i) => s + (i.subtotal || 0), 0);
@@ -5837,7 +5807,7 @@ async function handleQtyAdjust(req, res) {
       }
     }
 
-    // 8) 영향받은 PO 재고/배정 재계산
+    // 영향받은 PO 재고/배정 재계산
     for (const poId of affectedPOIds) {
       await updateInventoryFromPO(poId);
       await deallocateExcessFromOrders(poId);
