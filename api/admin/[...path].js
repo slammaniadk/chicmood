@@ -5436,15 +5436,39 @@ async function handleQtyCompare(req, res) {
 
     const [itemsResult, poItemsResult] = await Promise.all([
       supabaseAdmin.from('order_items')
-        .select('product_id, name, color, size, qty, status, order_id')
+        .select('id, product_id, name, color, size, qty, status, order_id')
         .in('order_id', orderIds),
       supabaseAdmin.from('purchase_order_items')
         .select('product_id, product_name, color_name, size_name, qty, received_qty, purchase_order_id'),
     ]);
 
+    // product_id가 NULL인 아이템 → 상품명으로 매칭
+    const orderItems = itemsResult.data || [];
+    const nullPidItems = orderItems.filter(i => !i.product_id && i.status !== '결제취소' && i.name);
+    if (nullPidItems.length > 0) {
+      const uniqueNames = [...new Set(nullPidItems.map(i => i.name))];
+      const { data: matchedProds } = await supabaseAdmin.from('products')
+        .select('id, name').in('name', uniqueNames);
+      if (matchedProds && matchedProds.length > 0) {
+        const nameToId = {};
+        matchedProds.forEach(p => { nameToId[p.name] = p.id; });
+        // DB에도 product_id 업데이트 (재발 방지)
+        const updates = [];
+        nullPidItems.forEach(item => {
+          if (nameToId[item.name]) {
+            item.product_id = nameToId[item.name];
+            if (item.id) updates.push({ id: item.id, product_id: nameToId[item.name] });
+          }
+        });
+        for (const u of updates) {
+          await supabaseAdmin.from('order_items').update({ product_id: u.product_id }).eq('id', u.id);
+        }
+      }
+    }
+
     // 주문 아이템 집계
     const orderMap = {};
-    (itemsResult.data || []).forEach(item => {
+    orderItems.forEach(item => {
       if (item.status === '결제취소' || !item.product_id) return;
       const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
       if (!orderMap[key]) {
@@ -5565,10 +5589,34 @@ async function handleQtyAdjust(req, res) {
     // 주문 아이템 배치 조회 + 집계
     const orderIds = orders.map(o => o.id);
     const { data: allOrderItems } = await supabaseAdmin.from('order_items')
-      .select('product_id, name, color, size, qty, status')
+      .select('id, product_id, name, color, size, qty, status')
       .in('order_id', orderIds);
+    const rawOrderItems = allOrderItems || [];
+
+    // product_id가 NULL인 아이템 → 상품명으로 매칭
+    const nullPidItems = rawOrderItems.filter(i => !i.product_id && i.status !== '결제취소' && i.name);
+    if (nullPidItems.length > 0) {
+      const uniqueNames = [...new Set(nullPidItems.map(i => i.name))];
+      const { data: matchedProds } = await supabaseAdmin.from('products')
+        .select('id, name').in('name', uniqueNames);
+      if (matchedProds && matchedProds.length > 0) {
+        const nameToId = {};
+        matchedProds.forEach(p => { nameToId[p.name] = p.id; });
+        const updates = [];
+        nullPidItems.forEach(item => {
+          if (nameToId[item.name]) {
+            item.product_id = nameToId[item.name];
+            if (item.id) updates.push({ id: item.id, product_id: nameToId[item.name] });
+          }
+        });
+        for (const u of updates) {
+          await supabaseAdmin.from('order_items').update({ product_id: u.product_id }).eq('id', u.id);
+        }
+      }
+    }
+
     const orderMap = {};
-    (allOrderItems || []).forEach(item => {
+    rawOrderItems.forEach(item => {
       if (item.status === '결제취소' || !item.product_id) return;
       const key = `${item.product_id}|${item.color || ''}|${item.size || ''}`;
       if (!orderMap[key]) {
