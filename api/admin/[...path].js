@@ -489,17 +489,17 @@ async function handleOrderMerge(req, res) {
     .single();
   if (mergeHistErr) return fail(res, `병합 이력 저장 실패: ${mergeHistErr.message}`, 500);
 
-  // 5) source의 order_items → target order_id로 UPDATE
+  // 5) source 발주 수량 차감 (items가 아직 source에 있는 상태에서 차감해야 정확)
+  for (const srcId of sourceIds) {
+    await deductPurchaseOrderQty(srcId);
+  }
+
+  // 6) source의 order_items → target order_id로 UPDATE
   for (const srcId of sourceIds) {
     const { error: moveErr } = await supabaseAdmin.from('order_items')
       .update({ order_id: targetId })
       .eq('order_id', srcId);
     if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
-  }
-
-  // 6) source 발주 수량 차감
-  for (const srcId of sourceIds) {
-    await deductPurchaseOrderQty(srcId);
   }
 
   // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
@@ -1134,6 +1134,11 @@ async function handleOrderDetail(req, res, id) {
 
   if (Object.keys(update).length === 0) return fail(res, '변경할 내용이 없습니다');
 
+  // 결제취소 차단 검증: DB 업데이트 전에 먼저 체크 (불일치 상태 방지)
+  if (status === '결제취소' && ['배송준비', '배송완료'].includes(prevStatus)) {
+    return fail(res, '배송준비 이후에는 결제취소가 불가능합니다');
+  }
+
   const { data, error } = await supabaseAdmin
     .from('orders')
     .update(update)
@@ -1205,14 +1210,28 @@ async function handleOrderDetail(req, res, id) {
       }
     }
   }
-  // 결제취소 시: 배송준비 이후 불가 + 전 품목 취소 + 배정 수량 초기화
+  // 결제취소 시: 전 품목 취소 + 배정 수량 초기화 + 해방 재고 재배정
   if (status === '결제취소') {
-    if (['배송준비', '배송완료'].includes(prevStatus)) {
-      return fail(res, '배송준비 이후에는 결제취소가 불가능합니다');
-    }
+    // 취소될 품목의 product/color/size 수집 (재배정용)
+    const { data: cancelItems } = await supabaseAdmin.from('order_items')
+      .select('product_id, color, size, allocated_qty')
+      .eq('order_id', id).not('status', 'eq', '결제취소');
     await supabaseAdmin.from('order_items')
       .update({ status: '결제취소', allocated_qty: 0 })
       .eq('order_id', id);
+    // 해방된 재고를 다른 대기 주문에 재배정
+    if (cancelItems && cancelItems.length > 0) {
+      const combos = new Set();
+      const tasks = [];
+      for (const ci of cancelItems) {
+        if (!ci.product_id || (ci.allocated_qty || 0) <= 0) continue;
+        const key = `${ci.product_id}|${ci.color || ''}|${ci.size || ''}`;
+        if (combos.has(key)) continue;
+        combos.add(key);
+        tasks.push(allocateByProduct(ci.product_id, ci.color || '', ci.size || ''));
+      }
+      if (tasks.length > 0) await Promise.all(tasks);
+    }
   }
   // 입금확인 전환 시 품목 상태도 입금확인으로
   if (status === '입금확인') {
@@ -2114,6 +2133,46 @@ async function deductPurchaseOrderQty(orderId) {
         );
       }
       if (invUpdates.length > 0) await Promise.all(invUpdates);
+
+      // 재고 감소된 조합에 대해 초과배정 해제
+      for (let i = 0; i < uniqueKeys.length; i++) {
+        const inv = invResults[i].data;
+        if (!inv) continue;
+        const [pid, color, size] = uniqueKeys[i].split('_');
+        const totalDeduct = inventoryOps
+          .filter(op => `${op.product_id}_${op.color}_${op.size}` === uniqueKeys[i])
+          .reduce((s, op) => s + op.deductReceived, 0);
+        if (totalDeduct > 0) {
+          // 현재 재고 대비 초과 배정 검사 및 해제
+          const newStockQty = Math.max(0, (inv.stock_qty || 0) - totalDeduct);
+          const { data: allocItems } = await supabaseAdmin.from('order_items')
+            .select('id, order_id, qty, allocated_qty, status')
+            .eq('product_id', parseInt(pid))
+            .eq('color', color).eq('size', size)
+            .gt('allocated_qty', 0)
+            .not('status', 'in', '("배송완료","결제취소")');
+          const totalAllocated = (allocItems || []).reduce((s, oi) => s + (oi.allocated_qty || 0), 0);
+          let excess = totalAllocated - newStockQty;
+          if (excess > 0) {
+            const candidates = (allocItems || [])
+              .filter(oi => oi.status === '배송준비' || oi.status === '결제완료')
+              .sort((a, b) => b.id - a.id); // LIFO
+            const deallocOps = [];
+            const affectedOrders = new Set();
+            for (const oi of candidates) {
+              if (excess <= 0) break;
+              const canDealloc = Math.min(oi.allocated_qty || 0, excess);
+              if (canDealloc <= 0) continue;
+              const newAlloc = (oi.allocated_qty || 0) - canDealloc;
+              deallocOps.push(supabaseAdmin.from('order_items').update({ allocated_qty: newAlloc, status: '결제완료' }).eq('id', oi.id));
+              excess -= canDealloc;
+              affectedOrders.add(oi.order_id);
+            }
+            if (deallocOps.length > 0) await Promise.all(deallocOps);
+            if (affectedOrders.size > 0) await Promise.all([...affectedOrders].map(oid => recalcOrderStatus(oid)));
+          }
+        }
+      }
     }
 
     // 영향받은 발주서 total 재계산 또는 삭제 (병렬)
