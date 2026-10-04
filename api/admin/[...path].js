@@ -3452,7 +3452,7 @@ async function handleMembers(req, res) {
 async function handleMemberDetail(req, res, id) {
   // PATCH: 회원 수정
   if (req.method === 'PATCH') {
-    const { name, phone, nickname, zipcode, address, addressDetail, role } = req.body;
+    const { name, phone, nickname, zipcode, address, addressDetail, role, password } = req.body;
     const updates = {};
     if (name !== undefined) updates.name = name;
     if (phone !== undefined) updates.phone = phone;
@@ -3461,6 +3461,7 @@ async function handleMemberDetail(req, res, id) {
     if (address !== undefined) updates.address = address;
     if (addressDetail !== undefined) updates.address_detail = addressDetail;
     if (role !== undefined) updates.role = role;
+    if (password !== undefined && password !== '') updates.password = password;
 
     if (Object.keys(updates).length === 0) return fail(res, '수정할 항목이 없습니다');
 
@@ -3497,6 +3498,7 @@ async function handleMemberDetail(req, res, id) {
       name: user.name,
       nickname: user.nickname || '',
       phone: user.phone,
+      password: user.password || '',
       role: user.role,
       zipcode: user.zipcode || '',
       address: user.address || '',

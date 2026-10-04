@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.19</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.04 09:26:04</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.20</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.04 09:39:48</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2498,6 +2498,7 @@
             <div><span class="text-[11px] text-warm-400 block">이름</span><span class="font-semibold">${escapeHtml(m.name)}</span></div>
             <div><span class="text-[11px] text-warm-400 block">닉네임</span><span>${m.nickname ? escapeHtml(m.nickname) : '-'}</span></div>
             <div><span class="text-[11px] text-warm-400 block">연락처</span><span>${escapeHtml(m.phone)}</span></div>
+            <div><span class="text-[11px] text-warm-400 block">비밀번호</span><span class="font-mono text-[14px] tracking-widest">${escapeHtml(m.password || '-')}</span></div>
             <div><span class="text-[11px] text-warm-400 block">역할</span><span>${m.role === 'admin' ? '관리자' : '일반회원'}</span></div>
             <div><span class="text-[11px] text-warm-400 block">가입일</span><span>${dateStr}</span></div>
             ${m.addressFull ? `<div class="col-span-2"><span class="text-[11px] text-warm-400 block">주소</span><span class="text-[12px]">${escapeHtml(m.addressFull)}</span></div>` : ''}
@@ -2621,6 +2622,7 @@
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">이름</label><input id="me-name" class="input-field" value="${escapeHtml(m.name)}" /></div>
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">닉네임</label><input id="me-nickname" class="input-field" value="${escapeHtml(m.nickname || '')}" /></div>
             <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">전화번호</label><input id="me-phone" class="input-field" value="${escapeHtml(m.phone)}" /></div>
+            <div><label class="text-[11px] font-semibold text-warm-500 block mb-1">비밀번호 (숫자 4자리)</label><input id="me-password" class="input-field" maxlength="4" inputmode="numeric" placeholder="변경 시 입력" value="${escapeHtml(m.password || '')}" /></div>
             <div>
               <label class="text-[11px] font-semibold text-warm-500 block mb-1">주소</label>
               <div class="flex gap-2 mb-2">
@@ -2645,13 +2647,17 @@
     const name = document.getElementById('me-name').value.trim();
     const nickname = document.getElementById('me-nickname').value.trim();
     const phone = document.getElementById('me-phone').value.trim();
+    const password = document.getElementById('me-password').value.trim();
     const zipcode = document.getElementById('me-zipcode').value.trim();
     const address = document.getElementById('me-addr').value.trim();
     const addressDetail = document.getElementById('me-addr-detail').value.trim();
     const role = document.getElementById('me-role').value;
     if (!name || !phone) { showToast('이름과 전화번호는 필수입니다'); return; }
+    if (password && !/^\d{4}$/.test(password)) { showToast('비밀번호는 숫자 4자리로 입력해주세요'); return; }
     try {
-      await api('/admin/members/' + userId, { method: 'PATCH', body: JSON.stringify({ name, nickname, phone, zipcode, address, addressDetail, role }) });
+      const body = { name, nickname, phone, zipcode, address, addressDetail, role };
+      if (password) body.password = password;
+      await api('/admin/members/' + userId, { method: 'PATCH', body: JSON.stringify(body) });
       document.getElementById('member-edit-modal').remove();
       showToast('회원 정보가 수정되었습니다');
       renderMembers(document.getElementById('page-content'));

@@ -42,6 +42,24 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // PUT: 비밀번호 찾기 (이름 + 전화번호로 확인)
+  if (req.method === 'PUT') {
+    const { name, phone } = req.body;
+    if (!name || !phone) return fail(res, '이름과 전화번호를 입력해주세요');
+
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('name, phone, password')
+      .eq('phone', phone)
+      .single();
+
+    if (error || !user || user.name !== name) {
+      return fail(res, '일치하는 회원 정보를 찾을 수 없습니다', 404);
+    }
+
+    return ok(res, { password: user.password });
+  }
+
   if (req.method !== 'POST') return fail(res, 'Method not allowed', 405);
 
   const { phone, password } = req.body;

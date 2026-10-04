@@ -192,7 +192,7 @@
     </div>
     <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
     <p class="text-[10px] text-warm-300 tracking-wider mt-1">Developed by DK Studio</p>
-    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.19 &middot; Last Modified 2026.10.04 09:26:04</p>
+    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.20 &middot; Last Modified 2026.10.04 09:36:48</p>
   </footer>
 
   <!-- 오버레이: 로딩 -->
@@ -1569,10 +1569,58 @@
             <button class="btn-primary w-full" onclick="doLogin()">로그인</button>
           </form>
 
-          <p class="text-center mt-6 text-[12px] text-warm-400">아직 회원이 아니신가요? <a href="#register" class="text-warm-700 underline underline-offset-4 font-medium">회원가입</a></p>
+          <div class="text-center mt-6 space-y-2">
+            <p class="text-[12px] text-warm-400"><a href="javascript:void(0)" onclick="openFindPasswordModal()" class="text-warm-600 underline underline-offset-4 font-medium">비밀번호를 잊으셨나요?</a></p>
+            <p class="text-[12px] text-warm-400">아직 회원이 아니신가요? <a href="#register" class="text-warm-700 underline underline-offset-4 font-medium">회원가입</a></p>
+          </div>
         </div>
       </section>
     `;
+  }
+
+  function openFindPasswordModal() {
+    const existing = document.getElementById('find-pw-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'find-pw-modal';
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = \`
+      <div style="background:#fff;border-radius:16px;padding:32px;max-width:360px;width:90%;margin:auto;position:relative;top:50%;transform:translateY(-50%);">
+        <h3 style="font-family:serif;font-size:18px;font-weight:600;color:#44403c;margin-bottom:16px;text-align:center;">비밀번호 찾기</h3>
+        <p style="font-size:12px;color:#a8a29e;text-align:center;margin-bottom:20px;">가입 시 등록한 이름과 전화번호를 입력해주세요.</p>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">이름</label>
+          <input id="fp-name" type="text" class="input-field" placeholder="홍길동" />
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">전화번호</label>
+          <input id="fp-phone" type="tel" class="input-field" placeholder="010-1234-5678" />
+        </div>
+        <div id="fp-result" style="display:none;text-align:center;padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px;">
+        </div>
+        <button class="btn-primary w-full" onclick="findPassword()">비밀번호 확인</button>
+        <button style="width:100%;margin-top:8px;padding:8px;background:none;border:1px solid #d6d3d1;border-radius:8px;cursor:pointer;font-size:12px;color:#78716c;" onclick="document.getElementById('find-pw-modal').remove()">닫기</button>
+      </div>
+    \`;
+    document.body.appendChild(modal);
+  }
+
+  async function findPassword() {
+    const name = document.getElementById('fp-name').value.trim();
+    const phone = document.getElementById('fp-phone').value.trim();
+    if (!name || !phone) { showToast('이름과 전화번호를 입력해주세요'); return; }
+    try {
+      const res = await api('/auth/login', {
+        method: 'PUT',
+        body: JSON.stringify({ name, phone })
+      });
+      const resultEl = document.getElementById('fp-result');
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = \`<p style="font-size:12px;color:#78716c;margin-bottom:4px;">회원님의 비밀번호</p><p style="font-size:24px;font-weight:700;color:#059669;letter-spacing:8px;">\${res.password}</p>\`;
+    } catch (e) {
+      showToast(e.message || '일치하는 회원 정보를 찾을 수 없습니다');
+    }
   }
 
   async function doLogin() {
