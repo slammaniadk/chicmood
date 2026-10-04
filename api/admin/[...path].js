@@ -257,9 +257,15 @@ async function handleOrders(req, res) {
 
   let query = supabaseAdmin
     .from('orders')
-    .select('*, broadcasts:broadcast_id(id, title)', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limitNum - 1);
+    .select('*, broadcasts:broadcast_id(id, title)', { count: 'exact' });
+
+  // 병합대상 모드: 주문자 이름순 정렬 (같은 사람끼리 모아보기)
+  if (duplicateIds) {
+    query = query.order('name', { ascending: true }).order('phone', { ascending: true }).order('created_at', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+  query = query.range(offset, offset + limitNum - 1);
 
   if (duplicateIds) query = query.in('id', duplicateIds);
   if (status && status !== 'all') query = query.eq('status', status);
