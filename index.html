@@ -1579,45 +1579,39 @@
   }
 
   function openFindPasswordModal() {
-    const existing = document.getElementById('find-pw-modal');
+    var existing = document.getElementById('find-pw-modal');
     if (existing) existing.remove();
-    const modal = document.createElement('div');
+    var modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'find-pw-modal';
-    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-    modal.innerHTML = \`
-      <div style="background:#fff;border-radius:16px;padding:32px;max-width:360px;width:90%;margin:auto;position:relative;top:50%;transform:translateY(-50%);">
-        <h3 style="font-family:serif;font-size:18px;font-weight:600;color:#44403c;margin-bottom:16px;text-align:center;">비밀번호 찾기</h3>
-        <p style="font-size:12px;color:#a8a29e;text-align:center;margin-bottom:20px;">가입 시 등록한 이름과 전화번호를 입력해주세요.</p>
-        <div style="margin-bottom:12px;">
-          <label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">이름</label>
-          <input id="fp-name" type="text" class="input-field" placeholder="홍길동" />
-        </div>
-        <div style="margin-bottom:16px;">
-          <label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">전화번호</label>
-          <input id="fp-phone" type="tel" class="input-field" placeholder="010-1234-5678" />
-        </div>
-        <div id="fp-result" style="display:none;text-align:center;padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px;">
-        </div>
-        <button class="btn-primary w-full" onclick="findPassword()">비밀번호 확인</button>
-        <button style="width:100%;margin-top:8px;padding:8px;background:none;border:1px solid #d6d3d1;border-radius:8px;cursor:pointer;font-size:12px;color:#78716c;" onclick="document.getElementById('find-pw-modal').remove()">닫기</button>
-      </div>
-    \`;
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    var h = '<div style="background:#fff;border-radius:16px;padding:32px;max-width:360px;width:90%;margin:auto;position:relative;top:50%;transform:translateY(-50%);">';
+    h += '<h3 style="font-family:serif;font-size:18px;font-weight:600;color:#44403c;margin-bottom:16px;text-align:center;">비밀번호 찾기</h3>';
+    h += '<p style="font-size:12px;color:#a8a29e;text-align:center;margin-bottom:20px;">가입 시 등록한 이름과 전화번호를 입력해주세요.</p>';
+    h += '<div style="margin-bottom:12px;"><label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">이름</label>';
+    h += '<input id="fp-name" type="text" class="input-field" placeholder="홍길동" /></div>';
+    h += '<div style="margin-bottom:16px;"><label style="font-size:11px;font-weight:600;color:#78716c;display:block;margin-bottom:4px;">전화번호</label>';
+    h += '<input id="fp-phone" type="tel" class="input-field" placeholder="010-1234-5678" /></div>';
+    h += '<div id="fp-result" style="display:none;text-align:center;padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px;"></div>';
+    h += '<button class="btn-primary w-full" onclick="findPassword()">비밀번호 확인</button>';
+    h += '<button style="width:100%;margin-top:8px;padding:8px;background:none;border:1px solid #d6d3d1;border-radius:8px;cursor:pointer;font-size:12px;color:#78716c;" onclick="document.getElementById(\'find-pw-modal\').remove()">닫기</button>';
+    h += '</div>';
+    modal.innerHTML = h;
     document.body.appendChild(modal);
   }
 
   async function findPassword() {
-    const name = document.getElementById('fp-name').value.trim();
-    const phone = document.getElementById('fp-phone').value.trim();
+    var name = document.getElementById('fp-name').value.trim();
+    var phone = document.getElementById('fp-phone').value.trim();
     if (!name || !phone) { showToast('이름과 전화번호를 입력해주세요'); return; }
     try {
-      const res = await api('/auth/login', {
+      var res = await api('/auth/login', {
         method: 'PUT',
-        body: JSON.stringify({ name, phone })
+        body: JSON.stringify({ name: name, phone: phone })
       });
-      const resultEl = document.getElementById('fp-result');
+      var resultEl = document.getElementById('fp-result');
       resultEl.style.display = 'block';
-      resultEl.innerHTML = \`<p style="font-size:12px;color:#78716c;margin-bottom:4px;">회원님의 비밀번호</p><p style="font-size:24px;font-weight:700;color:#059669;letter-spacing:8px;">\${res.password}</p>\`;
+      resultEl.innerHTML = '<p style="font-size:12px;color:#78716c;margin-bottom:4px;">회원님의 비밀번호</p><p style="font-size:24px;font-weight:700;color:#059669;letter-spacing:8px;">' + escapeHtml(res.password) + '</p>';
     } catch (e) {
       showToast(e.message || '일치하는 회원 정보를 찾을 수 없습니다');
     }
