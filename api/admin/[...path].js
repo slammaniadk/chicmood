@@ -5420,7 +5420,7 @@ async function handleQtyCompare(req, res) {
     // 전체 기준 조회 (방송 필터 없음)
     const { data: orders } = await supabaseAdmin.from('orders')
       .select('id, order_no, name, social, created_at, broadcast_id')
-      .in('status', ['결제완료', '배송준비', '배송완료']);
+      .in('status', ['입금확인', '결제완료', '배송준비', '배송완료']);
 
     if (!orders || orders.length === 0) {
       return ok(res, {
@@ -5583,7 +5583,7 @@ async function handleQtyAdjust(req, res) {
     // 전체 기준 조회 (방송 필터 없음)
     const { data: orders } = await supabaseAdmin.from('orders')
       .select('id, broadcast_id')
-      .in('status', ['결제완료', '배송준비', '배송완료']);
+      .in('status', ['입금확인', '결제완료', '배송준비', '배송완료']);
     if (!orders || orders.length === 0) return ok(res, { adjusted: 0, details: [], message: '해당 주문이 없습니다' });
 
     // 주문 아이템 배치 조회 + 집계
