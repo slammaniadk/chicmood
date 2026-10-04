@@ -164,7 +164,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.21</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.04 15:39:07</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.22</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.04 15:44:15</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -867,7 +867,7 @@
                   if (showDuplicatesOnly) {
                     const _gKeys = [];
                     data.orders.forEach(o => {
-                      const gk = (o.broadcastId||'') + '::' + o.name + '::' + (o.phone||'');
+                      const gk = o.name + '::' + (o.phone||'');
                       if (!_dupGroupMap[gk] && _dupGroupMap[gk] !== 0) {
                         _dupGroupMap[gk] = _gKeys.length;
                         _gKeys.push(gk);
@@ -875,7 +875,7 @@
                     });
                   }
                   return data.orders.map(o => {
-                  const _gk = (o.broadcastId||'') + '::' + o.name + '::' + (o.phone||'');
+                  const _gk = o.name + '::' + (o.phone||'');
                   const _dupBg = showDuplicatesOnly ? ((_dupGroupMap[_gk] || 0) % 2 === 0 ? 'background:#f5f3ff;' : 'background:#fefce8;') : '';
                   const d = new Date(o.createdAt);
                   const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}<br>${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;

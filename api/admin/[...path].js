@@ -223,19 +223,18 @@ async function handleOrders(req, res) {
     return ok(res, { orders: (data || []).map(o => ({ id: o.id, orderNo: o.order_no, name: o.name, total: o.total, createdAt: o.created_at })) });
   }
 
-  // 미병합 중복 필터: 동일방송+동일주문자 2건 이상 그룹의 주문 ID 수집
+  // 미병합 중복 필터: 동일주문자(이름+전화번호) 2건 이상 그룹의 주문 ID 수집
   let duplicateIds = null;
   if (duplicates === 'unmerged') {
     const { data: candidates } = await supabaseAdmin
       .from('orders')
-      .select('id, broadcast_id, name, phone')
+      .select('id, name, phone')
       .not('status', 'in', '("배송완료","결제취소")')
       .limit(5000);
     if (candidates && candidates.length > 0) {
       const groups = {};
       for (const c of candidates) {
-        if (!c.broadcast_id) continue;
-        const key = `${c.broadcast_id}::${c.name}::${c.phone}`;
+        const key = `${c.name}::${c.phone}`;
         if (!groups[key]) groups[key] = [];
         groups[key].push(c.id);
       }
