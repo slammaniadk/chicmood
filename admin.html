@@ -3378,6 +3378,8 @@
     const modal = document.createElement('div');
     modal.className = 'overlay';
     modal.id = 'broadcast-modal';
+    modal.dataset.bcId = isEdit ? b.id : '';
+    modal.dataset.channel = bmChannel;
     modal.innerHTML = `
       <div class="overlay-content p-6" style="max-height:90vh;max-width:820px;display:flex;flex-direction:column;">
         <div class="flex justify-between items-center mb-6 flex-shrink-0">
@@ -3426,7 +3428,7 @@
                 const separator = idx > 0 && isChecked === false && checkedSet.has(sortedProducts[idx-1].id) ? '<div style="border-top:2px solid #d4a574;margin:8px 0;"></div>' : '';
                 return `${separator}
                 <label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50 ${isChecked ? 'bg-amber-50' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
-                  <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} />
+                  <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} onchange="autoSaveBMProducts()" />
                   ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 60, 80)}" class="w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
                   <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
                   <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
@@ -3455,7 +3457,28 @@
     });
   }
 
+  let _autoSaveTimer = null;
+  async function autoSaveBMProducts() {
+    const modal = document.getElementById('broadcast-modal');
+    if (!modal) return;
+    const bcId = modal.dataset.bcId;
+    if (!bcId) return; // 신규 등록이면 무시
+    // 디바운스: 빠르게 여러 개 체크할 때 마지막 한 번만 저장
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(async () => {
+      const productIds = Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value));
+      try {
+        await api('/admin/broadcasts/' + bcId, {
+          method: 'PATCH',
+          body: JSON.stringify({ productIds })
+        });
+      } catch(e) { showToast(e.message || '자동 저장 실패'); }
+    }, 500);
+  }
+
   async function reloadBMProducts(channel) {
+    const modal = document.getElementById('broadcast-modal');
+    if (modal) modal.dataset.channel = channel;
     const listEl = document.getElementById('bm-product-list');
     if (!listEl) return;
     listEl.innerHTML = '<p class="text-warm-400 text-[12px] py-4 text-center">상품 목록 로딩 중...</p>';
@@ -3466,7 +3489,7 @@
       listEl.innerHTML = products.map(p => {
         const colorStr = (p.colors || []).map(c => c.name).join(', ');
         return `<label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
-          <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" />
+          <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" onchange="autoSaveBMProducts()" />
           ${p.images && p.images[0] ? '<img src="' + thumbUrl(p.images[0], 60, 80) + '" class="w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />' : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
           <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
           <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
