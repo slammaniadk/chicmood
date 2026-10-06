@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.33</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 20:48:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.34</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 20:51:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -2796,15 +2796,10 @@
 
   function buildPageButtons(cur, total) {
     const pages = [];
-    const show = new Set([1, total, cur, cur - 1, cur + 1]);
-    let prev = 0;
     for (let i = 1; i <= total; i++) {
-      if (!show.has(i)) continue;
-      if (prev && i - prev > 1) pages.push('<span class="text-warm-400 px-1">…</span>');
       pages.push(i === cur
         ? `<button class="btn-primary btn-sm min-w-[32px]">${i}</button>`
         : `<button class="btn-outline btn-sm min-w-[32px]" onclick="renderProducts(document.getElementById('page-content'),${i})">${i}</button>`);
-      prev = i;
     }
     return pages.join('');
   }
