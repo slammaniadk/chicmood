@@ -258,20 +258,12 @@ async function handleOrders(req, res) {
     .from('orders')
     .select('*, broadcasts:broadcast_id(id, title)', { count: 'exact' });
 
-  // 병합대상 모드: 주문자 이름순 정렬 (같은 사람끼리 모아보기)
-  if (duplicateIds) {
-    query = query.order('name', { ascending: true }).order('phone', { ascending: true }).order('created_at', { ascending: false });
-  } else {
-    query = query.order('created_at', { ascending: false });
-  }
-  query = query.range(offset, offset + limitNum - 1);
-
+  // 필터 조건 적용 (range보다 먼저 적용해야 정상 동작)
   if (duplicateIds) query = query.in('id', duplicateIds);
   if (status && status !== 'all') query = query.eq('status', status);
 
   // 검색어가 있으면 이름, 주문번호, 전화번호, 닉네임 + 상품명 검색
   if (search) {
-    // 상품명으로 order_items 검색하여 해당 order_id 목록 조회
     const { data: matchedItems } = await supabaseAdmin
       .from('order_items')
       .select('order_id')
@@ -285,15 +277,21 @@ async function handleOrders(req, res) {
     }
   }
 
+  // 정렬 + 페이징 (필터 이후에 적용)
+  if (duplicateIds) {
+    query = query.order('name', { ascending: true }).order('phone', { ascending: true }).order('created_at', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+  query = query.range(offset, offset + limitNum - 1);
+
   let { data: orders, error, count } = await query;
 
   // broadcast_id 컬럼이 없으면 join 없이 재시도
   if (error && error.message && error.message.includes('broadcast_id')) {
     query = supabaseAdmin
       .from('orders')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limitNum - 1);
+      .select('*', { count: 'exact' });
     if (duplicateIds) query = query.in('id', duplicateIds);
     if (status && status !== 'all') query = query.eq('status', status);
     if (search) {
@@ -308,6 +306,7 @@ async function handleOrders(req, res) {
         query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%`);
       }
     }
+    query = query.order('created_at', { ascending: false }).range(offset, offset + limitNum - 1);
     ({ data: orders, error, count } = await query);
   }
 
@@ -958,16 +957,31 @@ async function handleOrderModify(req, res, orderId) {
     }
   }
 
-  // 4. 기존 available_qty 복원 + 발주 차감 (병렬)
+  // 4. 기존 items의 배정 상태 보존 (삭제 전에 수집)
+  const { data: oldItems } = await supabaseAdmin.from('order_items')
+    .select('product_id, color, size, qty, allocated_qty, status')
+    .eq('order_id', orderId);
+  const oldAllocMap = {};
+  (oldItems || []).forEach(oi => {
+    const key = `${oi.product_id}|${oi.color || ''}|${oi.size || ''}`;
+    oldAllocMap[key] = { allocated_qty: oi.allocated_qty || 0, status: oi.status, qty: oi.qty };
+  });
+
+  // 5. 기존 available_qty 복원 + 발주 차감 (병렬)
   const parallelTasks = [restoreAvailableQty(orderId)];
   if (order.status === '결제완료') parallelTasks.push(deductPurchaseOrderQty(orderId));
   await Promise.all(parallelTasks);
 
-  // 5. 새 order_items 생성 (wholesale_price 우선, status = 현재 주문 상태)
+  // 6. 새 order_items 생성 (기존 배정 보존)
   const newOrderItems = items.map(item => {
     const prod = productMap[item.productId];
     const price = prod.wholesale_price || prod.price;
     const qty = Math.max(1, Math.min(99, parseInt(item.qty) || 1));
+    const key = `${item.productId}|${item.color || ''}|${item.size || ''}`;
+    const old = oldAllocMap[key];
+    // 기존 동일 품목이 있으면 배정 수량 보존 (새 qty 이내로 제한)
+    const restoredAlloc = old ? Math.min(old.allocated_qty, qty) : 0;
+    const restoredStatus = old && restoredAlloc >= qty ? old.status : order.status;
     return {
       order_id: orderId,
       product_id: item.productId,
@@ -977,11 +991,12 @@ async function handleOrderModify(req, res, orderId) {
       qty,
       price,
       subtotal: price * qty,
-      status: order.status,
+      allocated_qty: restoredAlloc,
+      status: restoredStatus,
     };
   });
 
-  // 6. 기존 items DELETE → 새 items INSERT
+  // 7. 기존 items DELETE → 새 items INSERT
   const { error: delErr } = await supabaseAdmin
     .from('order_items').delete().eq('order_id', orderId);
   if (delErr) return fail(res, delErr.message, 500);
@@ -1052,11 +1067,12 @@ async function handleOrderModify(req, res, orderId) {
   if (order.status === '결제완료') postTasks.push(createAutoPurchaseOrders(orderId));
   await Promise.all(postTasks);
 
-  // 8-1. 입고된 재고가 있으면 배정 재실행 (주문 수정 시 allocated_qty 초기화 보완)
+  // 8-1. 미배정 품목만 배정 재실행 (기존 배정이 보존된 품목은 건너뜀)
   if (order.status === '결제완료') {
     const allocCombos = new Set();
     const allocTasks = [];
     for (const item of newOrderItems) {
+      if ((item.allocated_qty || 0) >= item.qty) continue; // 이미 전량 배정됨
       const key = `${item.product_id}|${item.color}|${item.size}`;
       if (allocCombos.has(key)) continue;
       allocCombos.add(key);
@@ -1064,6 +1080,9 @@ async function handleOrderModify(req, res, orderId) {
     }
     if (allocTasks.length > 0) await Promise.all(allocTasks);
   }
+
+  // 8-2. 주문 상태 재계산 (전량 배정 시 배송준비 자동 승격)
+  await recalcOrderStatus(orderId);
 
   return ok(res, {
     orderId,
