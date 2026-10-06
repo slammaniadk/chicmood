@@ -3016,6 +3016,7 @@ async function handleProducts(req, res) {
   if (req.method === 'GET') {
     const isActiveParam = req.query.isActive || null;
     const searchParam = (req.query.search || '').trim();
+    const channelParam = req.query.channel || null;
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const pageSize = Math.min(500, Math.max(1, parseInt(req.query.pageSize) || 50));
     const from = (page - 1) * pageSize;
@@ -3028,6 +3029,11 @@ async function handleProducts(req, res) {
       .select('*, product_images(*), product_colors(*), vendors(name)')
       .order('id', { ascending: false })
       .range(from, to);
+
+    if (channelParam) {
+      countQuery = countQuery.eq('channel', channelParam);
+      dataQuery = dataQuery.eq('channel', channelParam);
+    }
 
     if (isActiveParam === 'true') {
       countQuery = countQuery.eq('is_active', true);
@@ -3081,6 +3087,7 @@ async function handleProducts(req, res) {
       size: p.size || '',
       category: p.category || '',
       lengthOptions: p.length_options || '',
+      channel: p.channel || 'chicmood',
       isActive: p.is_active !== false,
       images: (p.product_images || []).sort((a, b) => a.sort_order - b.sort_order).map(img => img.image_url),
       colors: (p.product_colors || []).sort((a, b) => a.sort_order - b.sort_order).map(c => ({ name: c.name, hex: c.hex_code })),
@@ -3090,7 +3097,7 @@ async function handleProducts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, category, lengthOptions } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, category, lengthOptions, channel } = req.body;
     if (!name) return fail(res, '상품명은 필수입니다');
 
     const finalPrice = price || costPrice || 0;
@@ -3099,6 +3106,7 @@ async function handleProducts(req, res) {
     if (costPrice) insertData.cost_price = costPrice;
     if (wholesalePrice !== undefined) insertData.wholesale_price = wholesalePrice;
     if (availableQty !== undefined) insertData.available_qty = availableQty;
+    if (channel) insertData.channel = channel;
 
     const { data: product, error } = await supabaseAdmin
       .from('products')
@@ -3128,7 +3136,7 @@ async function handleProducts(req, res) {
 // ============================================================
 async function handleProductDetail(req, res, id) {
   if (req.method === 'PATCH') {
-    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, isActive, category, lengthOptions } = req.body;
+    const { name, price, originalPrice, discount, description, material, images, colors, vendorId, costPrice, wholesalePrice, size, availableQty, isActive, category, lengthOptions, channel } = req.body;
 
     const update = {};
     if (name !== undefined) update.name = name;
@@ -3145,6 +3153,7 @@ async function handleProductDetail(req, res, id) {
     if (isActive !== undefined) update.is_active = isActive;
     if (category !== undefined) update.category = category;
     if (lengthOptions !== undefined) update.length_options = lengthOptions;
+    if (channel !== undefined) update.channel = channel;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('products').update(update).eq('id', id);
@@ -3214,6 +3223,7 @@ async function handleBroadcasts(req, res) {
       scheduledAt: b.scheduled_at,
       status: b.status,
       description: b.description,
+      channel: b.channel || 'chicmood',
       youtubeVideoId: b.youtube_video_id || null,
       productIds: (b.broadcast_products || []).map(bp => bp.product_id),
     }));
@@ -3222,11 +3232,12 @@ async function handleBroadcasts(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId } = req.body;
+    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId, channel } = req.body;
     if (!title) return fail(res, '방송 제목은 필수입니다');
 
     const insertData = { title, date_text: date || '', scheduled_at: scheduledAt || null, status: status || 'live', description: description || '' };
     if (youtubeVideoId) insertData.youtube_video_id = youtubeVideoId;
+    if (channel) insertData.channel = channel;
 
     const { data: broadcast, error } = await supabaseAdmin
       .from('broadcasts')
@@ -3280,6 +3291,7 @@ async function handleBroadcastDetail(req, res, id) {
       broadcast: {
         id: b.id, title: b.title, date: b.date_text, status: b.status,
         description: b.description, createdAt: b.created_at,
+        channel: b.channel || 'chicmood',
         youtubeVideoId: b.youtube_video_id || null,
         products, sales: salesData,
       }
@@ -3287,7 +3299,7 @@ async function handleBroadcastDetail(req, res, id) {
   }
 
   if (req.method === 'PATCH') {
-    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId } = req.body;
+    const { title, date, scheduledAt, status, description, productIds, youtubeVideoId, channel } = req.body;
 
     const update = {};
     if (title !== undefined) update.title = title;
@@ -3296,6 +3308,7 @@ async function handleBroadcastDetail(req, res, id) {
     if (status !== undefined) update.status = status;
     if (description !== undefined) update.description = description;
     if (youtubeVideoId !== undefined) update.youtube_video_id = youtubeVideoId || null;
+    if (channel !== undefined) update.channel = channel;
 
     if (Object.keys(update).length > 0) {
       const { error } = await supabaseAdmin.from('broadcasts').update(update).eq('id', id);
