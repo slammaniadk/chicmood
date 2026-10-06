@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.29</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 18:41:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.30</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 18:48:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3025,6 +3025,10 @@
     const existingSizes = (modal?.dataset.origSize || '').split(',').map(s => s.trim());
     const existingLengths = (modal?.dataset.origLength || '').split(',').map(s => s.trim());
 
+    // 체크박스에 매칭되지 않는 커스텀 사이즈 값 확인
+    const origSizeRaw = modal?.dataset.origSize || '';
+    const isCustomSize = origSizeRaw && !sizeOptions.some(s => origSizeRaw.split(',').map(v => v.trim()).includes(s));
+
     if (sizeOptions.length === 0) {
       sizeArea.innerHTML = '<p class="text-[11px] text-warm-400 mt-1">이 카테고리는 사이즈 옵션이 없습니다</p>';
     } else {
@@ -3034,10 +3038,11 @@
           ${sizeOptions.map(sz => {
             const hasSavedSize = sizeOptions.some(s => existingSizes.includes(s));
             const autoCheck = category === '신발' && !hasSavedSize;
-            const checked = autoCheck || existingSizes.includes(sz) ? 'checked' : '';
-            return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-size-cb" value="${sz}" ${checked} /> ${sz}</label>`;
+            const checked = !isCustomSize && (autoCheck || existingSizes.includes(sz)) ? 'checked' : '';
+            return `<label class="flex items-center gap-1 text-[12px] text-warm-600 cursor-pointer"><input type="checkbox" class="pm-size-cb" value="${sz}" ${checked} onchange="document.getElementById('pm-size-custom').value=''" /> ${sz}</label>`;
           }).join('')}
         </div>
+        <input id="pm-size-custom" class="input-field mt-2" value="${isCustomSize ? escapeHtml(origSizeRaw) : ''}" placeholder="직접 입력 (예: F(240*62))" style="font-size:12px;" onfocus="document.querySelectorAll('.pm-size-cb').forEach(c=>c.checked=false)" />
       `;
     }
 
@@ -3160,8 +3165,9 @@
     const wholesalePrice = parseInt(document.getElementById('pm-wholesale').value) || 0;
     const aqVal = document.getElementById('pm-available-qty').value.trim();
     const availableQty = aqVal === '' ? null : Math.max(0, parseInt(aqVal) || 0);
+    const sizeCustom = (document.getElementById('pm-size-custom')?.value || '').trim();
     const sizeChecked = [...document.querySelectorAll('.pm-size-cb:checked')].map(cb => cb.value);
-    const size = sizeChecked.join(',');
+    const size = sizeCustom || sizeChecked.join(',');
     const category = document.getElementById('pm-category').value;
     const lengthChecked = [...document.querySelectorAll('.pm-length-cb:checked')].map(cb => cb.value);
     const lengthOptions = lengthChecked.join(',');
