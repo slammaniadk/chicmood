@@ -3275,11 +3275,9 @@ async function handleBroadcastDetail(req, res, id) {
       if (error) return fail(res, error.message, 500);
     }
 
-    if (productIds) {
+    if (productIds && productIds.length > 0) {
       await supabaseAdmin.from('broadcast_products').delete().eq('broadcast_id', id);
-      if (productIds.length > 0) {
-        await supabaseAdmin.from('broadcast_products').insert(productIds.map((pid, i) => ({ broadcast_id: parseInt(id), product_id: pid, sort_order: i })));
-      }
+      await supabaseAdmin.from('broadcast_products').insert(productIds.map((pid, i) => ({ broadcast_id: parseInt(id), product_id: pid, sort_order: i })));
     }
 
     await writeLog(req._admin, 'UPDATE', 'broadcast', id, { title: title || undefined, status: status || undefined });
