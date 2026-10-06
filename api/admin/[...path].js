@@ -2501,8 +2501,8 @@ async function createAutoPurchaseOrders(orderId) {
     const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
     const [pendingPOsResult, maxPOsResult] = await Promise.all([
       supabaseAdmin.from('purchase_orders')
-        .select('id, vendor_id, broadcast_id, memo')
-        .in('status', ['발주대기', '부분입고']),
+        .select('id, vendor_id, broadcast_id, status, memo')
+        .in('status', ['발주대기', '부분입고', '입고완료']),
       supabaseAdmin.from('purchase_orders')
         .select('po_no').ilike('po_no', `PO-${dateStr}%`).order('po_no', { ascending: false }).limit(1),
     ]);
@@ -2621,6 +2621,14 @@ async function createAutoPurchaseOrders(orderId) {
           }
         }
         poIdsToRecalc.push(poId);
+        // 입고완료 PO에 미입고 품목이 추가되면 부분입고로 되돌림
+        if (existingPO.status === '입고완료') {
+          allOps.push(
+            supabaseAdmin.from('purchase_orders')
+              .update({ status: '부분입고' })
+              .eq('id', poId)
+          );
+        }
       } else {
         // 새 발주서 생성 (순차 - ID 필요)
         const poNo = `PO-${dateStr}-${String(nextPONum).padStart(3, '0')}`;
