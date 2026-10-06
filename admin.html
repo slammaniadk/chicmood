@@ -112,6 +112,8 @@
     .overlay-content { animation: scaleIn 0.2s ease-out forwards; background: #fff; border-radius: 12px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; margin: 16px; }
     @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
+    #img-hover-preview { display: none; position: fixed; z-index: 9999; pointer-events: none; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); border: 2px solid #fff; background: #fff; width: 200px; height: 260px; object-fit: cover; }
+
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e4c5a5; border-radius: 3px; }
@@ -164,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.28</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 16:20:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.29</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.06 18:41:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3439,7 +3441,7 @@
                 return `${separator}
                 <label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50 ${isChecked ? 'bg-amber-50' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
                   <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} onchange="updateBMCount();autoSaveBMProducts()" />
-                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 60, 80)}" class="w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
+                  ${p.images && p.images[0] ? `<img src="${thumbUrl(p.images[0], 60, 80)}" data-full="${thumbUrl(p.images[0], 400, 520)}" class="bm-thumb w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />` : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
                   <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
                   <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
                   ${colorStr ? `<span class="text-warm-400 text-[12px] truncate" style="max-width:180px;" title="${escapeHtml(colorStr)}">${escapeHtml(colorStr)}</span>` : ''}
@@ -3524,7 +3526,7 @@
         const colorStr = (p.colors || []).map(c => c.name).join(', ');
         return `<label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
           <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" onchange="updateBMCount();autoSaveBMProducts()" />
-          ${p.images && p.images[0] ? '<img src="' + thumbUrl(p.images[0], 60, 80) + '" class="w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />' : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
+          ${p.images && p.images[0] ? '<img src="' + thumbUrl(p.images[0], 60, 80) + '" data-full="' + thumbUrl(p.images[0], 400, 520) + '" class="bm-thumb w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />' : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
           <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
           <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
           ${colorStr ? '<span class="text-warm-400 text-[12px] truncate" style="max-width:180px;" title="' + escapeHtml(colorStr) + '">' + escapeHtml(colorStr) + '</span>' : ''}
@@ -6918,6 +6920,36 @@
     document.addEventListener('keydown', function _esc(e) { if (e.key === 'Escape') { const v = document.getElementById('chat-img-viewer'); if (v) v.remove(); document.removeEventListener('keydown', _esc); } });
     document.body.appendChild(viewer);
   }
+
+  // 방송수정 상품 이미지 hover 확대
+  (function() {
+    const preview = document.createElement('img');
+    preview.id = 'img-hover-preview';
+    document.body.appendChild(preview);
+
+    document.addEventListener('mouseenter', function(e) {
+      const img = e.target.closest('.bm-thumb');
+      if (!img) return;
+      const fullUrl = img.dataset.full;
+      if (!fullUrl) return;
+      preview.src = fullUrl;
+      preview.style.display = 'block';
+      const rect = img.getBoundingClientRect();
+      let left = rect.right + 12;
+      let top = rect.top - 40;
+      if (left + 210 > window.innerWidth) left = rect.left - 220;
+      if (top + 270 > window.innerHeight) top = window.innerHeight - 275;
+      if (top < 5) top = 5;
+      preview.style.left = left + 'px';
+      preview.style.top = top + 'px';
+    }, true);
+
+    document.addEventListener('mouseleave', function(e) {
+      if (e.target.closest && e.target.closest('.bm-thumb')) {
+        preview.style.display = 'none';
+      }
+    }, true);
+  })();
 
   </script>
 </body>
