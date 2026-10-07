@@ -2944,10 +2944,10 @@ async function handlePORegenerate(req, res) {
       }
 
       for (const [groupKey, group] of Object.entries(groups)) {
-        // 기존 발주대기/부분입고 발주서 확인
+        // 기존 발주서 확인 (입고완료 포함 → 부분입고로 다운그레이드)
         let existingPO = null;
         let query = supabaseAdmin.from('purchase_orders')
-          .select('id').in('status', ['발주대기', '부분입고']);
+          .select('id, status').in('status', ['발주대기', '부분입고', '입고완료']);
         if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
         else { query = query.is('vendor_id', null); }
         if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
@@ -2957,6 +2957,11 @@ async function handlePORegenerate(req, res) {
         let poId;
         if (existingPO) {
           poId = existingPO.id;
+          // 입고완료 → 부분입고 다운그레이드
+          if (existingPO.status === '입고완료') {
+            await supabaseAdmin.from('purchase_orders')
+              .update({ status: '부분입고' }).eq('id', poId);
+          }
           for (const newItem of group.items) {
             const { data: existingItems } = await supabaseAdmin.from('purchase_order_items')
               .select('id, qty, cost_price')
@@ -5861,10 +5866,10 @@ async function handleQtyAdjust(req, res) {
     }
 
     for (const [groupKey, group] of Object.entries(groups)) {
-      // 기존 발주서 찾기
+      // 기존 발주서 찾기 (입고완료 포함 → 부분입고로 다운그레이드)
       let existingPO = null;
       let query = supabaseAdmin.from('purchase_orders')
-        .select('id').in('status', ['발주대기', '부분입고']);
+        .select('id, status').in('status', ['발주대기', '부분입고', '입고완료']);
       if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
       else { query = query.is('vendor_id', null); }
       if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
@@ -5875,6 +5880,11 @@ async function handleQtyAdjust(req, res) {
       let poId;
       if (existingPO) {
         poId = existingPO.id;
+        // 입고완료 → 부분입고 다운그레이드
+        if (existingPO.status === '입고완료') {
+          await supabaseAdmin.from('purchase_orders')
+            .update({ status: '부분입고' }).eq('id', poId);
+        }
         for (const newItem of group.items) {
           const { data: existingItems } = await supabaseAdmin.from('purchase_order_items')
             .select('id, qty, cost_price')
