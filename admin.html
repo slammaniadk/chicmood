@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.35</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.07 16:28:03</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.36</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.07 16:34:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -4424,9 +4424,15 @@
   // ============================================================
   //  QTY COMPARE (주문/발주 수량 대조)
   // ============================================================
-  async function openQtyCompareModal() {
+  async function openQtyCompareModal(selectedBcId) {
     try {
-      const data = await api('/admin/purchase-orders/qty-compare');
+      const allBroadcasts = await api('/admin/broadcasts');
+      if (selectedBcId === undefined && allBroadcasts && allBroadcasts.length > 0) {
+        selectedBcId = String(allBroadcasts[0].id);
+      }
+      const qtyParams = new URLSearchParams();
+      if (selectedBcId && selectedBcId !== 'all') qtyParams.set('broadcastId', selectedBcId);
+      const data = await api('/admin/purchase-orders/qty-compare?' + qtyParams.toString());
       const { comparison, summary } = data;
 
       const existing = document.getElementById('qty-compare-modal');
@@ -4436,6 +4442,9 @@
       modal.className = 'overlay';
       modal.id = 'qty-compare-modal';
       modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+      const bcOptions = `<option value="all" ${selectedBcId==='all'?'selected':''}>전체</option>` +
+        (allBroadcasts||[]).map(b => `<option value="${b.id}" ${String(selectedBcId)===String(b.id)?'selected':''}>${escapeHtml(b.title||b.date||'방송 #'+b.id)}${b.status==='live'?' (방송중)':''}</option>`).join('');
 
       let tableRows = '';
       (comparison || []).forEach((item, idx) => {
@@ -4468,7 +4477,12 @@
       modal.innerHTML = `
         <div class="overlay-content p-6" style="max-width:940px;">
           <div class="flex justify-between items-center mb-4">
-            <h3 class="font-serif text-lg font-semibold text-warm-800 italic">주문/발주 수량 대조 (전체)</h3>
+            <div class="flex items-center gap-3">
+              <h3 class="font-serif text-lg font-semibold text-warm-800 italic">수량 대조</h3>
+              <select class="input-field" style="max-width:240px;padding:4px 8px;font-size:13px;" onchange="openQtyCompareModal(this.value)">
+                ${bcOptions}
+              </select>
+            </div>
             <button onclick="document.getElementById('qty-compare-modal').remove()" class="text-warm-400 hover:text-warm-700 bg-transparent border-none cursor-pointer text-xl">&times;</button>
           </div>
           <div class="flex gap-3 mb-4">

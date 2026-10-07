@@ -5547,10 +5547,14 @@ async function handleAfterServiceDetail(req, res, id) {
 async function handleQtyCompare(req, res) {
   if (req.method !== 'GET') return fail(res, 'Method not allowed', 405);
   try {
-    // 전체 기준 조회 (방송 필터 없음)
-    const { data: orders } = await supabaseAdmin.from('orders')
+    const { broadcastId } = req.query || {};
+
+    // 주문 조회 (방송 필터 옵션)
+    let ordersQuery = supabaseAdmin.from('orders')
       .select('id, order_no, name, social, created_at, broadcast_id')
       .in('status', ['입금확인', '결제완료', '배송준비', '배송완료']);
+    if (broadcastId) ordersQuery = ordersQuery.eq('broadcast_id', broadcastId);
+    const { data: orders } = await ordersQuery;
 
     if (!orders || orders.length === 0) {
       return ok(res, {
@@ -5564,12 +5568,28 @@ async function handleQtyCompare(req, res) {
     const orderLookup = {};
     orders.forEach(o => { orderLookup[o.id] = o; });
 
+    // 발주 아이템: broadcastId가 있으면 해당 방송의 PO만 조회
+    let poItemsPromise;
+    if (broadcastId) {
+      poItemsPromise = supabaseAdmin.from('purchase_orders')
+        .select('id').eq('broadcast_id', broadcastId)
+        .then(({ data: pos }) => {
+          const poIds = (pos || []).map(p => p.id);
+          if (poIds.length === 0) return { data: [] };
+          return supabaseAdmin.from('purchase_order_items')
+            .select('product_id, product_name, color_name, size_name, qty, received_qty, purchase_order_id')
+            .in('purchase_order_id', poIds);
+        });
+    } else {
+      poItemsPromise = supabaseAdmin.from('purchase_order_items')
+        .select('product_id, product_name, color_name, size_name, qty, received_qty, purchase_order_id');
+    }
+
     const [itemsResult, poItemsResult] = await Promise.all([
       supabaseAdmin.from('order_items')
         .select('id, product_id, name, color, size, qty, status, order_id')
         .in('order_id', orderIds),
-      supabaseAdmin.from('purchase_order_items')
-        .select('product_id, product_name, color_name, size_name, qty, received_qty, purchase_order_id'),
+      poItemsPromise,
     ]);
 
     // product_id가 NULL인 아이템 → 상품명으로 매칭
@@ -5619,7 +5639,7 @@ async function handleQtyCompare(req, res) {
       }
     });
 
-    // 발주 아이템 집계 (전체)
+    // 발주 아이템 집계
     const poMap = {};
     const allPOItems = poItemsResult.data || [];
     for (const item of allPOItems) {
