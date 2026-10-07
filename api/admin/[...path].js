@@ -488,8 +488,19 @@ async function handleOrderMerge(req, res) {
     .single();
   if (mergeHistErr) return fail(res, `병합 이력 저장 실패: ${mergeHistErr.message}`, 500);
 
-  // 5) source 발주 수량 차감 (items가 아직 source에 있는 상태에서 차감해야 정확)
+  // 5) 발주 수량 조정 (방송 기준)
+  // 같은 방송이면 동일 PO이므로 차감 불필요, 다른 방송이면 source PO에서 차감
+  const crossBcSourceItems = {};
   for (const srcId of sourceIds) {
+    const srcOrder = orders.find(o => o.id === srcId);
+    // 같은 방송이면 동일 PO이므로 차감 불필요
+    if ((srcOrder.broadcast_id || null) === (target.broadcast_id || null)) continue;
+
+    // 다른 방송이면 source items 저장 후 차감
+    const { data: srcItems } = await supabaseAdmin.from('order_items')
+      .select('product_id, name, color, size, qty')
+      .eq('order_id', srcId).neq('status', '결제취소');
+    crossBcSourceItems[srcId] = srcItems || [];
     await deductPurchaseOrderQty(srcId);
   }
 
@@ -499,6 +510,15 @@ async function handleOrderMerge(req, res) {
       .update({ order_id: targetId })
       .eq('order_id', srcId);
     if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
+  }
+
+  // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가
+  if (['결제완료', '배송준비'].includes(target.status)) {
+    for (const items of Object.values(crossBcSourceItems)) {
+      for (const item of items) {
+        await addItemToPurchaseOrder(targetId, item);
+      }
+    }
   }
 
   // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
@@ -2278,9 +2298,9 @@ async function addItemToPurchaseOrder(orderId, item) {
       .select('id, name, vendor_id, cost_price').eq('id', item.product_id).single();
     if (!product || !product.vendor_id) return;
 
-    // 기존 발주대기 발주서 찾기 (동일 거래처 + 동일 방송)
+    // 기존 발주서 찾기 (동일 거래처 + 동일 방송, 발주대기/부분입고/입고완료 매칭)
     let query = supabaseAdmin.from('purchase_orders')
-      .select('id').eq('vendor_id', product.vendor_id).eq('status', '발주대기');
+      .select('id, status').eq('vendor_id', product.vendor_id).in('status', ['발주대기', '부분입고', '입고완료']);
     if (orderBroadcastId) {
       query = query.eq('broadcast_id', orderBroadcastId);
     } else {
@@ -2314,6 +2334,12 @@ async function addItemToPurchaseOrder(orderId, item) {
           color_name: item.color || '', size_name: item.size || '',
           qty: item.qty, cost_price: costPrice, subtotal: item.qty * costPrice,
         });
+      }
+
+      // 기존 PO가 입고완료이면 미입고 품목이 추가되었으므로 부분입고로 되돌림
+      if (existingPOs[0].status === '입고완료') {
+        await supabaseAdmin.from('purchase_orders')
+          .update({ status: '부분입고' }).eq('id', poId);
       }
     } else {
       // 새 발주서 생성
