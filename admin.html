@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.37</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.07 16:54:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.38</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.08</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3519,15 +3519,27 @@
     if (modal) modal.dataset.channel = channel;
     const listEl = document.getElementById('bm-product-list');
     if (!listEl) return;
+    // 채널 전환 전 현재 체크된 상품 ID 캡처
+    const checkedSet = new Set(
+      Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value))
+    );
     listEl.innerHTML = '<p class="text-warm-400 text-[12px] py-4 text-center">상품 목록 로딩 중...</p>';
     try {
       const r = await api('/admin/products?isActive=true&pageSize=500&channel=' + channel);
       allProducts = r.items || r;
       const products = allProducts || [];
-      listEl.innerHTML = products.map(p => {
+      // 체크된 상품 상단 정렬
+      const sortedProducts = [...products].sort((a, _b) => {
+        const aChecked = checkedSet.has(a.id) ? 0 : 1;
+        const bChecked = checkedSet.has(_b.id) ? 0 : 1;
+        return aChecked - bChecked;
+      });
+      listEl.innerHTML = sortedProducts.map((p, idx) => {
+        const isChecked = checkedSet.has(p.id);
         const colorStr = (p.colors || []).map(c => c.name).join(', ');
-        return `<label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
-          <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" onchange="updateBMCount();autoSaveBMProducts()" />
+        const separator = idx > 0 && !isChecked && checkedSet.has(sortedProducts[idx-1].id) ? '<div style="border-top:2px solid #d4a574;margin:8px 0;"></div>' : '';
+        return `${separator}<label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50 ${isChecked ? 'bg-amber-50' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
+          <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} onchange="updateBMCount();autoSaveBMProducts()" />
           ${p.images && p.images[0] ? '<img src="' + thumbUrl(p.images[0], 60, 80) + '" data-full="' + thumbUrl(p.images[0], 400, 520) + '" class="bm-thumb w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />' : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
           <span class="text-warm-700 font-medium truncate" style="min-width:100px;max-width:220px;">${escapeHtml(p.name)}</span>
           <span class="text-warm-500 text-[13px] flex-shrink-0">${fmt(p.price)}</span>
@@ -3536,6 +3548,7 @@
           ${p.vendorName ? '<span class="text-blue-500 text-[12px] flex-shrink-0 bg-blue-50 px-2 py-0.5 rounded">' + escapeHtml(p.vendorName) + '</span>' : ''}
         </label>`;
       }).join('') || '<p class="text-warm-400 text-[12px]">등록된 상품이 없습니다</p>';
+      updateBMCount();
     } catch(e) {
       listEl.innerHTML = '<p class="text-warm-400 text-[12px] py-4 text-center">상품 목록을 불러올 수 없습니다</p>';
     }

@@ -3346,12 +3346,20 @@ async function handleBroadcastDetail(req, res, id) {
       if (error) return fail(res, error.message, 500);
     }
 
-    if (productIds && productIds.length > 0) {
-      await supabaseAdmin.from('broadcast_products').delete().eq('broadcast_id', id);
-      await supabaseAdmin.from('broadcast_products').insert(productIds.map((pid, i) => ({ broadcast_id: parseInt(id), product_id: pid, sort_order: i })));
+    if (productIds !== undefined) {
+      const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('replace_broadcast_products', {
+        p_broadcast_id: parseInt(id),
+        p_product_ids: productIds
+      });
+      if (rpcError) return fail(res, rpcError.message, 500);
+      await writeLog(req._admin, 'UPDATE', 'broadcast', id, {
+        title: title || undefined, status: status || undefined,
+        old_product_ids: rpcResult?.old_product_ids, new_product_ids: rpcResult?.new_product_ids
+      });
+    } else {
+      await writeLog(req._admin, 'UPDATE', 'broadcast', id, { title: title || undefined, status: status || undefined });
     }
 
-    await writeLog(req._admin, 'UPDATE', 'broadcast', id, { title: title || undefined, status: status || undefined });
     return ok(res, { id: parseInt(id) });
   }
 
