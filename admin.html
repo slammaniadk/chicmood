@@ -3377,8 +3377,9 @@
       } catch(_) {}
     }
     const products = allProducts || [];
-    // 체크된 상품(이 방송에 등록된) 상단 정렬
-    const checkedSet = new Set(b.productIds || []);
+    // 체크된 상품(이 방송에 등록된) 상단 정렬 + 글로벌 Set 초기화
+    _bmCheckedIds = new Set(b.productIds || []);
+    const checkedSet = _bmCheckedIds;
     const sortedProducts = [...products].sort((a, _b) => {
       const aChecked = checkedSet.has(a.id) ? 0 : 1;
       const bChecked = checkedSet.has(_b.id) ? 0 : 1;
@@ -3480,6 +3481,7 @@
 
   let _autoSaveTimer = null;
   let _bmAutoSaved = false;
+  let _bmCheckedIds = new Set();
   async function autoSaveBMProducts() {
     const modal = document.getElementById('broadcast-modal');
     if (!modal) return;
@@ -3491,7 +3493,13 @@
     const indicator = document.getElementById('bm-save-indicator');
     if (indicator) { indicator.textContent = '저장 중...'; indicator.className = 'text-[11px] text-yellow-600 font-semibold ml-2'; }
     _autoSaveTimer = setTimeout(async () => {
-      const productIds = Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value));
+      // 글로벌 Set 동기화
+      document.querySelectorAll('.bm-product').forEach(cb => {
+        const pid = parseInt(cb.value);
+        if (cb.checked) _bmCheckedIds.add(pid);
+        else _bmCheckedIds.delete(pid);
+      });
+      const productIds = Array.from(_bmCheckedIds);
       try {
         await api('/admin/broadcasts/' + bcId, {
           method: 'PATCH',
@@ -3519,10 +3527,13 @@
     if (modal) modal.dataset.channel = channel;
     const listEl = document.getElementById('bm-product-list');
     if (!listEl) return;
-    // 채널 전환 전 현재 체크된 상품 ID 캡처
-    const checkedSet = new Set(
-      Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value))
-    );
+    // 채널 전환 전: 현재 DOM의 체크 상태를 글로벌 Set에 동기화
+    const visibleProducts = document.querySelectorAll('.bm-product');
+    visibleProducts.forEach(cb => {
+      const pid = parseInt(cb.value);
+      if (cb.checked) _bmCheckedIds.add(pid);
+      else _bmCheckedIds.delete(pid);
+    });
     listEl.innerHTML = '<p class="text-warm-400 text-[12px] py-4 text-center">상품 목록 로딩 중...</p>';
     try {
       const r = await api('/admin/products?isActive=true&pageSize=500&channel=' + channel);
@@ -3530,14 +3541,14 @@
       const products = allProducts || [];
       // 체크된 상품 상단 정렬
       const sortedProducts = [...products].sort((a, _b) => {
-        const aChecked = checkedSet.has(a.id) ? 0 : 1;
-        const bChecked = checkedSet.has(_b.id) ? 0 : 1;
+        const aChecked = _bmCheckedIds.has(a.id) ? 0 : 1;
+        const bChecked = _bmCheckedIds.has(_b.id) ? 0 : 1;
         return aChecked - bChecked;
       });
       listEl.innerHTML = sortedProducts.map((p, idx) => {
-        const isChecked = checkedSet.has(p.id);
+        const isChecked = _bmCheckedIds.has(p.id);
         const colorStr = (p.colors || []).map(c => c.name).join(', ');
-        const separator = idx > 0 && !isChecked && checkedSet.has(sortedProducts[idx-1].id) ? '<div style="border-top:2px solid #d4a574;margin:8px 0;"></div>' : '';
+        const separator = idx > 0 && !isChecked && _bmCheckedIds.has(sortedProducts[idx-1].id) ? '<div style="border-top:2px solid #d4a574;margin:8px 0;"></div>' : '';
         return `${separator}<label class="flex items-center gap-3 cursor-pointer text-[14px] bm-product-row py-1.5 px-2 rounded hover:bg-warm-50 ${isChecked ? 'bg-amber-50' : ''}" data-id="${p.id}" data-name="${escapeHtml(p.name).toLowerCase()}" data-vendor="${escapeHtml(p.vendorName || '').toLowerCase()}">
           <input type="checkbox" class="bm-product flex-shrink-0 w-4 h-4" value="${p.id}" ${isChecked ? 'checked' : ''} onchange="updateBMCount();autoSaveBMProducts()" />
           ${p.images && p.images[0] ? '<img src="' + thumbUrl(p.images[0], 60, 80) + '" data-full="' + thumbUrl(p.images[0], 400, 520) + '" class="bm-thumb w-8 h-11 object-cover rounded border border-warm-200 flex-shrink-0" />' : '<div class="w-8 h-11 bg-warm-100 rounded flex-shrink-0"></div>'}
@@ -3560,7 +3571,13 @@
     const status = document.getElementById('bm-status').value;
     const channel = document.getElementById('bm-channel').value;
     const description = '';
-    const productIds = Array.from(document.querySelectorAll('.bm-product:checked')).map(cb => parseInt(cb.value));
+    // 현재 DOM 체크 상태를 글로벌 Set에 동기화 후 사용
+    document.querySelectorAll('.bm-product').forEach(cb => {
+      const pid = parseInt(cb.value);
+      if (cb.checked) _bmCheckedIds.add(pid);
+      else _bmCheckedIds.delete(pid);
+    });
+    const productIds = Array.from(_bmCheckedIds);
     const youtubeVideoId = extractYouTubeVideoId(document.getElementById('bm-youtube-url').value.trim());
 
     if (!title) { showToast('방송 제목은 필수입니다'); return; }
