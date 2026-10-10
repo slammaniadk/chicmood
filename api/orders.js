@@ -79,6 +79,20 @@ module.exports = async function handler(req, res) {
     return fail(res, '종료된 방송의 상품은 주문할 수 없습니다');
   }
 
+  // 중복 주문 방지: 동일 유저가 10초 이내 같은 방송에 주문한 건이 있으면 차단
+  const tenSecondsAgo = new Date(Date.now() - 10000).toISOString();
+  const { data: recentOrders } = await supabaseAdmin
+    .from('orders')
+    .select('id, created_at')
+    .eq('user_id', userId)
+    .eq('broadcast_id', parseInt(broadcastId))
+    .gte('created_at', tenSecondsAgo)
+    .neq('status', '결제취소')
+    .limit(1);
+  if (recentOrders && recentOrders.length > 0) {
+    return fail(res, '이미 주문이 접수되었습니다. 잠시 후 다시 시도해주세요.', 429);
+  }
+
   // 서버에서 가격 계산 (클라이언트 가격 무시) - 판매가(wholesale_price) 우선 사용
   const productIds = items.map(i => i.productId);
   const { data: products, error: pErr } = await supabaseAdmin

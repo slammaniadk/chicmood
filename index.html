@@ -192,7 +192,7 @@
     </div>
     <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
     <p class="text-[10px] text-warm-300 tracking-wider mt-1">Developed by DK Studio</p>
-    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.38 &middot; Last Modified 2026.10.08</p>
+    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.39 &middot; Last Modified 2026.10.10 19:00:00</p>
   </footer>
 
   <!-- 오버레이: 로딩 -->
@@ -1240,7 +1240,9 @@
     }
   }
 
+  let _isSubmitting = false;
   async function submitCheckout() {
+    if (_isSubmitting) return;
     const name = document.getElementById('co-name').value.trim();
     const phone = document.getElementById('co-phone').value.trim();
     const baseAddress = document.getElementById('co-address').value.trim();
@@ -1302,6 +1304,10 @@
   }
 
   async function placeOrder(name, phone, social, address, memo, broadcastId) {
+    if (_isSubmitting) return;
+    _isSubmitting = true;
+    const submitBtn = document.getElementById('co-submit-btn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '주문 처리 중...'; }
     document.getElementById('overlay-loading').classList.remove('hidden');
 
     try {
@@ -1340,6 +1346,9 @@
     } catch (e) {
       document.getElementById('overlay-loading').classList.add('hidden');
       showToast(e.message || '주문 처리에 실패했습니다');
+    } finally {
+      _isSubmitting = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '구매하기'; }
     }
   }
 
