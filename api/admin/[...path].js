@@ -262,16 +262,39 @@ async function handleOrders(req, res) {
   if (duplicateIds) query = query.in('id', duplicateIds);
   if (status && status !== 'all') query = query.eq('status', status);
 
-  // 검색어가 있으면 이름, 주문번호, 전화번호, 닉네임 + 상품명 검색
+  // 검색어가 있으면 이름, 주문번호, 전화번호, 닉네임 + 상품명 + 거래처명 검색
   if (search) {
+    // 상품명으로 주문 ID 매칭
     const { data: matchedItems } = await supabaseAdmin
       .from('order_items')
       .select('order_id')
       .ilike('name', `%${search}%`);
-    const matchedOrderIds = [...new Set((matchedItems || []).map(i => i.order_id))];
+    const matchedOrderIds = new Set((matchedItems || []).map(i => i.order_id));
 
-    if (matchedOrderIds.length > 0) {
-      query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%,id.in.(${matchedOrderIds.join(',')})`);
+    // 거래처명으로 주문 ID 매칭 (vendors → products → order_items)
+    const { data: matchedVendors } = await supabaseAdmin
+      .from('vendors')
+      .select('id')
+      .ilike('name', `%${search}%`);
+    if (matchedVendors && matchedVendors.length > 0) {
+      const vendorIds = matchedVendors.map(v => v.id);
+      const { data: vendorProducts } = await supabaseAdmin
+        .from('products')
+        .select('id')
+        .in('vendor_id', vendorIds);
+      if (vendorProducts && vendorProducts.length > 0) {
+        const vpIds = vendorProducts.map(p => p.id);
+        const { data: vendorItems } = await supabaseAdmin
+          .from('order_items')
+          .select('order_id')
+          .in('product_id', vpIds);
+        (vendorItems || []).forEach(i => matchedOrderIds.add(i.order_id));
+      }
+    }
+
+    const allMatchedIds = [...matchedOrderIds];
+    if (allMatchedIds.length > 0) {
+      query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%,id.in.(${allMatchedIds.join(',')})`);
     } else {
       query = query.or(`name.ilike.%${search}%,order_no.ilike.%${search}%,phone.ilike.%${search}%,social.ilike.%${search}%`);
     }
