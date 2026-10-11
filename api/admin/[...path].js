@@ -2545,6 +2545,21 @@ async function createAutoPurchaseOrders(orderId) {
       });
     }
 
+    // 같은 (product_id + color + size) 조합 합산 (중복 품목 방지)
+    for (const group of Object.values(groups)) {
+      const merged = {};
+      for (const item of group.items) {
+        const key = `${item.product_id}|${item.color_name}|${item.size_name}`;
+        if (!merged[key]) {
+          merged[key] = { ...item, order_item_ids: [{ order_item_id: item.order_item_id, qty: item.qty }] };
+        } else {
+          merged[key].qty += item.qty;
+          merged[key].order_item_ids.push({ order_item_id: item.order_item_id, qty: item.qty });
+        }
+      }
+      group.items = Object.values(merged);
+    }
+
     // 기존 발주대기/부분입고 발주서 + PO번호 max 병렬 조회
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
@@ -2616,9 +2631,12 @@ async function createAutoPurchaseOrders(orderId) {
                 .update({ qty: newQty, subtotal: newQty * (match.cost_price || newItem.cost_price) })
                 .eq('id', match.id)
             );
-            // 기존 PO item에 link 추가
-            if (newItem.order_item_id) {
-              matchedLinks.push({ poItemId: match.id, order_item_id: newItem.order_item_id, qty: newItem.qty });
+            match.qty = newQty; // 다음 반복에서 누적 합산되도록 갱신
+            // 기존 PO item에 link 추가 (합산된 품목의 모든 order_item_id)
+            for (const src of (newItem.order_item_ids || [{ order_item_id: newItem.order_item_id, qty: newItem.qty }])) {
+              if (src.order_item_id) {
+                matchedLinks.push({ poItemId: match.id, order_item_id: src.order_item_id, qty: src.qty });
+              }
             }
           } else {
             insertItemsData.push({
@@ -2628,8 +2646,7 @@ async function createAutoPurchaseOrders(orderId) {
                 size_name: newItem.size_name, qty: newItem.qty,
                 cost_price: newItem.cost_price, subtotal: newItem.qty * newItem.cost_price,
               },
-              order_item_id: newItem.order_item_id,
-              qty: newItem.qty,
+              order_item_ids: newItem.order_item_ids || [{ order_item_id: newItem.order_item_id, qty: newItem.qty }],
             });
           }
         }
@@ -2651,20 +2668,21 @@ async function createAutoPurchaseOrders(orderId) {
           const { data: insertedItems } = await supabaseAdmin.from('purchase_order_items')
             .insert(insertItemsData.map(d => d.poItemData)).select('id, product_id, color_name, size_name');
           if (insertedItems) {
-            for (const inserted of insertedItems) {
-              const src = insertItemsData.find(d =>
-                d.poItemData.product_id === inserted.product_id &&
-                d.poItemData.color_name === inserted.color_name &&
-                d.poItemData.size_name === inserted.size_name
-              );
-              if (src && src.order_item_id) {
-                linkOps.push(
-                  supabaseAdmin.from('po_order_links').upsert({
-                    purchase_order_item_id: inserted.id,
-                    order_item_id: src.order_item_id,
-                    qty: src.qty,
-                  }, { onConflict: 'purchase_order_item_id,order_item_id' })
-                );
+            for (let idx = 0; idx < insertedItems.length; idx++) {
+              const inserted = insertedItems[idx];
+              const src = insertItemsData[idx];
+              if (src && src.order_item_ids) {
+                for (const link of src.order_item_ids) {
+                  if (link.order_item_id) {
+                    linkOps.push(
+                      supabaseAdmin.from('po_order_links').upsert({
+                        purchase_order_item_id: inserted.id,
+                        order_item_id: link.order_item_id,
+                        qty: link.qty,
+                      }, { onConflict: 'purchase_order_item_id,order_item_id' })
+                    );
+                  }
+                }
               }
             }
           }
@@ -2705,20 +2723,21 @@ async function createAutoPurchaseOrders(orderId) {
           }))
         ).select('id, product_id, color_name, size_name');
         if (insertedItems) {
-          for (const inserted of insertedItems) {
-            const src = group.items.find(i =>
-              i.product_id === inserted.product_id &&
-              i.color_name === inserted.color_name &&
-              i.size_name === inserted.size_name
-            );
-            if (src && src.order_item_id) {
-              linkOps.push(
-                supabaseAdmin.from('po_order_links').upsert({
-                  purchase_order_item_id: inserted.id,
-                  order_item_id: src.order_item_id,
-                  qty: src.qty,
-                }, { onConflict: 'purchase_order_item_id,order_item_id' })
-              );
+          for (let idx = 0; idx < insertedItems.length; idx++) {
+            const inserted = insertedItems[idx];
+            const src = group.items[idx];
+            if (src && src.order_item_ids) {
+              for (const link of src.order_item_ids) {
+                if (link.order_item_id) {
+                  linkOps.push(
+                    supabaseAdmin.from('po_order_links').upsert({
+                      purchase_order_item_id: inserted.id,
+                      order_item_id: link.order_item_id,
+                      qty: link.qty,
+                    }, { onConflict: 'purchase_order_item_id,order_item_id' })
+                  );
+                }
+              }
             }
           }
         }
