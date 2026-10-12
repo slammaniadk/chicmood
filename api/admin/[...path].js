@@ -2304,6 +2304,16 @@ async function addItemToPurchaseOrder(orderId, item) {
   try {
     if (!item.product_id) return;
 
+    // 이미 발주에 연결된 품목이면 중복 추가 방지
+    if (item.id) {
+      const { data: existLink } = await supabaseAdmin
+        .from('po_order_links')
+        .select('id')
+        .eq('order_item_id', item.id)
+        .limit(1);
+      if (existLink && existLink.length > 0) return;
+    }
+
     // 주문의 broadcast 정보 조회
     let orderBroadcastId = null;
     let orderBroadcastTitle = '';
@@ -2490,7 +2500,16 @@ async function createAutoPurchaseOrders(orderId) {
     const items = itemsResult.data;
     if (!items || items.length === 0) return;
 
-    const validItems = items.filter(i => i.product_id);
+    const allValidItems = items.filter(i => i.product_id);
+    if (allValidItems.length === 0) return;
+
+    // 이미 발주에 연결된 order_item은 제외 (중복 발주 방지)
+    const { data: existingLinks } = await supabaseAdmin
+      .from('po_order_links')
+      .select('order_item_id')
+      .in('order_item_id', allValidItems.map(i => i.id));
+    const linkedItemIds = new Set((existingLinks || []).map(l => l.order_item_id));
+    const validItems = allValidItems.filter(i => !linkedItemIds.has(i.id));
     if (validItems.length === 0) return;
 
     // 상품 정보 배치 조회
