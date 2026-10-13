@@ -537,10 +537,18 @@ async function handleOrderMerge(req, res) {
 
   // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가 + po_order_links 재생성
   if (!BLOCKED_STATUSES.includes(target.status)) {
+    const crossBcItemIds = [];
     for (const items of Object.values(crossBcSourceItems)) {
       for (const item of items) {
         await addItemToPurchaseOrder(targetId, item, item.id);
+        crossBcItemIds.push(item.id);
       }
+    }
+    // 다른 방송에서 온 품목은 allocated_qty 리셋 (재고가 차감되었으므로 재배정 필요)
+    if (crossBcItemIds.length > 0) {
+      await supabaseAdmin.from('order_items')
+        .update({ allocated_qty: 0 })
+        .in('id', crossBcItemIds);
     }
   }
 
@@ -576,6 +584,23 @@ async function handleOrderMerge(req, res) {
     mergedFrom: sourceIds,
     name: target.name,
   });
+
+  // 10-1) 다른 방송 품목이 있었으면 target PO 기준 재배정 실행
+  if (Object.keys(crossBcSourceItems).length > 0) {
+    // target 주문과 연결된 PO들에서 재배정
+    const { data: targetLinks } = await supabaseAdmin.from('po_order_links')
+      .select('purchase_order_item_id')
+      .in('order_item_id', Object.values(crossBcSourceItems).flat().map(i => i.id));
+    const poItemIds = [...new Set((targetLinks || []).map(l => l.purchase_order_item_id))];
+    if (poItemIds.length > 0) {
+      const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('purchase_order_id').in('id', poItemIds);
+      const poIds = [...new Set((poItems || []).map(p => p.purchase_order_id))];
+      for (const poId of poIds) {
+        await allocateReceivedToOrders(poId);
+      }
+    }
+  }
 
   // 11) 전량배정 시 자동 배송준비 승격
   if (target.status === '결제완료') {
@@ -2429,10 +2454,6 @@ async function addItemToPurchaseOrder(orderId, item, orderItemId = null) {
           order_item_id: orderItemId,
           qty: item.qty,
         }, { onConflict: 'purchase_order_item_id,order_item_id' });
-        // po_order_links 생성 시 allocated_qty 동기화
-        await supabaseAdmin.from('order_items')
-          .update({ allocated_qty: item.qty })
-          .eq('id', orderItemId);
       }
     }
   } catch (e) { console.error('품목별 발주 추가 오류:', e.message || e); }
@@ -2649,7 +2670,6 @@ async function createAutoPurchaseOrders(orderId) {
     const poIdsToRecalc = [];
 
     const linkOps = []; // po_order_links upsert 작업 모음
-    const allocUpdates = {}; // order_item_id → qty (allocated_qty 업데이트용)
 
     for (const group of groupEntries) {
       const existingPO = pendingPOs.find(po =>
@@ -2704,7 +2724,6 @@ async function createAutoPurchaseOrders(orderId) {
               qty: ml.qty,
             }, { onConflict: 'purchase_order_item_id,order_item_id' })
           );
-          allocUpdates[ml.order_item_id] = (allocUpdates[ml.order_item_id] || 0) + ml.qty;
         }
 
         // 새 items 삽입 → ID 반환 → link 생성
@@ -2725,7 +2744,6 @@ async function createAutoPurchaseOrders(orderId) {
                         qty: link.qty,
                       }, { onConflict: 'purchase_order_item_id,order_item_id' })
                     );
-                    allocUpdates[link.order_item_id] = (allocUpdates[link.order_item_id] || 0) + link.qty;
                   }
                 }
               }
@@ -2781,7 +2799,6 @@ async function createAutoPurchaseOrders(orderId) {
                       qty: link.qty,
                     }, { onConflict: 'purchase_order_item_id,order_item_id' })
                   );
-                  allocUpdates[link.order_item_id] = (allocUpdates[link.order_item_id] || 0) + link.qty;
                 }
               }
             }
@@ -2795,17 +2812,6 @@ async function createAutoPurchaseOrders(orderId) {
 
     // po_order_links upsert 병렬 실행
     if (linkOps.length > 0) await Promise.all(linkOps);
-
-    // order_items.allocated_qty 업데이트 (po_order_links와 동기화)
-    const allocEntries = Object.entries(allocUpdates);
-    if (allocEntries.length > 0) {
-      const allocOps = allocEntries.map(([oiId, qty]) =>
-        supabaseAdmin.from('order_items')
-          .update({ allocated_qty: qty })
-          .eq('id', Number(oiId))
-      );
-      await Promise.all(allocOps);
-    }
 
     // total_amount 재계산 (병렬)
     if (poIdsToRecalc.length > 0) {
