@@ -521,7 +521,7 @@ async function handleOrderMerge(req, res) {
 
     // 다른 방송이면 source items 저장 후 차감
     const { data: srcItems } = await supabaseAdmin.from('order_items')
-      .select('product_id, name, color, size, qty')
+      .select('id, product_id, name, color, size, qty')
       .eq('order_id', srcId).neq('status', '결제취소');
     crossBcSourceItems[srcId] = srcItems || [];
     await deductPurchaseOrderQty(srcId);
@@ -535,11 +535,11 @@ async function handleOrderMerge(req, res) {
     if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
   }
 
-  // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가
-  if (['결제완료', '배송준비'].includes(target.status)) {
+  // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가 + po_order_links 재생성
+  if (!BLOCKED_STATUSES.includes(target.status)) {
     for (const items of Object.values(crossBcSourceItems)) {
       for (const item of items) {
-        await addItemToPurchaseOrder(targetId, item);
+        await addItemToPurchaseOrder(targetId, item, item.id);
       }
     }
   }
@@ -2299,8 +2299,8 @@ async function restoreAvailableQty(orderId) {
   } catch (e) { console.error('판매가능수량 복원 오류:', e.message || e); }
 }
 
-// 단일 품목 발주 추가 헬퍼 (품목별 결제완료 전환 시)
-async function addItemToPurchaseOrder(orderId, item) {
+// 단일 품목 발주 추가 헬퍼 (품목별 결제완료 전환 시, orderItemId 전달 시 po_order_links도 생성)
+async function addItemToPurchaseOrder(orderId, item, orderItemId = null) {
   try {
     if (!item.product_id) return;
 
@@ -2413,6 +2413,24 @@ async function addItemToPurchaseOrder(orderId, item) {
     await supabaseAdmin.from('purchase_orders').update({
       total_amount: newTotal, updated_at: new Date().toISOString()
     }).eq('id', poId);
+
+    // po_order_links 생성 (병합 등에서 orderItemId 전달 시)
+    if (orderItemId && poId) {
+      const { data: targetPoItem } = await supabaseAdmin.from('purchase_order_items')
+        .select('id')
+        .eq('purchase_order_id', poId)
+        .eq('product_id', item.product_id)
+        .eq('color_name', item.color || '')
+        .eq('size_name', item.size || '')
+        .single();
+      if (targetPoItem) {
+        await supabaseAdmin.from('po_order_links').upsert({
+          purchase_order_item_id: targetPoItem.id,
+          order_item_id: orderItemId,
+          qty: item.qty,
+        }, { onConflict: 'purchase_order_item_id,order_item_id' });
+      }
+    }
   } catch (e) { console.error('품목별 발주 추가 오류:', e.message || e); }
 }
 
@@ -4027,17 +4045,32 @@ async function handlePurchaseOrderDetail(req, res, id) {
     if (memo !== undefined) update.memo = memo;
     update.updated_at = new Date().toISOString();
 
-    // items 배열이 전달되면 기존 품목 삭제 후 새로 삽입 (received_qty 보존)
+    // items 배열이 전달되면 기존 품목 삭제 후 새로 삽입 (received_qty + po_order_links 보존)
     if (items && Array.isArray(items)) {
-      // 삭제 전 기존 아이템의 received_qty를 (product_id, color_name, size_name) 키로 백업
+      // 삭제 전 기존 아이템의 id, received_qty를 (product_id, color_name, size_name) 키로 백업
       const { data: existingPOItems } = await supabaseAdmin.from('purchase_order_items')
-        .select('product_id, color_name, size_name, received_qty')
+        .select('id, product_id, color_name, size_name, received_qty')
         .eq('purchase_order_id', id);
       const receivedQtyBackup = {};
+      const oldItemKeyMap = {}; // id → key 매핑
       (existingPOItems || []).forEach(ei => {
         const key = `${ei.product_id}|${ei.color_name || ''}|${ei.size_name || ''}`;
         receivedQtyBackup[key] = (receivedQtyBackup[key] || 0) + (ei.received_qty || 0);
+        oldItemKeyMap[ei.id] = key;
       });
+
+      // po_order_links 백업 (품목 ID 변경 시 재연결용)
+      const oldItemIds = (existingPOItems || []).map(i => i.id).filter(Boolean);
+      let savedPoLinks = [];
+      if (oldItemIds.length > 0) {
+        const { data: links } = await supabaseAdmin.from('po_order_links')
+          .select('purchase_order_item_id, order_item_id, qty')
+          .in('purchase_order_item_id', oldItemIds);
+        savedPoLinks = links || [];
+        if (savedPoLinks.length > 0) {
+          await supabaseAdmin.from('po_order_links').delete().in('purchase_order_item_id', oldItemIds);
+        }
+      }
 
       await supabaseAdmin.from('purchase_order_items').delete().eq('purchase_order_id', id);
       if (items.length > 0) {
@@ -4058,6 +4091,26 @@ async function handlePurchaseOrderDetail(req, res, id) {
         });
         await supabaseAdmin.from('purchase_order_items').insert(poItems);
       }
+
+      // po_order_links 재연결: 새 품목 ID로 매핑
+      if (savedPoLinks.length > 0) {
+        const { data: newPoItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, product_id, color_name, size_name').eq('purchase_order_id', parseInt(id));
+        const newItemMap = {};
+        (newPoItems || []).forEach(i => { newItemMap[`${i.product_id}|${i.color_name || ''}|${i.size_name || ''}`] = i.id; });
+        const remappedLinks = savedPoLinks
+          .map(link => {
+            const key = oldItemKeyMap[link.purchase_order_item_id];
+            const newId = key ? newItemMap[key] : null;
+            if (!newId) return null;
+            return { purchase_order_item_id: newId, order_item_id: link.order_item_id, qty: link.qty };
+          })
+          .filter(Boolean);
+        if (remappedLinks.length > 0) {
+          await supabaseAdmin.from('po_order_links').upsert(remappedLinks, { onConflict: 'purchase_order_item_id,order_item_id' });
+        }
+      }
+
       // total_amount 재계산
       update.total_amount = items.reduce((s, i) => s + (i.qty || 1) * (i.costPrice || 0), 0);
     }
