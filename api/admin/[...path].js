@@ -2355,10 +2355,7 @@ async function addItemToPurchaseOrder(orderId, item) {
         .single();
 
       if (existingItem) {
-        const newQty = existingItem.qty + item.qty;
-        await supabaseAdmin.from('purchase_order_items')
-          .update({ qty: newQty, subtotal: newQty * (existingItem.cost_price || product.cost_price || 0) })
-          .eq('id', existingItem.id);
+        await supabaseAdmin.rpc('increment_po_item_qty', { p_item_id: existingItem.id, p_add_qty: item.qty });
       } else {
         const costPrice = product.cost_price || 0;
         await supabaseAdmin.from('purchase_order_items').insert({
@@ -2521,17 +2518,24 @@ async function createAutoPurchaseOrders(orderId) {
     const productMap = {};
     products.forEach(p => { productMap[p.id] = p; });
 
-    // 방송 정보 설정
+    // 방송 정보 설정: broadcast_products에 등록된 상품만 해당 방송 발주서에 배정
     let productBroadcastMap = {};
+    // 주문에 broadcast_id가 있어도 broadcast_products에 실제 등록된 상품만 방송 발주서에 넣음
+    // (방송과 무관한 거래처 상품이 방송 발주서에 섞이는 문제 방지)
+    const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
+      .select('product_id, broadcast_id, broadcasts(id, title)')
+      .in('product_id', productIds)
+      .order('broadcast_id', { ascending: false });
     if (orderBroadcastId) {
+      // 주문의 방송에 등록된 상품만 해당 방송으로 배정
+      const bcSet = new Set((bcProducts || []).filter(bp => bp.broadcast_id === orderBroadcastId).map(bp => bp.product_id));
       productIds.forEach(pid => {
-        productBroadcastMap[pid] = { broadcastId: orderBroadcastId, broadcastTitle: orderBroadcastTitle };
+        if (bcSet.has(pid)) {
+          productBroadcastMap[pid] = { broadcastId: orderBroadcastId, broadcastTitle: orderBroadcastTitle };
+        }
+        // bcSet에 없는 상품은 productBroadcastMap에 넣지 않음 → broadcastId: 0 (무방송) 그룹으로 감
       });
     } else {
-      const { data: bcProducts } = await supabaseAdmin.from('broadcast_products')
-        .select('product_id, broadcast_id, broadcasts(id, title)')
-        .in('product_id', productIds)
-        .order('broadcast_id', { ascending: false });
       (bcProducts || []).forEach(bp => {
         if (!productBroadcastMap[bp.product_id]) {
           productBroadcastMap[bp.product_id] = {
@@ -2644,13 +2648,10 @@ async function createAutoPurchaseOrders(orderId) {
             ei.size_name === newItem.size_name
           );
           if (match) {
-            const newQty = match.qty + newItem.qty;
             updateOps.push(
-              supabaseAdmin.from('purchase_order_items')
-                .update({ qty: newQty, subtotal: newQty * (match.cost_price || newItem.cost_price) })
-                .eq('id', match.id)
+              supabaseAdmin.rpc('increment_po_item_qty', { p_item_id: match.id, p_add_qty: newItem.qty })
             );
-            match.qty = newQty; // 다음 반복에서 누적 합산되도록 갱신
+            match.qty += newItem.qty; // 로컬 참조용 (link 생성에는 영향 없음)
             // 기존 PO item에 link 추가 (합산된 품목의 모든 order_item_id)
             for (const src of (newItem.order_item_ids || [{ order_item_id: newItem.order_item_id, qty: newItem.qty }])) {
               if (src.order_item_id) {
@@ -3032,9 +3033,7 @@ async function handlePORegenerate(req, res) {
               .eq('size_name', newItem.size_name);
             const match = existingItems && existingItems.length > 0 ? existingItems[0] : null;
             if (match) {
-              const newQty = match.qty + newItem.qty;
-              await supabaseAdmin.from('purchase_order_items')
-                .update({ qty: newQty, subtotal: newQty * (match.cost_price || newItem.cost_price) }).eq('id', match.id);
+              await supabaseAdmin.rpc('increment_po_item_qty', { p_item_id: match.id, p_add_qty: newItem.qty });
             } else {
               const { error: itemErr } = await supabaseAdmin.from('purchase_order_items').insert({
                 purchase_order_id: poId, product_id: newItem.product_id,
