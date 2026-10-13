@@ -2429,6 +2429,10 @@ async function addItemToPurchaseOrder(orderId, item, orderItemId = null) {
           order_item_id: orderItemId,
           qty: item.qty,
         }, { onConflict: 'purchase_order_item_id,order_item_id' });
+        // po_order_links 생성 시 allocated_qty 동기화
+        await supabaseAdmin.from('order_items')
+          .update({ allocated_qty: item.qty })
+          .eq('id', orderItemId);
       }
     }
   } catch (e) { console.error('품목별 발주 추가 오류:', e.message || e); }
@@ -2645,6 +2649,7 @@ async function createAutoPurchaseOrders(orderId) {
     const poIdsToRecalc = [];
 
     const linkOps = []; // po_order_links upsert 작업 모음
+    const allocUpdates = {}; // order_item_id → qty (allocated_qty 업데이트용)
 
     for (const group of groupEntries) {
       const existingPO = pendingPOs.find(po =>
@@ -2699,6 +2704,7 @@ async function createAutoPurchaseOrders(orderId) {
               qty: ml.qty,
             }, { onConflict: 'purchase_order_item_id,order_item_id' })
           );
+          allocUpdates[ml.order_item_id] = (allocUpdates[ml.order_item_id] || 0) + ml.qty;
         }
 
         // 새 items 삽입 → ID 반환 → link 생성
@@ -2719,6 +2725,7 @@ async function createAutoPurchaseOrders(orderId) {
                         qty: link.qty,
                       }, { onConflict: 'purchase_order_item_id,order_item_id' })
                     );
+                    allocUpdates[link.order_item_id] = (allocUpdates[link.order_item_id] || 0) + link.qty;
                   }
                 }
               }
@@ -2774,6 +2781,7 @@ async function createAutoPurchaseOrders(orderId) {
                       qty: link.qty,
                     }, { onConflict: 'purchase_order_item_id,order_item_id' })
                   );
+                  allocUpdates[link.order_item_id] = (allocUpdates[link.order_item_id] || 0) + link.qty;
                 }
               }
             }
@@ -2787,6 +2795,17 @@ async function createAutoPurchaseOrders(orderId) {
 
     // po_order_links upsert 병렬 실행
     if (linkOps.length > 0) await Promise.all(linkOps);
+
+    // order_items.allocated_qty 업데이트 (po_order_links와 동기화)
+    const allocEntries = Object.entries(allocUpdates);
+    if (allocEntries.length > 0) {
+      const allocOps = allocEntries.map(([oiId, qty]) =>
+        supabaseAdmin.from('order_items')
+          .update({ allocated_qty: qty })
+          .eq('id', Number(oiId))
+      );
+      await Promise.all(allocOps);
+    }
 
     // total_amount 재계산 (병렬)
     if (poIdsToRecalc.length > 0) {
