@@ -539,19 +539,12 @@ async function handleOrderMerge(req, res) {
 
   // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가 + po_order_links 재생성
   if (!BLOCKED_STATUSES.includes(target.status)) {
-    const crossBcItemIds = [];
     for (const items of Object.values(crossBcSourceItems)) {
       for (const item of items) {
         await addItemToPurchaseOrder(targetId, item, item.id);
-        crossBcItemIds.push(item.id);
       }
     }
-    // 다른 방송에서 온 품목은 allocated_qty 리셋 (재고가 차감되었으므로 재배정 필요)
-    if (crossBcItemIds.length > 0) {
-      await supabaseAdmin.from('order_items')
-        .update({ allocated_qty: 0 })
-        .in('id', crossBcItemIds);
-    }
+    // 배정(allocated_qty)은 유지 — 리셋하지 않음
   }
 
   // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
@@ -587,22 +580,7 @@ async function handleOrderMerge(req, res) {
     name: target.name,
   });
 
-  // 10-1) 다른 방송 품목이 있었으면 target PO 기준 재배정 실행
-  if (Object.keys(crossBcSourceItems).length > 0) {
-    // target 주문과 연결된 PO들에서 재배정
-    const { data: targetLinks } = await supabaseAdmin.from('po_order_links')
-      .select('purchase_order_item_id')
-      .in('order_item_id', Object.values(crossBcSourceItems).flat().map(i => i.id));
-    const poItemIds = [...new Set((targetLinks || []).map(l => l.purchase_order_item_id))];
-    if (poItemIds.length > 0) {
-      const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
-        .select('purchase_order_id').in('id', poItemIds);
-      const poIds = [...new Set((poItems || []).map(p => p.purchase_order_id))];
-      for (const poId of poIds) {
-        await allocateReceivedToOrders(poId);
-      }
-    }
-  }
+  // 10-1) 다른 방송 품목: 배정 유지 (재배정 실행하지 않음)
 
   // 11) 전량배정 시 자동 배송준비 승격
   if (target.status === '결제완료') {
