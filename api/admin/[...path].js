@@ -526,7 +526,7 @@ async function handleOrderMerge(req, res) {
       .select('id, product_id, name, color, size, qty')
       .eq('order_id', srcId).neq('status', '결제취소');
     crossBcSourceItems[srcId] = srcItems || [];
-    await deductPurchaseOrderQty(srcId);
+    await deductPurchaseOrderQty(srcId, { skipDeallocate: true });
   }
 
   // 6) source의 order_items → target order_id로 UPDATE
@@ -2038,7 +2038,7 @@ async function checkAdvancedPurchaseOrders(orderId) {
 }
 
 // 주문 취소/삭제 시 발주 수량 차감 헬퍼
-async function deductPurchaseOrderQty(orderId) {
+async function deductPurchaseOrderQty(orderId, { skipDeallocate = false } = {}) {
   try {
     // 주문 + 품목 + 상품 정보 병렬 조회
     const [orderResult, itemsResult] = await Promise.all([
@@ -2201,7 +2201,8 @@ async function deductPurchaseOrderQty(orderId) {
       }
       if (invUpdates.length > 0) await Promise.all(invUpdates);
 
-      // 재고 감소된 조합에 대해 초과배정 해제
+      // 재고 감소된 조합에 대해 초과배정 해제 (병합 시에는 건너뜀)
+      if (skipDeallocate) return;
       for (let i = 0; i < uniqueKeys.length; i++) {
         const inv = invResults[i].data;
         if (!inv) continue;
