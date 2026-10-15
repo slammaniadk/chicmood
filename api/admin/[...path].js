@@ -2320,15 +2320,19 @@ async function addItemToPurchaseOrder(orderId, item, orderItemId = null) {
       if (existLink && existLink.length > 0) return;
     }
 
-    // 주문의 broadcast 정보 조회
+    // 주문의 broadcast 정보 조회 (join 실패 시에도 broadcast_id 확보)
     let orderBroadcastId = null;
     let orderBroadcastTitle = '';
     try {
       const { data: orderData } = await supabaseAdmin.from('orders')
-        .select('broadcast_id, broadcasts:broadcast_id(id, title)').eq('id', orderId).single();
+        .select('broadcast_id').eq('id', orderId).single();
       if (orderData && orderData.broadcast_id) {
         orderBroadcastId = orderData.broadcast_id;
-        orderBroadcastTitle = orderData.broadcasts ? orderData.broadcasts.title : '';
+        try {
+          const { data: bcData } = await supabaseAdmin.from('broadcasts')
+            .select('title').eq('id', orderData.broadcast_id).single();
+          if (bcData) orderBroadcastTitle = bcData.title || '';
+        } catch (e2) { /* 방송 타이틀 조회 실패는 무시 */ }
       }
     } catch (e) { /* broadcast 조회 실패 무시 */ }
 
@@ -3037,6 +3041,7 @@ async function handlePORegenerate(req, res) {
         if (group.vendorId) { query = query.eq('vendor_id', group.vendorId); }
         else { query = query.is('vendor_id', null); }
         if (group.broadcastId) query = query.eq('broadcast_id', group.broadcastId);
+        else query = query.is('broadcast_id', null);
         const { data: candidatePOs } = await query.order('id', { ascending: false }).limit(1);
         if (candidatePOs && candidatePOs.length > 0) existingPO = candidatePOs[0];
 
