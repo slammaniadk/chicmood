@@ -6332,6 +6332,29 @@ async function handleDataCheck(req, res) {
     const orderMap = {};
     for (const o of orders) orderMap[o.id] = o;
 
+    // Step 2.5: product_id NULL인 주문아이템 → 상품명으로 매칭 (handleQtyCompare 패턴 재활용)
+    const nullPidItems = orderItemsAll.filter(i => !i.product_id && i.status !== '결제취소' && i.name);
+    if (nullPidItems.length > 0) {
+      const uniqueNames = [...new Set(nullPidItems.map(i => i.name))];
+      const { data: matchedProds } = await supabaseAdmin.from('products')
+        .select('id, name').in('name', uniqueNames);
+      if (matchedProds && matchedProds.length > 0) {
+        const nameToId = {};
+        matchedProds.forEach(p => { nameToId[p.name] = p.id; });
+        const updates = [];
+        for (const item of nullPidItems) {
+          if (nameToId[item.name]) {
+            item.product_id = nameToId[item.name];
+            if (item.id) updates.push({ id: item.id, product_id: nameToId[item.name] });
+          }
+        }
+        // DB에도 product_id 업데이트 (재발 방지)
+        for (const u of updates) {
+          await supabaseAdmin.from('order_items').update({ product_id: u.product_id }).eq('id', u.id);
+        }
+      }
+    }
+
     // Step 3: 전체 요약
     const ordersByStatus = {};
     for (const o of orders) {
@@ -6344,7 +6367,17 @@ async function handleDataCheck(req, res) {
     const totalReceived = poItemsAll.reduce((s, pi) => s + (pi.received_qty || 0), 0);
     const allocatedQty = activeOIs.reduce((s, oi) => s + Math.min(oi.allocated_qty || 0, oi.qty || 0), 0);
     const unallocatedQty = totalOrderQty - allocatedQty;
+    // 건수 기준 배정 카운트 (아이템 행 단위)
+    const allocatedCount = activeOIs.filter(oi => (oi.allocated_qty || 0) >= (oi.qty || 0)).length;
+    const unallocatedCount = activeOIs.length - allocatedCount;
     const receiveRate = totalPOQty > 0 ? Math.round(totalReceived / totalPOQty * 100) : 0;
+
+    // 입금확인 주문의 수량 (요약용)
+    const pendingOrders0 = orders.filter(o => o.status === '입금확인');
+    const pendingOrderIds0 = new Set(pendingOrders0.map(o => o.id));
+    const pendingQty0 = activeOIs
+      .filter(oi => pendingOrderIds0.has(oi.order_id))
+      .reduce((s, oi) => s + (oi.qty || 0), 0);
 
     // Step 4: 거래처별 그룹핑
     const poVendorMap = {};
@@ -6449,10 +6482,13 @@ async function handleDataCheck(req, res) {
         totalOrderQty,
         totalPOs: pos.length,
         totalPOQty,
+        pendingQty: pendingQty0,
         totalReceived,
         receiveRate,
         allocatedQty,
         unallocatedQty,
+        allocatedCount,
+        unallocatedCount,
       },
       vendors: vendorsResult,
       orderVsPO: { totalOrderQty, totalPOQty, pendingQty, note },

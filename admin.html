@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.52</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 16:00:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 16:08:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -192,7 +192,7 @@
       <button class="tab" data-tab="purchase-orders" onclick="navigate('purchase-orders')">📦 발주관리</button>
       <button class="tab" data-tab="inventory" onclick="navigate('inventory')">🗄️ 재고관리</button>
       <button class="tab" data-tab="shipping" onclick="navigate('shipping')">🚚 배송관리</button>
-      <button class="tab" data-tab="data-check" onclick="navigate('data-check')">📋 방송현황</button>
+      <button class="tab" data-tab="data-check" onclick="navigate('data-check')">🔍 데이터점검</button>
       <button class="tab" data-tab="returns" onclick="navigate('returns')">🔄 반품관리</button>
       <button class="tab" data-tab="sales" onclick="navigate('sales')">💰 매출관리</button>
       <button class="tab" data-tab="reports" onclick="navigate('reports')">📈 통계</button>
@@ -272,7 +272,7 @@
     { key: 'purchase-orders', label: '발주관리', icon: '📦' },
     { key: 'inventory', label: '재고관리', icon: '📁' },
     { key: 'shipping', label: '배송관리', icon: '🚚' },
-    { key: 'data-check', label: '방송현황', icon: '📋' },
+    { key: 'data-check', label: '데이터점검', icon: '🔍' },
     { key: 'returns', label: '반품관리', icon: '🔄' },
     { key: 'sales', label: '매출관리', icon: '💰' },
     { key: 'reports', label: '통계', icon: '📈' },
@@ -5742,9 +5742,9 @@
       const data = await api('/admin/data-check');
       const broadcasts = data.broadcasts || [];
       el.innerHTML = `<div class="fade-in">
-        <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-4">방송현황</h2>
+        <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-4">데이터 점검</h2>
         <div class="flex items-center gap-3 mb-6">
-          <select id="bc-select" class="input" style="max-width:420px">
+          <select id="bc-select" class="input" style="min-width:500px;max-width:600px;font-size:12px">
             <option value="">-- 방송 선택 --</option>
             ${broadcasts.map(b => `<option value="${b.id}">${escapeHtml(b.dateText || '')} 방송 #${b.id} ${escapeHtml(b.title)} (${b.orderCount}건)</option>`).join('')}
           </select>
@@ -5776,12 +5776,20 @@
       let html = '';
 
       // 전체 요약
+      // 거래처 상태별 집계
+      const vcComplete = vs.filter(v => v.poStatus === '입고완료');
+      const vcPartial = vs.filter(v => v.poStatus === '부분입고');
+      const vcWaiting = vs.filter(v => v.poStatus === '발주대기' || v.poStatus === '미입고');
+
       html += `<div class="card mb-4" style="font-size:13px;line-height:1.8">
         <h3 class="font-semibold text-warm-900 mb-2" style="font-size:15px">전체 요약</h3>
         <div>총 주문: <b>${s.totalOrders}건</b> (${statusParts}) / 주문수량 <b>${s.totalOrderQty}개</b></div>
-        <div>총 발주: <b>${s.totalPOs}건</b> / 발주수량 <b>${s.totalPOQty}개</b></div>
+        <div>총 발주: <b>${s.totalPOs}건</b> / 발주수량 <b>${s.totalPOQty}개</b>${s.pendingQty > 0 ? ' <span class="text-warm-500">(입금확인 ' + s.pendingQty + '개 미발주)</span>' : ''}</div>
         <div>총 입고: <b>${s.totalReceived}개</b> / 미입고 ${s.totalPOQty - s.totalReceived}개 (입고율 <b>${s.receiveRate}%</b>)</div>
-        <div>배정: <b>${s.allocatedQty}건</b> / 미배정: <b class="text-rose-600">${s.unallocatedQty}건</b></div>
+        <div>배정OK: <b>${s.allocatedCount}건</b> / 미배정: <b class="text-rose-600">${s.unallocatedCount}건</b></div>
+        ${vcComplete.length > 0 ? '<div class="text-emerald-600">입고완료: <b>' + vcComplete.length + '건</b> (' + vcComplete.map(v => escapeHtml(v.vendorName)).join(', ') + ')</div>' : ''}
+        ${vcPartial.length > 0 ? '<div class="text-amber-600">부분입고: <b>' + vcPartial.length + '건</b></div>' : ''}
+        ${vcWaiting.length > 0 ? '<div class="text-rose-600">발주대기: <b>' + vcWaiting.length + '건</b> (' + vcWaiting.map(v => escapeHtml(v.vendorName)).join(', ') + ')</div>' : ''}
       </div>`;
 
       // 거래처별 현황
