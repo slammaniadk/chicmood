@@ -492,6 +492,10 @@ async function handleOrderMerge(req, res) {
     return fail(res, '서로 다른 상태의 주문은 병합할 수 없습니다. 같은 상태의 주문만 병합해주세요.', 400);
   }
 
+  // ★ 모든 주문 중 가장 큰(나중) broadcast_id를 병합 기준으로 사용
+  const allBroadcastIds = orders.map(o => o.broadcast_id).filter(Boolean);
+  const mergeBroadcastId = allBroadcastIds.length > 0 ? Math.max(...allBroadcastIds) : null;
+
   // 4) 병합 이력 스냅샷 저장 (병합해제용)
   const sourceSnapshots = [];
   for (const srcId of sourceIds) {
@@ -509,112 +513,143 @@ async function handleOrderMerge(req, res) {
       target_id: targetId,
       merged_by: req._admin.id,
       source_orders: sourceSnapshots,
+      target_broadcast_id: target.broadcast_id,  // 병합해제 시 target 방송 원복용
     })
     .select('id')
     .single();
   if (mergeHistErr) return fail(res, `병합 이력 저장 실패: ${mergeHistErr.message}`, 500);
 
-  // 5) 발주 수량 조정 (방송 기준)
-  // 같은 방송이면 동일 PO이므로 차감 불필요, 다른 방송이면 source PO에서 차감
-  const crossBcSourceItems = {};
+  // 5) 발주 수량 조정 — mergeBroadcastId 기준으로 모든 cross-broadcast 아이템 이관
+  // Phase 1: 이관 대상 수집 + received_qty 캡처
+  const transferItems = [];       // { orderId, item } — PO 이관 대상
   const receivedQtyByItemId = {};
-  const sourcePOIds = new Set();
+  const affectedPOIds = new Set(); // inventory 동기화용
+
+  // target 아이템: target.broadcast_id != mergeBroadcastId이면 이관 대상
+  const targetNeedsTransfer = (target.broadcast_id || null) !== (mergeBroadcastId || null);
+  let targetCrossBcItems = [];
+  if (targetNeedsTransfer) {
+    const { data: tItems } = await supabaseAdmin.from('order_items')
+      .select('id, product_id, name, color, size, qty')
+      .eq('order_id', targetId).neq('status', '결제취소');
+    targetCrossBcItems = tItems || [];
+    for (const item of targetCrossBcItems) {
+      transferItems.push({ orderId: targetId, item });
+    }
+  }
+
+  // source 아이템: source.broadcast_id != mergeBroadcastId이면 이관 대상
+  const crossBcSourceOrderIds = [];
   for (const srcId of sourceIds) {
     const srcOrder = orders.find(o => o.id === srcId);
-    // 같은 방송이면 동일 PO이므로 차감 불필요
-    if ((srcOrder.broadcast_id || null) === (target.broadcast_id || null)) continue;
+    if ((srcOrder.broadcast_id || null) === (mergeBroadcastId || null)) continue;
+    crossBcSourceOrderIds.push(srcId);
 
-    // 다른 방송이면 source items 저장 후 차감
     const { data: srcItems } = await supabaseAdmin.from('order_items')
       .select('id, product_id, name, color, size, qty')
       .eq('order_id', srcId).neq('status', '결제취소');
-    crossBcSourceItems[srcId] = srcItems || [];
+    for (const item of (srcItems || [])) {
+      transferItems.push({ orderId: srcId, item });
+    }
+  }
 
-    // received_qty 캡처: deduct 전에 source PO items에서 읽기
-    const itemIds = (srcItems || []).filter(i => i.product_id).map(i => i.id);
-    if (itemIds.length > 0) {
-      const { data: links } = await supabaseAdmin.from('po_order_links')
-        .select('order_item_id, purchase_order_item_id')
-        .in('order_item_id', itemIds);
-      if (links && links.length > 0) {
-        const poItemIds = [...new Set(links.map(l => l.purchase_order_item_id))];
-        const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
-          .select('id, purchase_order_id, received_qty')
-          .in('id', poItemIds);
-        const poItemMap = {};
-        (poItems || []).forEach(pi => { poItemMap[pi.id] = pi; });
+  // 이관 대상 아이템들의 received_qty 캡처 (deduct 전)
+  const allTransferItemIds = transferItems.filter(t => t.item.product_id).map(t => t.item.id);
+  if (allTransferItemIds.length > 0) {
+    const { data: links } = await supabaseAdmin.from('po_order_links')
+      .select('order_item_id, purchase_order_item_id')
+      .in('order_item_id', allTransferItemIds);
+    if (links && links.length > 0) {
+      const poItemIds = [...new Set(links.map(l => l.purchase_order_item_id))];
+      const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('id, purchase_order_id, received_qty')
+        .in('id', poItemIds);
+      const poItemMap = {};
+      (poItems || []).forEach(pi => { poItemMap[pi.id] = pi; });
 
-        for (const link of links) {
-          const poItem = poItemMap[link.purchase_order_item_id];
-          if (!poItem) continue;
-          sourcePOIds.add(poItem.purchase_order_id);
-          const srcItem = (srcItems || []).find(i => i.id === link.order_item_id);
-          if (srcItem) {
-            receivedQtyByItemId[link.order_item_id] = Math.min(poItem.received_qty || 0, srcItem.qty);
-          }
+      for (const link of links) {
+        const poItem = poItemMap[link.purchase_order_item_id];
+        if (!poItem) continue;
+        affectedPOIds.add(poItem.purchase_order_id);
+        const tItem = transferItems.find(t => t.item.id === link.order_item_id);
+        if (tItem) {
+          receivedQtyByItemId[link.order_item_id] = Math.min(poItem.received_qty || 0, tItem.item.qty);
         }
       }
     }
+  }
 
+  // Phase 2: 원래 PO에서 차감
+  // target 아이템 차감 (broadcast 변경 전이므로 올바른 PO를 찾음)
+  if (targetNeedsTransfer) {
+    await deductPurchaseOrderQty(targetId, { skipDeallocate: true, isTransfer: true });
+  }
+  // source 아이템 차감
+  for (const srcId of crossBcSourceOrderIds) {
     await deductPurchaseOrderQty(srcId, { skipDeallocate: true, isTransfer: true });
   }
 
-  // 6) source의 order_items → target order_id로 UPDATE
+  // Phase 3: items 이동 + broadcast 갱신
+  // source order_items → target order_id로 UPDATE
   for (const srcId of sourceIds) {
     const { error: moveErr } = await supabaseAdmin.from('order_items')
       .update({ order_id: targetId })
       .eq('order_id', srcId);
     if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
   }
+  // target.broadcast_id = mergeBroadcastId로 UPDATE
+  if (targetNeedsTransfer && mergeBroadcastId) {
+    await supabaseAdmin.from('orders')
+      .update({ broadcast_id: mergeBroadcastId })
+      .eq('id', targetId);
+  }
 
-  // 6-1) 다른 방송에서 이동된 items → target 방송 PO에 추가 + po_order_links 재생성
+  // Phase 4: mergeBroadcast PO에 이관 대상 아이템 추가
+  // (target이 이제 mergeBroadcastId이므로 addItemToPurchaseOrder가 올바른 PO에 추가)
   if (!BLOCKED_STATUSES.includes(target.status)) {
-    for (const items of Object.values(crossBcSourceItems)) {
-      for (const item of items) {
-        await addItemToPurchaseOrder(targetId, item, item.id);
-      }
+    const newTargetPOIds = new Set();
+    for (const { item } of transferItems) {
+      await addItemToPurchaseOrder(targetId, item, item.id);
     }
-    // 배정(allocated_qty)은 유지 — 리셋하지 않음
 
-    // 6-2) target PO items에 received_qty 반영 + inventory 동기화
-    const targetPOIds = new Set();
-    for (const items of Object.values(crossBcSourceItems)) {
-      for (const item of items) {
-        const addReceivedQty = receivedQtyByItemId[item.id];
-        if (!addReceivedQty) continue;
+    // Phase 5: received_qty 반영 + inventory 동기화
+    for (const { item } of transferItems) {
+      const addReceivedQty = receivedQtyByItemId[item.id];
+      if (!addReceivedQty) continue;
 
-        const { data: links } = await supabaseAdmin.from('po_order_links')
-          .select('purchase_order_item_id')
-          .eq('order_item_id', item.id);
-        if (links && links.length > 0) {
-          const { data: poItem } = await supabaseAdmin.from('purchase_order_items')
-            .select('id, received_qty, purchase_order_id')
-            .eq('id', links[0].purchase_order_item_id)
-            .single();
-          if (poItem) {
-            await supabaseAdmin.from('purchase_order_items')
-              .update({ received_qty: (poItem.received_qty || 0) + addReceivedQty })
-              .eq('id', poItem.id);
-            targetPOIds.add(poItem.purchase_order_id);
-          }
+      const { data: links } = await supabaseAdmin.from('po_order_links')
+        .select('purchase_order_item_id')
+        .eq('order_item_id', item.id);
+      if (links && links.length > 0) {
+        const { data: poItem } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, received_qty, purchase_order_id')
+          .eq('id', links[0].purchase_order_item_id)
+          .single();
+        if (poItem) {
+          await supabaseAdmin.from('purchase_order_items')
+            .update({ received_qty: (poItem.received_qty || 0) + addReceivedQty })
+            .eq('id', poItem.id);
+          newTargetPOIds.add(poItem.purchase_order_id);
         }
       }
     }
-    // source + target PO inventory_log 동기화
-    for (const poId of sourcePOIds) {
+    // 영향받은 모든 PO inventory 동기화
+    for (const poId of affectedPOIds) {
       await updateInventoryFromPO(poId);
     }
-    for (const poId of targetPOIds) {
+    for (const poId of newTargetPOIds) {
       await updateInventoryFromPO(poId);
     }
   }
 
-  // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
-  const { data: allOrderDetails } = await supabaseAdmin.from('orders')
-    .select('subtotal, shipping_fee, shipping_refund, total')
-    .in('id', allIds);
+  // 7) 금액 재계산: subtotal은 실제 order_items에서, 배송비만 orders에서 합산
+  const { data: targetItems } = await supabaseAdmin.from('order_items')
+    .select('subtotal').eq('order_id', targetId);
+  const newSubtotal = (targetItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
 
-  const newSubtotal = (allOrderDetails || []).reduce((s, o) => s + (o.subtotal || 0), 0);
+  const { data: allOrderDetails } = await supabaseAdmin.from('orders')
+    .select('shipping_fee, shipping_refund')
+    .in('id', allIds);
   const newShippingFee = (allOrderDetails || []).reduce((s, o) => s + (o.shipping_fee || 0), 0);
   const newShippingRefund = (allOrderDetails || []).reduce((s, o) => s + (o.shipping_refund || 0), 0);
   const newTotal = newSubtotal + newShippingFee - newShippingRefund;
@@ -641,8 +676,6 @@ async function handleOrderMerge(req, res) {
     mergedFrom: sourceIds,
     name: target.name,
   });
-
-  // 10-1) 다른 방송 품목: 배정 유지 (재배정 실행하지 않음)
 
   // 11) 전량배정 시 자동 배송준비 승격
   if (target.status === '결제완료') {
@@ -729,6 +762,7 @@ async function handleOrderUnmerge(req, res) {
         total: src.total || 0,
         status: targetOrder.status,
         broadcast_id: src.broadcast_id || null,
+        merge_history_id: null,  // 복원된 source는 병합 상태가 아님
       })
       .select('id, order_no')
       .single();
@@ -742,7 +776,7 @@ async function handleOrderUnmerge(req, res) {
       if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
     }
 
-    // cross-broadcast인 경우: target PO에서 링크/수량 제거 (createAutoPurchaseOrders가 원래 방송 PO 생성하도록)
+    // cross-broadcast인 경우: target PO(현재 mergeBroadcast)에서 링크/수량 제거
     const isCrossBroadcast = (src.broadcast_id || null) !== (targetOrder.broadcast_id || null);
     if (isCrossBroadcast && src.item_ids && src.item_ids.length > 0) {
       const { data: poLinks } = await supabaseAdmin.from('po_order_links')
@@ -799,6 +833,70 @@ async function handleOrderUnmerge(req, res) {
       newOrderNo: newOrder.order_no,
       newOrderId: newOrder.id,
     });
+  }
+
+  // 3-1) target 방송 원복: merge_history.target_broadcast_id가 현재와 다르면 PO 이관 후 복원
+  const origTargetBroadcastId = history.target_broadcast_id || null;
+  const currentTargetBroadcastId = targetOrder.broadcast_id || null;
+  if (origTargetBroadcastId !== null && origTargetBroadcastId !== currentTargetBroadcastId) {
+    // target의 남은 아이템들의 PO 링크 조회 + 차감
+    const { data: targetItemIds } = await supabaseAdmin.from('order_items')
+      .select('id').eq('order_id', targetId);
+    const tItemIds = (targetItemIds || []).map(i => i.id);
+
+    if (tItemIds.length > 0) {
+      const { data: tPoLinks } = await supabaseAdmin.from('po_order_links')
+        .select('id, purchase_order_item_id, order_item_id, qty')
+        .in('order_item_id', tItemIds);
+
+      if (tPoLinks && tPoLinks.length > 0) {
+        const tPoItemIds = [...new Set(tPoLinks.map(l => l.purchase_order_item_id))];
+        const { data: tPoItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, purchase_order_id, qty, cost_price')
+          .in('id', tPoItemIds);
+
+        const tAffectedPoIds = new Set();
+        for (const link of tPoLinks) {
+          const poItem = (tPoItems || []).find(pi => pi.id === link.purchase_order_item_id);
+          if (!poItem) continue;
+
+          const newQty = poItem.qty - link.qty;
+          if (newQty <= 0) {
+            await supabaseAdmin.from('purchase_order_items').delete().eq('id', poItem.id);
+          } else {
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, subtotal: newQty * poItem.cost_price })
+              .eq('id', poItem.id);
+          }
+          tAffectedPoIds.add(poItem.purchase_order_id);
+        }
+
+        // po_order_links 삭제
+        await supabaseAdmin.from('po_order_links')
+          .delete()
+          .in('order_item_id', tItemIds);
+
+        // 영향받은 PO total_amount 재계산
+        for (const poId of tAffectedPoIds) {
+          const { data: remainPOItems } = await supabaseAdmin.from('purchase_order_items')
+            .select('subtotal').eq('purchase_order_id', poId);
+          const newTotal = (remainPOItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+          await supabaseAdmin.from('purchase_orders')
+            .update({ total_amount: newTotal, updated_at: new Date().toISOString() })
+            .eq('id', poId);
+        }
+      }
+    }
+
+    // target.broadcast_id를 원래 값으로 복원
+    await supabaseAdmin.from('orders')
+      .update({ broadcast_id: origTargetBroadcastId })
+      .eq('id', targetId);
+
+    // 원래 방송 PO 재생성
+    if (['결제완료', '배송준비'].includes(targetOrder.status)) {
+      await createAutoPurchaseOrders(targetId);
+    }
   }
 
   // 4) target 주문 금액 재계산 (남은 아이템 기준)
