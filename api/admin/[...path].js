@@ -6355,16 +6355,51 @@ async function handleDataCheck(req, res) {
       }
     }
 
-    // Step 2.7: po_order_links 로드 → 진짜 배정 데이터 (입고 시 자동생성)
+    // Step 2.7: po_order_links + PO item 입고 상태 → 실제 배정 여부 판정
+    // 링크가 있어도 해당 PO아이템이 입고 안 됐으면 미배정
     const activeOIs = orderItemsAll.filter(oi => oi.status !== '결제취소');
     const oiIds = activeOIs.map(oi => oi.id);
-    const linkQtyMap = {}; // order_item_id → 배정수량 합계
+
+    // po_order_links 전체 로드 (id순 = 생성순)
+    const allLinks = [];
     for (let i = 0; i < oiIds.length; i += 200) {
       const batch = oiIds.slice(i, i + 200);
       const { data: links } = await supabaseAdmin.from('po_order_links')
-        .select('order_item_id, qty').in('order_item_id', batch);
-      for (const l of (links || [])) {
-        linkQtyMap[l.order_item_id] = (linkQtyMap[l.order_item_id] || 0) + (l.qty || 0);
+        .select('id, order_item_id, purchase_order_item_id, qty')
+        .in('order_item_id', batch);
+      allLinks.push(...(links || []));
+    }
+    allLinks.sort((a, b) => a.id - b.id); // FIFO 순서
+
+    // PO아이템별 입고잔량 추적 (received_qty를 선착순 소진)
+    const poItemRemaining = {};
+    for (const pi of poItemsAll) {
+      poItemRemaining[pi.id] = pi.received_qty || 0;
+    }
+
+    // FIFO로 입고된 수량만큼만 배정 처리
+    const fulfilledLinks = new Set();
+    for (const link of allLinks) {
+      const remaining = poItemRemaining[link.purchase_order_item_id] || 0;
+      if (remaining >= (link.qty || 0)) {
+        poItemRemaining[link.purchase_order_item_id] -= (link.qty || 0);
+        fulfilledLinks.add(link.id);
+      }
+    }
+
+    // 주문아이템별 배정 여부: 모든 링크가 fulfilled여야 배정
+    const linksByOI = {};
+    for (const l of allLinks) {
+      if (!linksByOI[l.order_item_id]) linksByOI[l.order_item_id] = [];
+      linksByOI[l.order_item_id].push(l);
+    }
+    const oiAllocatedMap = {}; // order_item_id → boolean
+    for (const oi of activeOIs) {
+      const links = linksByOI[oi.id];
+      if (!links || links.length === 0) {
+        oiAllocatedMap[oi.id] = false;
+      } else {
+        oiAllocatedMap[oi.id] = links.every(l => fulfilledLinks.has(l.id));
       }
     }
 
@@ -6377,8 +6412,7 @@ async function handleDataCheck(req, res) {
     const totalOrderQty = activeOIs.reduce((s, oi) => s + (oi.qty || 0), 0);
     const totalPOQty = poItemsAll.reduce((s, pi) => s + (pi.qty || 0), 0);
     const totalReceived = poItemsAll.reduce((s, pi) => s + (pi.received_qty || 0), 0);
-    // po_order_links 기준 배정 (입고=자동배정이므로 links가 진짜 원본)
-    const allocatedCount = activeOIs.filter(oi => (linkQtyMap[oi.id] || 0) >= (oi.qty || 0)).length;
+    const allocatedCount = activeOIs.filter(oi => oiAllocatedMap[oi.id]).length;
     const unallocatedCount = activeOIs.length - allocatedCount;
     const receiveRate = totalPOQty > 0 ? Math.round(totalReceived / totalPOQty * 100) : 0;
 
@@ -6432,31 +6466,33 @@ async function handleDataCheck(req, res) {
         else poStatus = '미입고';
       }
 
-      // 주문아이템 → 아이템 단위로 배정/미배정 고객 분류
-      // 한 고객이 배정 아이템과 미배정 아이템을 동시에 가질 수 있으므로 양쪽에 나올 수 있음
+      // 주문아이템 → 배정/미배정 (건수 + 고객명)
       const allocatedSet = new Set();
       const unallocatedSet = new Set();
+      let vAllocItemCount = 0, vUnallocItemCount = 0;
       for (const oi of activeOIs) {
         if (!oi.product_id || !vProductIds.has(oi.product_id)) continue;
         const order = orderMap[oi.order_id];
         if (!order) continue;
         const custName = order.name || '?';
-        if ((linkQtyMap[oi.id] || 0) >= (oi.qty || 0)) {
+        if (oiAllocatedMap[oi.id]) {
+          vAllocItemCount++;
           allocatedSet.add(custName);
         } else {
+          vUnallocItemCount++;
           unallocatedSet.add(custName);
         }
       }
-      const allocatedCustomers = [...allocatedSet];
-      const unallocatedCustomers = [...unallocatedSet];
 
       vendorsResult.push({
         vendorName: vName,
         poStatus,
         receivedQty: vReceivedQty,
         poQty: vPOQty,
-        allocatedCustomers,
-        unallocatedCustomers,
+        allocatedItemCount: vAllocItemCount,
+        unallocatedItemCount: vUnallocItemCount,
+        allocatedCustomers: [...allocatedSet],
+        unallocatedCustomers: [...unallocatedSet],
       });
     }
 
