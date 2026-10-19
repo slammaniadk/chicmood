@@ -2124,7 +2124,9 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false } = {}) 
           if (!poItem) continue;
 
           const newQty = poItem.qty - item.qty;
-          const deductReceived = Math.min(poItem.received_qty || 0, item.qty);
+          // 이미 입고된 PO는 received_qty/재고 차감 안 함 (물리적 재고는 창고에 그대로 있음)
+          const isReceived = po.status === '입고완료' || po.status === '부분입고';
+          const deductReceived = isReceived ? 0 : Math.min(poItem.received_qty || 0, item.qty);
 
           if (newQty <= 0) {
             deleteItemIds.push(poItem.id);
