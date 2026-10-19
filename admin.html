@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 18:09:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 18:14:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -5801,15 +5801,19 @@
         const ai = v.allocatedItemCount || 0;
         const ui = v.unallocatedItemCount || 0;
         const isComplete = v.poStatus === '입고완료';
+        const isNone = v.poStatus === '미입고';
+        const rowBg = isComplete ? 'bg-emerald-50' : isNone ? 'bg-rose-50' : '';
+        const vRate = v.poQty > 0 ? Math.round(v.receivedQty / v.poQty * 100) : 0;
+        const rateColor = vRate >= 100 ? 'text-emerald-600' : vRate > 0 ? 'text-amber-600' : 'text-rose-500';
         const statusBadge = v.poStatus === '입고완료' ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold" style="white-space:nowrap">입고완료</span>'
           : v.poStatus === '부분입고' ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold" style="white-space:nowrap">부분입고</span>'
           : v.poStatus === '미입고' ? '<span class="text-[11px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 font-semibold" style="white-space:nowrap">미입고</span>'
           : '<span class="text-[11px] px-1.5 py-0.5 rounded bg-warm-100 text-warm-500 font-semibold" style="white-space:nowrap">발주대기</span>';
-        html += `<details class="mb-2 border-b border-warm-100 pb-2 rounded-lg px-3 pt-2 ${isComplete ? 'bg-emerald-50' : ''}">
+        html += `<details class="mb-2 border-b border-warm-100 pb-2 rounded-lg px-3 pt-2 ${rowBg}">
           <summary class="cursor-pointer select-none flex items-center gap-1.5" style="font-size:13px;white-space:nowrap">
             <span class="text-warm-400" style="font-size:11px;width:22px;text-align:right;flex-shrink:0">${vSeq}.</span>
             <span style="flex-shrink:0">${statusBadge}</span>
-            <span><b>${escapeHtml(v.vendorName)}</b> | ${v.poQty}개 발주 | ${v.receivedQty}개 입고 | ${ai}건 배정 / <span class="text-rose-600">${ui}건 미배정</span></span>
+            <span><b>${escapeHtml(v.vendorName)}</b> | ${v.poQty}개 발주 | ${v.receivedQty}개 입고 <span class="${rateColor}" style="font-size:11px">(${vRate}%)</span> | ${ai}건 배정 / <span class="text-rose-600">${ui}건 미배정</span></span>
           </summary>
           <div class="mt-2" style="font-size:12px;color:#666;margin-left:80px">
             ${v.allocatedCustomers.length > 0 ? '<div class="mb-1"><span class="text-emerald-600 font-semibold">배정:</span> ' + v.allocatedCustomers.map(n => escapeHtml(n)).join(', ') + '</div>' : ''}
