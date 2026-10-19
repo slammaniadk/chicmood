@@ -6464,55 +6464,52 @@ async function handleDataCheck(req, res) {
         else poStatus = '미입고';
       }
 
-      // 주문아이템 → 배정/미배정 (수량 기준 + 고객명)
-      const allocatedSet = new Set();
-      const unallocatedSet = new Set();
-      let vAllocQty = 0, vUnallocQty = 0;
-
       // 해당 거래처 상품의 주문아이템 수집
+      const shippedStatuses = new Set(['배송준비', '배송중', '배송완료']);
       const vendorOIs = [];
+      let vOrderQty = 0;
       for (const oi of activeOIs) {
         if (!oi.product_id || !vProductIds.has(oi.product_id)) continue;
         const order = orderMap[oi.order_id];
         if (!order) continue;
-        vendorOIs.push({ oi, custName: order.name || '?' });
+        vOrderQty += (oi.qty || 0);
+        vendorOIs.push({ oi, custName: order.name || '?', orderStatus: order.status });
       }
 
-      const isComplete = poStatus === '입고완료';
-      const shippedStatuses = new Set(['배송준비', '배송중', '배송완료']);
+      // 핵심 공식: 배정 = min(주문수량, 입고수량), 미배정 = 발주수량 - 배정
+      // → 배정 ≤ 입고 보장, 배정 + 미배정 = 발주수량 보장
+      const vAllocQty = Math.min(vOrderQty, vReceivedQty);
+      const vUnallocQty = Math.max(0, vPOQty - vAllocQty);
 
-      // 1차: 배송처리된 주문 → 무조건 배정 (이미 물건 나간 것)
-      for (const { oi, custName } of vendorOIs) {
-        const order = orderMap[oi.order_id];
-        if (order && shippedStatuses.has(order.status)) {
-          vAllocQty += (oi.qty || 0);
-          allocatedSet.add(custName);
-        }
+      // 고객명 분류 (배송처리 > FIFO링크 > 나머지 순으로 배정 우선)
+      const allocatedSet = new Set();
+      const unallocatedSet = new Set();
+      let remainCap = vAllocQty;
+
+      // 1차: 배송처리 주문 → 최우선 배정
+      for (const { oi, custName, orderStatus } of vendorOIs) {
+        if (!shippedStatuses.has(orderStatus)) continue;
+        remainCap -= (oi.qty || 0);
+        allocatedSet.add(custName);
+      }
+      if (remainCap < 0) remainCap = 0;
+
+      // 2차: FIFO 링크 배정
+      for (const { oi, custName, orderStatus } of vendorOIs) {
+        if (shippedStatuses.has(orderStatus)) continue;
+        if (!oiAllocatedMap[oi.id]) continue;
+        const qty = oi.qty || 0;
+        if (remainCap >= qty) { remainCap -= qty; allocatedSet.add(custName); }
+        else { unallocatedSet.add(custName); }
       }
 
-      // 2차: FIFO 링크로 배정된 아이템 (1차에서 이미 처리된 건 제외)
-      for (const { oi, custName } of vendorOIs) {
-        const order = orderMap[oi.order_id];
-        if (order && shippedStatuses.has(order.status)) continue;
-        if (oiAllocatedMap[oi.id]) {
-          vAllocQty += (oi.qty || 0);
-          allocatedSet.add(custName);
-        }
-      }
-
-      // 3차: 입고완료 거래처의 나머지 아이템 → 남은 입고여력 한도 내 배정
-      for (const { oi, custName } of vendorOIs) {
-        const order = orderMap[oi.order_id];
-        if (order && shippedStatuses.has(order.status)) continue;
+      // 3차: 나머지 → 남은 여력 내 배정
+      for (const { oi, custName, orderStatus } of vendorOIs) {
+        if (shippedStatuses.has(orderStatus)) continue;
         if (oiAllocatedMap[oi.id]) continue;
         const qty = oi.qty || 0;
-        if (isComplete && vAllocQty + qty <= vReceivedQty) {
-          vAllocQty += qty;
-          allocatedSet.add(custName);
-        } else {
-          vUnallocQty += qty;
-          unallocatedSet.add(custName);
-        }
+        if (remainCap >= qty) { remainCap -= qty; allocatedSet.add(custName); }
+        else { unallocatedSet.add(custName); }
       }
 
       vendorsResult.push({
