@@ -6412,8 +6412,6 @@ async function handleDataCheck(req, res) {
     const totalOrderQty = activeOIs.reduce((s, oi) => s + (oi.qty || 0), 0);
     const totalPOQty = poItemsAll.reduce((s, pi) => s + (pi.qty || 0), 0);
     const totalReceived = poItemsAll.reduce((s, pi) => s + (pi.received_qty || 0), 0);
-    const allocatedCount = activeOIs.filter(oi => oiAllocatedMap[oi.id]).length;
-    const unallocatedCount = activeOIs.length - allocatedCount;
     const receiveRate = totalPOQty > 0 ? Math.round(totalReceived / totalPOQty * 100) : 0;
 
     // 입금확인 주문의 수량 (요약용)
@@ -6498,6 +6496,10 @@ async function handleDataCheck(req, res) {
 
     const statusOrder = { '부분입고': 0, '미입고': 1, '발주대기': 2, '입고완료': 3 };
     vendorsResult.sort((a, b) => (statusOrder[a.poStatus] ?? 9) - (statusOrder[b.poStatus] ?? 9));
+
+    // 전체 배정/미배정 집계 (거래처별 합산 — 발주수량 기준으로 일관성 유지)
+    const allocatedCount = vendorsResult.reduce((s, v) => s + (v.allocatedItemCount || 0), 0);
+    const unallocatedCount = totalPOQty - allocatedCount;
 
     // Step 5: 주문 vs 발주
     const pendingOrders = orders.filter(o => o.status === '입금확인');
