@@ -517,6 +517,8 @@ async function handleOrderMerge(req, res) {
   // 5) 발주 수량 조정 (방송 기준)
   // 같은 방송이면 동일 PO이므로 차감 불필요, 다른 방송이면 source PO에서 차감
   const crossBcSourceItems = {};
+  const receivedQtyByItemId = {};
+  const sourcePOIds = new Set();
   for (const srcId of sourceIds) {
     const srcOrder = orders.find(o => o.id === srcId);
     // 같은 방송이면 동일 PO이므로 차감 불필요
@@ -527,7 +529,34 @@ async function handleOrderMerge(req, res) {
       .select('id, product_id, name, color, size, qty')
       .eq('order_id', srcId).neq('status', '결제취소');
     crossBcSourceItems[srcId] = srcItems || [];
-    await deductPurchaseOrderQty(srcId, { skipDeallocate: true });
+
+    // received_qty 캡처: deduct 전에 source PO items에서 읽기
+    const itemIds = (srcItems || []).filter(i => i.product_id).map(i => i.id);
+    if (itemIds.length > 0) {
+      const { data: links } = await supabaseAdmin.from('po_order_links')
+        .select('order_item_id, purchase_order_item_id')
+        .in('order_item_id', itemIds);
+      if (links && links.length > 0) {
+        const poItemIds = [...new Set(links.map(l => l.purchase_order_item_id))];
+        const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, purchase_order_id, received_qty')
+          .in('id', poItemIds);
+        const poItemMap = {};
+        (poItems || []).forEach(pi => { poItemMap[pi.id] = pi; });
+
+        for (const link of links) {
+          const poItem = poItemMap[link.purchase_order_item_id];
+          if (!poItem) continue;
+          sourcePOIds.add(poItem.purchase_order_id);
+          const srcItem = (srcItems || []).find(i => i.id === link.order_item_id);
+          if (srcItem) {
+            receivedQtyByItemId[link.order_item_id] = Math.min(poItem.received_qty || 0, srcItem.qty);
+          }
+        }
+      }
+    }
+
+    await deductPurchaseOrderQty(srcId, { skipDeallocate: true, isTransfer: true });
   }
 
   // 6) source의 order_items → target order_id로 UPDATE
@@ -546,6 +575,38 @@ async function handleOrderMerge(req, res) {
       }
     }
     // 배정(allocated_qty)은 유지 — 리셋하지 않음
+
+    // 6-2) target PO items에 received_qty 반영 + inventory 동기화
+    const targetPOIds = new Set();
+    for (const items of Object.values(crossBcSourceItems)) {
+      for (const item of items) {
+        const addReceivedQty = receivedQtyByItemId[item.id];
+        if (!addReceivedQty) continue;
+
+        const { data: links } = await supabaseAdmin.from('po_order_links')
+          .select('purchase_order_item_id')
+          .eq('order_item_id', item.id);
+        if (links && links.length > 0) {
+          const { data: poItem } = await supabaseAdmin.from('purchase_order_items')
+            .select('id, received_qty, purchase_order_id')
+            .eq('id', links[0].purchase_order_item_id)
+            .single();
+          if (poItem) {
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ received_qty: (poItem.received_qty || 0) + addReceivedQty })
+              .eq('id', poItem.id);
+            targetPOIds.add(poItem.purchase_order_id);
+          }
+        }
+      }
+    }
+    // source + target PO inventory_log 동기화
+    for (const poId of sourcePOIds) {
+      await updateInventoryFromPO(poId);
+    }
+    for (const poId of targetPOIds) {
+      await updateInventoryFromPO(poId);
+    }
   }
 
   // 7) 금액 재계산: 각 주문의 기존 금액(배송비/차감 포함) 그대로 합산
@@ -679,6 +740,53 @@ async function handleOrderUnmerge(req, res) {
         .update({ order_id: newOrder.id })
         .in('id', src.item_ids);
       if (moveErr) return fail(res, `품목 이동 실패: ${moveErr.message}`, 500);
+    }
+
+    // cross-broadcast인 경우: target PO에서 링크/수량 제거 (createAutoPurchaseOrders가 원래 방송 PO 생성하도록)
+    const isCrossBroadcast = (src.broadcast_id || null) !== (targetOrder.broadcast_id || null);
+    if (isCrossBroadcast && src.item_ids && src.item_ids.length > 0) {
+      const { data: poLinks } = await supabaseAdmin.from('po_order_links')
+        .select('id, purchase_order_item_id, order_item_id, qty')
+        .in('order_item_id', src.item_ids);
+
+      if (poLinks && poLinks.length > 0) {
+        // target PO items에서 qty 차감
+        const poItemIds = [...new Set(poLinks.map(l => l.purchase_order_item_id))];
+        const { data: poItems } = await supabaseAdmin.from('purchase_order_items')
+          .select('id, purchase_order_id, qty, cost_price')
+          .in('id', poItemIds);
+
+        const affectedPoIds = new Set();
+        for (const link of poLinks) {
+          const poItem = (poItems || []).find(pi => pi.id === link.purchase_order_item_id);
+          if (!poItem) continue;
+
+          const newQty = poItem.qty - link.qty;
+          if (newQty <= 0) {
+            await supabaseAdmin.from('purchase_order_items').delete().eq('id', poItem.id);
+          } else {
+            await supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, subtotal: newQty * poItem.cost_price })
+              .eq('id', poItem.id);
+          }
+          affectedPoIds.add(poItem.purchase_order_id);
+        }
+
+        // po_order_links 삭제
+        await supabaseAdmin.from('po_order_links')
+          .delete()
+          .in('order_item_id', src.item_ids);
+
+        // 영향받은 PO total_amount 재계산
+        for (const poId of affectedPoIds) {
+          const { data: remainPOItems } = await supabaseAdmin.from('purchase_order_items')
+            .select('subtotal').eq('purchase_order_id', poId);
+          const newTotal = (remainPOItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+          await supabaseAdmin.from('purchase_orders')
+            .update({ total_amount: newTotal, updated_at: new Date().toISOString() })
+            .eq('id', poId);
+        }
+      }
     }
 
     // 복원된 주문에 대해 자동 발주 생성 (이미 발주가 있는 상태일 때만)
@@ -2039,7 +2147,7 @@ async function checkAdvancedPurchaseOrders(orderId) {
 }
 
 // 주문 취소/삭제 시 발주 수량 차감 헬퍼
-async function deductPurchaseOrderQty(orderId, { skipDeallocate = false } = {}) {
+async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTransfer = false } = {}) {
   try {
     // 주문 + 품목 + 상품 정보 병렬 조회
     const [orderResult, itemsResult] = await Promise.all([
@@ -2126,7 +2234,7 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false } = {}) 
           const newQty = poItem.qty - item.qty;
           // 이미 입고된 PO는 received_qty/재고 차감 안 함 (물리적 재고는 창고에 그대로 있음)
           const isReceived = po.status === '입고완료' || po.status === '부분입고';
-          const deductReceived = isReceived ? 0 : Math.min(poItem.received_qty || 0, item.qty);
+          const deductReceived = (isReceived && !isTransfer) ? 0 : Math.min(poItem.received_qty || 0, item.qty);
 
           if (newQty <= 0) {
             deleteItemIds.push(poItem.id);
@@ -2144,8 +2252,8 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false } = {}) 
             poItem.received_qty = newReceivedQty;
           }
 
-          // 입고완료/부분입고 PO에서 차감 시 재고도 역반영
-          if ((po.status === '입고완료' || po.status === '부분입고') && deductReceived > 0) {
+          // 입고완료/부분입고 PO에서 차감 시 재고도 역반영 (이관 시에는 updateInventoryFromPO에서 처리)
+          if (!isTransfer && (po.status === '입고완료' || po.status === '부분입고') && deductReceived > 0) {
             inventoryOps.push({ product_id: item.product_id, color: item.color || '', size: item.size || '', deductReceived });
           }
 
