@@ -6422,26 +6422,23 @@ async function handleDataCheck(req, res) {
         else poStatus = '미입고';
       }
 
-      // 주문아이템 → 고객별 배정 여부 판정
-      const orderGroups = {}; // orderId -> { name, allAllocated }
+      // 주문아이템 → 아이템 단위로 배정/미배정 고객 분류
+      // 한 고객이 배정 아이템과 미배정 아이템을 동시에 가질 수 있으므로 양쪽에 나올 수 있음
+      const allocatedSet = new Set();
+      const unallocatedSet = new Set();
       for (const oi of activeOIs) {
         if (!oi.product_id || !vProductIds.has(oi.product_id)) continue;
         const order = orderMap[oi.order_id];
         if (!order) continue;
-        if (!orderGroups[oi.order_id]) {
-          orderGroups[oi.order_id] = { name: order.name || '?', allAllocated: true };
-        }
-        if ((oi.allocated_qty || 0) < (oi.qty || 0)) {
-          orderGroups[oi.order_id].allAllocated = false;
+        const custName = order.name || '?';
+        if ((oi.allocated_qty || 0) >= (oi.qty || 0)) {
+          allocatedSet.add(custName);
+        } else {
+          unallocatedSet.add(custName);
         }
       }
-
-      const allocatedCustomers = [];
-      const unallocatedCustomers = [];
-      for (const g of Object.values(orderGroups)) {
-        if (g.allAllocated) allocatedCustomers.push(g.name);
-        else unallocatedCustomers.push(g.name);
-      }
+      const allocatedCustomers = [...allocatedSet];
+      const unallocatedCustomers = [...unallocatedSet];
 
       vendorsResult.push({
         vendorName: vName,
