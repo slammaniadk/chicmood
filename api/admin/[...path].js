@@ -6494,8 +6494,12 @@ async function handleDataCheck(req, res) {
       });
     }
 
-    const statusOrder = { '부분입고': 0, '미입고': 1, '발주대기': 2, '입고완료': 3 };
-    vendorsResult.sort((a, b) => (statusOrder[a.poStatus] ?? 9) - (statusOrder[b.poStatus] ?? 9));
+    const statusOrder = { '입고완료': 0, '부분입고': 1, '미입고': 2, '발주대기': 3 };
+    vendorsResult.sort((a, b) =>
+      (statusOrder[a.poStatus] ?? 9) - (statusOrder[b.poStatus] ?? 9)
+      || (b.poQty || 0) - (a.poQty || 0)
+      || (a.vendorName || '').localeCompare(b.vendorName || '', 'ko')
+    );
 
     // 전체 배정/미배정 집계 (거래처별 합산 — 발주수량 기준으로 일관성 유지)
     const allocatedCount = vendorsResult.reduce((s, v) => s + (v.allocatedItemCount || 0), 0);
