@@ -2375,6 +2375,16 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
       await supabaseAdmin.from('po_order_links').delete().in('order_item_id', orderItemIds);
     }
 
+    // 영향받은 PO total_amount 재계산
+    for (const poId of affectedPOIds) {
+      const { data: remainPOItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('subtotal').eq('purchase_order_id', poId);
+      const newTotal = (remainPOItems || []).reduce((s, i) => s + (i.subtotal || 0), 0);
+      await supabaseAdmin.from('purchase_orders')
+        .update({ total_amount: newTotal, updated_at: new Date().toISOString() })
+        .eq('id', poId);
+    }
+
     // 재고 역반영 (병렬)
     if (inventoryOps.length > 0) {
       const invKeys = inventoryOps.map(op => `${op.product_id}_${op.color}_${op.size}`);
