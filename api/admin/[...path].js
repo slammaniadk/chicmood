@@ -2247,117 +2247,166 @@ async function checkAdvancedPurchaseOrders(orderId) {
 // 주문 취소/삭제 시 발주 수량 차감 헬퍼
 async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTransfer = false } = {}) {
   try {
-    // 주문 + 품목 + 상품 정보 병렬 조회
-    const [orderResult, itemsResult] = await Promise.all([
-      supabaseAdmin.from('orders').select('broadcast_id').eq('id', orderId).single(),
-      supabaseAdmin.from('order_items').select('id, product_id, color, size, qty').eq('order_id', orderId),
-    ]);
-    const order = orderResult.data;
-    const items = itemsResult.data;
+    // 주문 + 품목 조회
+    const { data: items } = await supabaseAdmin.from('order_items')
+      .select('id, product_id, color, size, qty').eq('order_id', orderId);
     if (!items || items.length === 0) return;
 
-    const productIds = [...new Set(items.map(i => i.product_id).filter(Boolean))];
-    if (productIds.length === 0) return;
-    const { data: products } = await supabaseAdmin.from('products')
-      .select('id, vendor_id').in('id', productIds);
-    const vendorMap = {};
-    (products || []).forEach(p => { vendorMap[p.id] = p.vendor_id; });
-
-    // 관련 발주서 한번에 조회 (발주대기, 부분입고, 입고완료)
-    const vendorIds = [...new Set(Object.values(vendorMap).filter(Boolean))];
-    const hasNullVendor = Object.values(vendorMap).some(v => !v);
-    if (vendorIds.length === 0 && !hasNullVendor) return;
-
-    // vendor_id가 있는 PO와 null인 PO를 각각 조회 후 합산
-    const poQueries = [];
-    if (vendorIds.length > 0) {
-      let q = supabaseAdmin.from('purchase_orders')
-        .select('id, status, vendor_id')
-        .in('vendor_id', vendorIds)
-        .in('status', ['발주대기', '부분입고', '입고완료']);
-      if (order && order.broadcast_id) q = q.eq('broadcast_id', order.broadcast_id);
-      else q = q.is('broadcast_id', null);
-      poQueries.push(q);
-    }
-    if (hasNullVendor) {
-      let q = supabaseAdmin.from('purchase_orders')
-        .select('id, status, vendor_id')
-        .is('vendor_id', null)
-        .in('status', ['발주대기', '부분입고', '입고완료']);
-      if (order && order.broadcast_id) q = q.eq('broadcast_id', order.broadcast_id);
-      else q = q.is('broadcast_id', null);
-      poQueries.push(q);
-    }
-    const poResults = await Promise.all(poQueries);
-    const allPOs = poResults.flatMap(r => r.data || []);
-    if (allPOs.length === 0) return;
-
-    // 발주 품목 한번에 조회
-    const poIds = allPOs.map(p => p.id);
-    const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
-      .select('id, purchase_order_id, product_id, color_name, size_name, qty, received_qty, cost_price')
-      .in('purchase_order_id', poIds);
-
-    // 발주서별 품목 맵 구성
-    const poItemsMap = {};
-    (allPOItems || []).forEach(pi => {
-      if (!poItemsMap[pi.purchase_order_id]) poItemsMap[pi.purchase_order_id] = [];
-      poItemsMap[pi.purchase_order_id].push(pi);
-    });
-
-    // 품목별 매칭 및 처리
-    const statusPriority = ['발주대기', '부분입고', '입고완료'];
     const affectedPOIds = new Set();
     const deleteItemIds = [];
     const updateOps = [];
     const inventoryOps = [];
 
-    for (const item of items) {
-      if (!item.product_id) continue;
-      const vendorId = vendorMap[item.product_id] || null;
+    // ── 1차: po_order_links 기반 정확 매칭 (broadcast_id 불일치 PO도 처리) ──
+    const orderItemIds = items.map(i => i.id).filter(Boolean);
+    const { data: poLinks } = orderItemIds.length > 0
+      ? await supabaseAdmin.from('po_order_links')
+          .select('order_item_id, purchase_order_item_id, qty')
+          .in('order_item_id', orderItemIds)
+      : { data: [] };
 
-      let matched = false;
-      for (const poStatus of statusPriority) {
-        if (matched) break;
-        const candidatePOs = allPOs.filter(p => p.vendor_id === vendorId && p.status === poStatus);
-        for (const po of candidatePOs) {
-          const poItems = poItemsMap[po.id] || [];
-          const poItem = poItems.find(pi =>
-            pi.product_id === item.product_id &&
-            pi.color_name === (item.color || '') &&
-            pi.size_name === (item.size || '')
+    const linkedItemIds = new Set(); // 링크로 처리된 order_item_id
+
+    if (poLinks && poLinks.length > 0) {
+      const poItemIds = [...new Set(poLinks.map(l => l.purchase_order_item_id))];
+      const { data: linkedPOItems } = await supabaseAdmin.from('purchase_order_items')
+        .select('id, purchase_order_id, product_id, color_name, size_name, qty, received_qty, cost_price')
+        .in('id', poItemIds);
+      const linkedPOItemMap = {};
+      (linkedPOItems || []).forEach(pi => { linkedPOItemMap[pi.id] = pi; });
+
+      // 링크된 PO의 상태 조회
+      const linkedPOIdsArr = [...new Set((linkedPOItems || []).map(pi => pi.purchase_order_id))];
+      const { data: linkedPOs } = linkedPOIdsArr.length > 0
+        ? await supabaseAdmin.from('purchase_orders').select('id, status').in('id', linkedPOIdsArr)
+        : { data: [] };
+      const linkedPOStatusMap = {};
+      (linkedPOs || []).forEach(p => { linkedPOStatusMap[p.id] = p.status; });
+
+      for (const link of poLinks) {
+        const poItem = linkedPOItemMap[link.purchase_order_item_id];
+        if (!poItem) continue;
+        const item = items.find(i => i.id === link.order_item_id);
+        if (!item) continue;
+        linkedItemIds.add(item.id);
+
+        const poStatus = linkedPOStatusMap[poItem.purchase_order_id] || '';
+        const isReceived = poStatus === '입고완료' || poStatus === '부분입고';
+        const deductReceived = (isReceived && !isTransfer) ? 0 : Math.min(poItem.received_qty || 0, link.qty);
+
+        const newQty = poItem.qty - link.qty;
+        if (newQty <= 0) {
+          deleteItemIds.push(poItem.id);
+        } else {
+          const newReceivedQty = Math.max(0, (poItem.received_qty || 0) - deductReceived);
+          updateOps.push(
+            supabaseAdmin.from('purchase_order_items')
+              .update({ qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price })
+              .eq('id', poItem.id)
           );
-          if (!poItem) continue;
+          poItem.qty = newQty;
+          poItem.received_qty = newReceivedQty;
+        }
 
-          const newQty = poItem.qty - item.qty;
-          // 이미 입고된 PO는 received_qty/재고 차감 안 함 (물리적 재고는 창고에 그대로 있음)
-          const isReceived = po.status === '입고완료' || po.status === '부분입고';
-          const deductReceived = (isReceived && !isTransfer) ? 0 : Math.min(poItem.received_qty || 0, item.qty);
+        if (!isTransfer && isReceived && deductReceived > 0) {
+          inventoryOps.push({ product_id: item.product_id, color: item.color || '', size: item.size || '', deductReceived });
+        }
+        affectedPOIds.add(poItem.purchase_order_id);
+      }
+    }
 
-          if (newQty <= 0) {
-            deleteItemIds.push(poItem.id);
-            // 로컬 맵에서도 제거
-            poItemsMap[po.id] = poItems.filter(pi => pi.id !== poItem.id);
-          } else {
-            const newReceivedQty = Math.max(0, (poItem.received_qty || 0) - deductReceived);
-            updateOps.push(
-              supabaseAdmin.from('purchase_order_items')
-                .update({ qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price })
-                .eq('id', poItem.id)
-            );
-            // 로컬 맵도 갱신
-            poItem.qty = newQty;
-            poItem.received_qty = newReceivedQty;
+    // ── 2차: 링크 없는 아이템은 기존 vendor+broadcast 매칭 fallback ──
+    const unmatchedItems = items.filter(i => i.product_id && !linkedItemIds.has(i.id));
+    if (unmatchedItems.length > 0) {
+      const { data: orderData } = await supabaseAdmin.from('orders').select('broadcast_id').eq('id', orderId).single();
+      const order = orderData;
+
+      const productIds = [...new Set(unmatchedItems.map(i => i.product_id).filter(Boolean))];
+      const { data: products } = await supabaseAdmin.from('products')
+        .select('id, vendor_id').in('id', productIds);
+      const vendorMap = {};
+      (products || []).forEach(p => { vendorMap[p.id] = p.vendor_id; });
+
+      const vendorIds = [...new Set(Object.values(vendorMap).filter(Boolean))];
+      const hasNullVendor = Object.values(vendorMap).some(v => !v);
+
+      if (vendorIds.length > 0 || hasNullVendor) {
+        const poQueries = [];
+        if (vendorIds.length > 0) {
+          let q = supabaseAdmin.from('purchase_orders')
+            .select('id, status, vendor_id')
+            .in('vendor_id', vendorIds)
+            .in('status', ['발주대기', '부분입고', '입고완료']);
+          if (order && order.broadcast_id) q = q.eq('broadcast_id', order.broadcast_id);
+          else q = q.is('broadcast_id', null);
+          poQueries.push(q);
+        }
+        if (hasNullVendor) {
+          let q = supabaseAdmin.from('purchase_orders')
+            .select('id, status, vendor_id')
+            .is('vendor_id', null)
+            .in('status', ['발주대기', '부분입고', '입고완료']);
+          if (order && order.broadcast_id) q = q.eq('broadcast_id', order.broadcast_id);
+          else q = q.is('broadcast_id', null);
+          poQueries.push(q);
+        }
+        const poResults = await Promise.all(poQueries);
+        const allPOs = poResults.flatMap(r => r.data || []);
+
+        if (allPOs.length > 0) {
+          const poIds = allPOs.map(p => p.id);
+          const { data: allPOItems } = await supabaseAdmin.from('purchase_order_items')
+            .select('id, purchase_order_id, product_id, color_name, size_name, qty, received_qty, cost_price')
+            .in('purchase_order_id', poIds);
+          const poItemsMap = {};
+          (allPOItems || []).forEach(pi => {
+            if (!poItemsMap[pi.purchase_order_id]) poItemsMap[pi.purchase_order_id] = [];
+            poItemsMap[pi.purchase_order_id].push(pi);
+          });
+
+          const statusPriority = ['발주대기', '부분입고', '입고완료'];
+          for (const item of unmatchedItems) {
+            const vendorId = vendorMap[item.product_id] || null;
+            let matched = false;
+            for (const poStatus of statusPriority) {
+              if (matched) break;
+              const candidatePOs = allPOs.filter(p => p.vendor_id === vendorId && p.status === poStatus);
+              for (const po of candidatePOs) {
+                const poItems = poItemsMap[po.id] || [];
+                const poItem = poItems.find(pi =>
+                  pi.product_id === item.product_id &&
+                  pi.color_name === (item.color || '') &&
+                  pi.size_name === (item.size || '')
+                );
+                if (!poItem) continue;
+
+                const newQty = poItem.qty - item.qty;
+                const isReceived = po.status === '입고완료' || po.status === '부분입고';
+                const deductReceived = (isReceived && !isTransfer) ? 0 : Math.min(poItem.received_qty || 0, item.qty);
+
+                if (newQty <= 0) {
+                  deleteItemIds.push(poItem.id);
+                  poItemsMap[po.id] = poItems.filter(pi => pi.id !== poItem.id);
+                } else {
+                  const newReceivedQty = Math.max(0, (poItem.received_qty || 0) - deductReceived);
+                  updateOps.push(
+                    supabaseAdmin.from('purchase_order_items')
+                      .update({ qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price })
+                      .eq('id', poItem.id)
+                  );
+                  poItem.qty = newQty;
+                  poItem.received_qty = newReceivedQty;
+                }
+
+                if (!isTransfer && isReceived && deductReceived > 0) {
+                  inventoryOps.push({ product_id: item.product_id, color: item.color || '', size: item.size || '', deductReceived });
+                }
+                affectedPOIds.add(po.id);
+                matched = true;
+                break;
+              }
+            }
           }
-
-          // 입고완료/부분입고 PO에서 차감 시 재고도 역반영 (이관 시에는 updateInventoryFromPO에서 처리)
-          if (!isTransfer && (po.status === '입고완료' || po.status === '부분입고') && deductReceived > 0) {
-            inventoryOps.push({ product_id: item.product_id, color: item.color || '', size: item.size || '', deductReceived });
-          }
-
-          affectedPOIds.add(po.id);
-          matched = true;
-          break;
         }
       }
     }
@@ -2370,7 +2419,6 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
     if (batchOps.length > 0) await Promise.all(batchOps);
 
     // po_order_links에서 해당 order_items 레코드 삭제
-    const orderItemIds = items.map(i => i.id).filter(Boolean);
     if (orderItemIds.length > 0) {
       await supabaseAdmin.from('po_order_links').delete().in('order_item_id', orderItemIds);
     }
