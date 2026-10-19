@@ -6478,12 +6478,22 @@ async function handleDataCheck(req, res) {
         vendorOIs.push({ oi, custName: order.name || '?' });
       }
 
-      // 입고완료 거래처는 링크 유무 관계없이 모두 배정 처리
-      const allCovered = poStatus === '입고완료';
+      // 입고완료 거래처: FIFO 링크 배정 + 남은 입고여력 내 추가 배정
+      const isComplete = poStatus === '입고완료';
 
+      // 1차: FIFO 링크로 배정된 아이템
       for (const { oi, custName } of vendorOIs) {
+        if (oiAllocatedMap[oi.id]) {
+          vAllocQty += (oi.qty || 0);
+          allocatedSet.add(custName);
+        }
+      }
+
+      // 2차: 입고완료 거래처의 링크 없는 아이템 → 남은 입고여력 한도 내 배정
+      for (const { oi, custName } of vendorOIs) {
+        if (oiAllocatedMap[oi.id]) continue;
         const qty = oi.qty || 0;
-        if (allCovered || oiAllocatedMap[oi.id]) {
+        if (isComplete && vAllocQty + qty <= vReceivedQty) {
           vAllocQty += qty;
           allocatedSet.add(custName);
         } else {
