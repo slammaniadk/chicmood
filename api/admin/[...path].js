@@ -6480,8 +6480,8 @@ async function handleDataCheck(req, res) {
         vendorOIs.push({ oi, custName: order.name || '?' });
       }
 
-      // 입고수량 >= 주문수량이면 링크 유무 관계없이 모두 배정 처리
-      const allCovered = vReceivedQty > 0 && vReceivedQty >= vOrderItemQty;
+      // 입고완료 거래처는 링크 유무 관계없이 모두 배정 처리
+      const allCovered = poStatus === '입고완료';
 
       for (const { oi, custName } of vendorOIs) {
         if (allCovered || oiAllocatedMap[oi.id]) {
