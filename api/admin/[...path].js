@@ -6490,7 +6490,7 @@ async function handleDataCheck(req, res) {
         receivedQty: vReceivedQty,
         poQty: vPOQty,
         allocatedItemCount: vAllocItemCount,
-        unallocatedItemCount: vUnallocItemCount,
+        unallocatedItemCount: vPOQty - vAllocItemCount, // 발주수량 기준
         allocatedCustomers: [...allocatedSet],
         unallocatedCustomers: [...unallocatedSet],
       });
