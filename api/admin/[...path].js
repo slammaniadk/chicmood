@@ -4084,20 +4084,30 @@ async function handlePurchaseOrderDetail(req, res, id) {
         }
       }
 
+      // 기존 품목의 qty도 백업 (자동발주가 올려놓은 qty가 프론트 값으로 롤백되는 것 방지)
+      const qtyBackup = {};
+      (existingPOItems || []).forEach(ei => {
+        const key = `${ei.product_id}|${ei.color_name || ''}|${ei.size_name || ''}`;
+        qtyBackup[key] = Math.max(qtyBackup[key] || 0, ei.qty || 0);
+      });
+
       await supabaseAdmin.from('purchase_order_items').delete().eq('purchase_order_id', id);
       if (items.length > 0) {
         const poItems = items.map(i => {
           const key = `${i.productId}|${i.colorName || ''}|${i.sizeName || ''}`;
           const backupQty = receivedQtyBackup[key] || 0;
+          const frontQty = i.qty || 1;
+          const dbQty = qtyBackup[key] || 0;
+          const finalQty = Math.max(frontQty, dbQty); // DB qty가 더 크면 유지 (자동발주 증가분 보존)
           return {
             purchase_order_id: parseInt(id),
             product_id: i.productId || null,
             product_name: i.productName || '',
             color_name: i.colorName || '',
             size_name: i.sizeName || '',
-            qty: i.qty || 1,
+            qty: finalQty,
             cost_price: i.costPrice || 0,
-            subtotal: (i.qty || 1) * (i.costPrice || 0),
+            subtotal: finalQty * (i.costPrice || 0),
             received_qty: i.receivedQty !== undefined ? i.receivedQty : backupQty,
           };
         });
