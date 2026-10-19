@@ -6355,20 +6355,30 @@ async function handleDataCheck(req, res) {
       }
     }
 
+    // Step 2.7: po_order_links 로드 → 진짜 배정 데이터 (입고 시 자동생성)
+    const activeOIs = orderItemsAll.filter(oi => oi.status !== '결제취소');
+    const oiIds = activeOIs.map(oi => oi.id);
+    const linkQtyMap = {}; // order_item_id → 배정수량 합계
+    for (let i = 0; i < oiIds.length; i += 200) {
+      const batch = oiIds.slice(i, i + 200);
+      const { data: links } = await supabaseAdmin.from('po_order_links')
+        .select('order_item_id, qty').in('order_item_id', batch);
+      for (const l of (links || [])) {
+        linkQtyMap[l.order_item_id] = (linkQtyMap[l.order_item_id] || 0) + (l.qty || 0);
+      }
+    }
+
     // Step 3: 전체 요약
     const ordersByStatus = {};
     for (const o of orders) {
       ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
     }
 
-    const activeOIs = orderItemsAll.filter(oi => oi.status !== '결제취소');
     const totalOrderQty = activeOIs.reduce((s, oi) => s + (oi.qty || 0), 0);
     const totalPOQty = poItemsAll.reduce((s, pi) => s + (pi.qty || 0), 0);
     const totalReceived = poItemsAll.reduce((s, pi) => s + (pi.received_qty || 0), 0);
-    const allocatedQty = activeOIs.reduce((s, oi) => s + Math.min(oi.allocated_qty || 0, oi.qty || 0), 0);
-    const unallocatedQty = totalOrderQty - allocatedQty;
-    // 건수 기준 배정 카운트 (아이템 행 단위)
-    const allocatedCount = activeOIs.filter(oi => (oi.allocated_qty || 0) >= (oi.qty || 0)).length;
+    // po_order_links 기준 배정 (입고=자동배정이므로 links가 진짜 원본)
+    const allocatedCount = activeOIs.filter(oi => (linkQtyMap[oi.id] || 0) >= (oi.qty || 0)).length;
     const unallocatedCount = activeOIs.length - allocatedCount;
     const receiveRate = totalPOQty > 0 ? Math.round(totalReceived / totalPOQty * 100) : 0;
 
@@ -6431,7 +6441,7 @@ async function handleDataCheck(req, res) {
         const order = orderMap[oi.order_id];
         if (!order) continue;
         const custName = order.name || '?';
-        if ((oi.allocated_qty || 0) >= (oi.qty || 0)) {
+        if ((linkQtyMap[oi.id] || 0) >= (oi.qty || 0)) {
           allocatedSet.add(custName);
         } else {
           unallocatedSet.add(custName);
@@ -6482,8 +6492,6 @@ async function handleDataCheck(req, res) {
         pendingQty: pendingQty0,
         totalReceived,
         receiveRate,
-        allocatedQty,
-        unallocatedQty,
         allocatedCount,
         unallocatedCount,
       },
