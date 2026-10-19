@@ -6468,12 +6468,23 @@ async function handleDataCheck(req, res) {
       const allocatedSet = new Set();
       const unallocatedSet = new Set();
       let vAllocItemCount = 0, vUnallocItemCount = 0;
+
+      // 해당 거래처 상품의 주문아이템 수집 및 총 주문수량
+      let vOrderItemQty = 0;
+      const vendorOIs = [];
       for (const oi of activeOIs) {
         if (!oi.product_id || !vProductIds.has(oi.product_id)) continue;
         const order = orderMap[oi.order_id];
         if (!order) continue;
-        const custName = order.name || '?';
-        if (oiAllocatedMap[oi.id]) {
+        vOrderItemQty += (oi.qty || 0);
+        vendorOIs.push({ oi, custName: order.name || '?' });
+      }
+
+      // 입고수량 >= 주문수량이면 링크 유무 관계없이 모두 배정 처리
+      const allCovered = vReceivedQty > 0 && vReceivedQty >= vOrderItemQty;
+
+      for (const { oi, custName } of vendorOIs) {
+        if (allCovered || oiAllocatedMap[oi.id]) {
           vAllocItemCount++;
           allocatedSet.add(custName);
         } else {
@@ -6488,7 +6499,7 @@ async function handleDataCheck(req, res) {
         receivedQty: vReceivedQty,
         poQty: vPOQty,
         allocatedItemCount: vAllocItemCount,
-        unallocatedItemCount: vPOQty - vAllocItemCount, // 발주수량 기준
+        unallocatedItemCount: vUnallocItemCount,
         allocatedCustomers: [...allocatedSet],
         unallocatedCustomers: [...unallocatedSet],
       });
@@ -6503,7 +6514,7 @@ async function handleDataCheck(req, res) {
 
     // 전체 배정/미배정 집계 (거래처별 합산 — 발주수량 기준으로 일관성 유지)
     const allocatedCount = vendorsResult.reduce((s, v) => s + (v.allocatedItemCount || 0), 0);
-    const unallocatedCount = totalPOQty - allocatedCount;
+    const unallocatedCount = vendorsResult.reduce((s, v) => s + (v.unallocatedItemCount || 0), 0);
 
     // Step 5: 주문 vs 발주
     const pendingOrders = orders.filter(o => o.status === '입금확인');
