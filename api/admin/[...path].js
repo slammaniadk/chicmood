@@ -6464,19 +6464,17 @@ async function handleDataCheck(req, res) {
         else poStatus = '미입고';
       }
 
-      // 주문아이템 → 배정/미배정 (건수 + 고객명)
+      // 주문아이템 → 배정/미배정 (수량 기준 + 고객명)
       const allocatedSet = new Set();
       const unallocatedSet = new Set();
-      let vAllocItemCount = 0, vUnallocItemCount = 0;
+      let vAllocQty = 0, vUnallocQty = 0;
 
-      // 해당 거래처 상품의 주문아이템 수집 및 총 주문수량
-      let vOrderItemQty = 0;
+      // 해당 거래처 상품의 주문아이템 수집
       const vendorOIs = [];
       for (const oi of activeOIs) {
         if (!oi.product_id || !vProductIds.has(oi.product_id)) continue;
         const order = orderMap[oi.order_id];
         if (!order) continue;
-        vOrderItemQty += (oi.qty || 0);
         vendorOIs.push({ oi, custName: order.name || '?' });
       }
 
@@ -6484,11 +6482,12 @@ async function handleDataCheck(req, res) {
       const allCovered = poStatus === '입고완료';
 
       for (const { oi, custName } of vendorOIs) {
+        const qty = oi.qty || 0;
         if (allCovered || oiAllocatedMap[oi.id]) {
-          vAllocItemCount++;
+          vAllocQty += qty;
           allocatedSet.add(custName);
         } else {
-          vUnallocItemCount++;
+          vUnallocQty += qty;
           unallocatedSet.add(custName);
         }
       }
@@ -6498,8 +6497,8 @@ async function handleDataCheck(req, res) {
         poStatus,
         receivedQty: vReceivedQty,
         poQty: vPOQty,
-        allocatedItemCount: vAllocItemCount,
-        unallocatedItemCount: vUnallocItemCount,
+        allocatedItemCount: vAllocQty,
+        unallocatedItemCount: vUnallocQty,
         allocatedCustomers: [...allocatedSet],
         unallocatedCustomers: [...unallocatedSet],
       });

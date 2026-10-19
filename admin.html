@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 18:14:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 19:17:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -5786,7 +5786,7 @@
         <div>총 주문: <b>${s.totalOrders}건</b> (${statusParts}) / 주문수량 <b>${s.totalOrderQty}개</b></div>
         <div>총 발주: <b>${s.totalPOs}건</b> / 발주수량 <b>${s.totalPOQty}개</b>${s.pendingQty > 0 ? ' <span class="text-warm-500">(입금확인 ' + s.pendingQty + '개 미발주)</span>' : ''}</div>
         <div>총 입고: <b>${s.totalReceived}개</b> / 미입고 ${s.totalPOQty - s.totalReceived}개 (입고율 <b>${s.receiveRate}%</b>)</div>
-        <div>배정OK: <b>${s.allocatedCount}건</b> / 미배정: <b class="text-rose-600">${s.unallocatedCount}건</b></div>
+        <div>배정OK: <b>${s.allocatedCount}개</b> / 미배정: <b class="text-rose-600">${s.unallocatedCount}개</b></div>
         ${vcComplete.length > 0 ? '<div class="text-emerald-600">입고완료: <b>' + vcComplete.length + '건</b> (' + vcComplete.map(v => escapeHtml(v.vendorName)).join(', ') + ')</div>' : ''}
         ${vcPartial.length > 0 ? '<div class="text-amber-600">부분입고: <b>' + vcPartial.length + '건</b></div>' : ''}
         ${vcWaiting.length > 0 ? '<div class="text-rose-600">발주대기: <b>' + vcWaiting.length + '건</b> (' + vcWaiting.map(v => escapeHtml(v.vendorName)).join(', ') + ')</div>' : ''}
@@ -5813,7 +5813,7 @@
           <summary class="cursor-pointer select-none flex items-center gap-1.5" style="font-size:13px;white-space:nowrap">
             <span class="text-warm-400" style="font-size:11px;width:22px;text-align:right;flex-shrink:0">${vSeq}.</span>
             <span style="flex-shrink:0">${statusBadge}</span>
-            <span><b>${escapeHtml(v.vendorName)}</b> | ${v.poQty}개 발주 | ${v.receivedQty}개 입고 <span class="${rateColor}" style="font-size:11px">(${vRate}%)</span> | ${ai}건 배정 / <span class="text-rose-600">${ui}건 미배정</span></span>
+            <span><b>${escapeHtml(v.vendorName)}</b> | ${v.poQty}개 발주 | ${v.receivedQty}개 입고 <span class="${rateColor}" style="font-size:11px">(${vRate}%)</span> | ${ai}개 배정 / <span class="text-rose-600">${ui}개 미배정</span></span>
           </summary>
           <div class="mt-2" style="font-size:12px;color:#666;margin-left:80px">
             ${v.allocatedCustomers.length > 0 ? '<div class="mb-1"><span class="text-emerald-600 font-semibold">배정:</span> ' + v.allocatedCustomers.map(n => escapeHtml(n)).join(', ') + '</div>' : ''}
