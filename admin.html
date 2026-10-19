@@ -166,7 +166,7 @@
         </button>
         <span class="font-serif text-xl font-semibold tracking-[0.1em] italic">CHICMOOD</span>
         <span class="text-[11px] text-warm-400 tracking-wider font-light hidden sm:inline">MANAGEMENT</span>
-        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.51</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 15:19:00</span>
+        <span class="text-[9px] text-warm-500 ml-2 hidden sm:inline">Ver 3.0.52</span><span class="text-[9px] text-warm-500 ml-4 hidden sm:inline">Last Modified 2026.10.19 16:00:00</span>
       </div>
       <button id="logout-btn" class="text-[12px] text-warm-300 hover:text-white transition-colors bg-transparent border-none cursor-pointer hidden" onclick="doLogout()">로그아웃</button>
     </div>
@@ -192,7 +192,7 @@
       <button class="tab" data-tab="purchase-orders" onclick="navigate('purchase-orders')">📦 발주관리</button>
       <button class="tab" data-tab="inventory" onclick="navigate('inventory')">🗄️ 재고관리</button>
       <button class="tab" data-tab="shipping" onclick="navigate('shipping')">🚚 배송관리</button>
-      <button class="tab" data-tab="data-check" onclick="navigate('data-check')">🔍 데이터점검</button>
+      <button class="tab" data-tab="data-check" onclick="navigate('data-check')">📋 방송현황</button>
       <button class="tab" data-tab="returns" onclick="navigate('returns')">🔄 반품관리</button>
       <button class="tab" data-tab="sales" onclick="navigate('sales')">💰 매출관리</button>
       <button class="tab" data-tab="reports" onclick="navigate('reports')">📈 통계</button>
@@ -272,7 +272,7 @@
     { key: 'purchase-orders', label: '발주관리', icon: '📦' },
     { key: 'inventory', label: '재고관리', icon: '📁' },
     { key: 'shipping', label: '배송관리', icon: '🚚' },
-    { key: 'data-check', label: '데이터점검', icon: '🔍' },
+    { key: 'data-check', label: '방송현황', icon: '📋' },
     { key: 'returns', label: '반품관리', icon: '🔄' },
     { key: 'sales', label: '매출관리', icon: '💰' },
     { key: 'reports', label: '통계', icon: '📈' },
@@ -5734,176 +5734,91 @@
   }
 
   // ============================================================
-  //  DATA CHECK (데이터점검)
+  //  방송현황 (Broadcast Status)
   // ============================================================
   async function renderDataCheck(el) {
-    el.innerHTML = `
-      <div class="fade-in">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-serif text-2xl font-semibold text-warm-900 italic">데이터 점검</h2>
-          <button class="btn-primary" id="btn-run-check" onclick="runDataCheck()">🔄 전체 점검 실행</button>
+    el.innerHTML = '<div class="flex justify-center py-20"><div class="spinner"></div></div>';
+    try {
+      const data = await api('/admin/data-check');
+      const broadcasts = data.broadcasts || [];
+      el.innerHTML = `<div class="fade-in">
+        <h2 class="font-serif text-2xl font-semibold text-warm-900 italic mb-4">방송현황</h2>
+        <div class="flex items-center gap-3 mb-6">
+          <select id="bc-select" class="input" style="max-width:420px">
+            <option value="">-- 방송 선택 --</option>
+            ${broadcasts.map(b => `<option value="${b.id}">${escapeHtml(b.dateText || '')} 방송 #${b.id} ${escapeHtml(b.title)} (${b.orderCount}건)</option>`).join('')}
+          </select>
+          <button class="btn-primary" onclick="runDataCheck()">조회</button>
         </div>
-        <div id="data-check-result">
-          <p class="py-20 text-center text-warm-400">점검 실행 버튼을 눌러주세요.</p>
-        </div>
+        <div id="data-check-result"></div>
       </div>`;
+    } catch (e) {
+      el.innerHTML = '<p class="py-10 text-center text-rose-500">방송 목록 로드 실패: ' + (e.message || '') + '</p>';
+    }
   }
 
   async function runDataCheck() {
-    const btn = document.getElementById('btn-run-check');
+    const sel = document.getElementById('bc-select');
     const box = document.getElementById('data-check-result');
-    if (!btn || !box) return;
-    btn.disabled = true; btn.textContent = '점검 중...';
-    box.innerHTML = '<div class="flex justify-center py-20"><div class="spinner"></div></div>';
+    if (!sel || !box) return;
+    const bcId = sel.value;
+    if (!bcId) { box.innerHTML = '<p class="py-10 text-center text-warm-400">방송을 선택해주세요.</p>'; return; }
 
+    box.innerHTML = '<div class="flex justify-center py-10"><div class="spinner"></div></div>';
     try {
-      const data = await api('/admin/data-check');
-      const checks = [
-        { key: 'allocationMismatch', label: '배정 불일치', desc: 'allocated_qty ≠ link합계' },
-        { key: 'unallocatedWithStock', label: '미배정+재고있음', desc: '미배정 아이템 중 재고 존재' },
-        { key: 'poShortage', label: '발주 부족', desc: '주문수량 > 발주수량' },
-        { key: 'statusInconsistency', label: '상태 불일치', desc: '상태값과 실제 데이터 불일치' },
-        { key: 'duplicatePO', label: '중복 발주', desc: '동일 거래처+방송에 2건 이상' },
-        { key: 'amountMismatch', label: '금액 불일치', desc: '주문총액 ≠ 아이템합계+배송비' },
-      ];
+      const data = await api('/admin/data-check?broadcastId=' + bcId);
+      const s = data.summary;
+      const vs = data.vendors || [];
+      const ovp = data.orderVsPO;
 
-      // 요약 카드
-      let html = '<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">';
-      for (const c of checks) {
-        const r = data[c.key] || { count: 0 };
-        const ok = r.count === 0;
-        const bg = ok ? 'from-emerald-50 to-green-100 border-emerald-200/60' : 'from-rose-50 to-pink-100 border-rose-200/60';
-        const txt = ok ? 'text-emerald-700' : 'text-rose-700';
-        const num = ok ? 'text-emerald-900' : 'text-rose-900';
-        const sub = ok ? 'text-emerald-600' : 'text-rose-600';
-        html += `<div class="rounded-xl p-4 bg-gradient-to-br ${bg} border">
-          <p class="text-[10px] font-semibold tracking-wider ${sub} uppercase mb-1">${c.label}</p>
-          <p class="text-2xl font-bold ${num}">${r.count}건</p>
-          <p class="text-[10px] ${txt} mt-0.5">${c.desc}</p>
-        </div>`;
+      const statusParts = Object.entries(s.ordersByStatus || {}).map(([k, v]) => k + ' ' + v).join(' + ');
+
+      let html = '';
+
+      // 전체 요약
+      html += `<div class="card mb-4" style="font-size:13px;line-height:1.8">
+        <h3 class="font-semibold text-warm-900 mb-2" style="font-size:15px">전체 요약</h3>
+        <div>총 주문: <b>${s.totalOrders}건</b> (${statusParts}) / 주문수량 <b>${s.totalOrderQty}개</b></div>
+        <div>총 발주: <b>${s.totalPOs}건</b> / 발주수량 <b>${s.totalPOQty}개</b></div>
+        <div>총 입고: <b>${s.totalReceived}개</b> / 미입고 ${s.totalPOQty - s.totalReceived}개 (입고율 <b>${s.receiveRate}%</b>)</div>
+        <div>배정: <b>${s.allocatedQty}건</b> / 미배정: <b class="text-rose-600">${s.unallocatedQty}건</b></div>
+      </div>`;
+
+      // 거래처별 현황
+      html += `<div class="card mb-4">
+        <h3 class="font-semibold text-warm-900 mb-3" style="font-size:15px">거래처별 현황</h3>`;
+      for (const v of vs) {
+        const sc = v.poStatus === '입고완료' ? 'bg-emerald-100 text-emerald-700'
+          : v.poStatus === '부분입고' ? 'bg-amber-100 text-amber-700'
+          : 'bg-rose-100 text-rose-700';
+        html += `<details class="mb-3 border-b border-warm-100 pb-3">
+          <summary class="cursor-pointer select-none" style="font-size:13px">
+            <b>${escapeHtml(v.vendorName)}</b> | ${v.receivedQty}/${v.poQty} 입고 |
+            <span class="px-1.5 py-0.5 rounded text-[10px] ${sc}">${v.poStatus}</span> |
+            배정${v.allocatedCustomers.length}명 / <span class="text-rose-600">미배정${v.unallocatedCustomers.length}명</span>
+          </summary>
+          <div class="ml-4 mt-2" style="font-size:12px;color:#666">
+            ${v.allocatedCustomers.length > 0 ? '<div class="mb-1"><span class="text-emerald-600 font-semibold">배정:</span> ' + v.allocatedCustomers.map(n => escapeHtml(n)).join(', ') + '</div>' : ''}
+            ${v.unallocatedCustomers.length > 0 ? '<div><span class="text-rose-600 font-semibold">미배정:</span> ' + v.unallocatedCustomers.map(n => escapeHtml(n)).join(', ') + '</div>' : ''}
+          </div>
+        </details>`;
+      }
+      if (vs.length === 0) {
+        html += '<p class="text-warm-400 text-center py-4" style="font-size:12px">발주 데이터 없음</p>';
       }
       html += '</div>';
 
-      // 상세 목록 (이슈 있는 항목만)
-      for (const c of checks) {
-        const r = data[c.key] || { count: 0, items: [] };
-        if (r.count === 0) continue;
-
-        html += `<details class="mb-4 card" open>
-          <summary class="cursor-pointer font-semibold text-warm-800 text-[14px] select-none">
-            ${c.label} <span class="text-rose-600">(${r.count}건)</span>
-          </summary>
-          <div class="mt-3 overflow-x-auto">`;
-
-        if (c.key === 'allocationMismatch') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">주문번호</th><th class="pb-2 pr-3">고객명</th><th class="pb-2 pr-3">상품</th><th class="pb-2 pr-3 text-right">배정</th><th class="pb-2 text-right">링크합</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3 text-warm-700">${i.orderNo}</td>
-              <td class="py-1.5 pr-3">${i.customerName}</td>
-              <td class="py-1.5 pr-3">${i.productName}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${i.allocatedQty}</td>
-              <td class="py-1.5 text-right font-mono">${i.linkQty}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-
-        } else if (c.key === 'unallocatedWithStock') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">상품/색상/사이즈</th><th class="pb-2 pr-3 text-right">재고</th><th class="pb-2 text-right">미배정건수</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3">${i.productName}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${i.stock}</td>
-              <td class="py-1.5 text-right font-mono">${i.unallocCount}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-
-        } else if (c.key === 'poShortage') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">상품/색상/사이즈</th><th class="pb-2 pr-3 text-right">주문</th><th class="pb-2 pr-3 text-right">발주</th><th class="pb-2 text-right">부족</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3">${i.productName}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${i.ordered}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${i.poQty}</td>
-              <td class="py-1.5 text-right font-mono text-rose-600 font-bold">${i.shortfall}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-
-        } else if (c.key === 'statusInconsistency') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">유형</th><th class="pb-2 pr-3">번호</th><th class="pb-2 pr-3">이름</th><th class="pb-2">상세</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3"><span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700">${i.type}</span></td>
-              <td class="py-1.5 pr-3 text-warm-700">${i.orderNo || i.poNo || ''}</td>
-              <td class="py-1.5 pr-3">${i.customerName || ''}</td>
-              <td class="py-1.5 text-warm-600">${i.detail}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-
-        } else if (c.key === 'duplicatePO') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">거래처</th><th class="pb-2 pr-3">방송</th><th class="pb-2">발주번호 목록</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3">${i.vendorName}</td>
-              <td class="py-1.5 pr-3">${i.broadcastTitle}</td>
-              <td class="py-1.5 text-warm-600">${i.poList.join(', ')}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-
-        } else if (c.key === 'amountMismatch') {
-          html += `<table class="w-full text-[12px]">
-            <thead><tr class="border-b border-warm-200 text-warm-500 text-left">
-              <th class="pb-2 pr-3">주문번호</th><th class="pb-2 pr-3">고객명</th><th class="pb-2 pr-3 text-right">저장총액</th><th class="pb-2 pr-3 text-right">계산총액</th><th class="pb-2 text-right">차이</th>
-            </tr></thead><tbody>`;
-          for (const i of r.items) {
-            html += `<tr class="border-b border-warm-100">
-              <td class="py-1.5 pr-3 text-warm-700">${i.orderNo}</td>
-              <td class="py-1.5 pr-3">${i.customerName}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${Number(i.savedTotal).toLocaleString()}</td>
-              <td class="py-1.5 pr-3 text-right font-mono">${Number(i.calcTotal).toLocaleString()}</td>
-              <td class="py-1.5 text-right font-mono text-rose-600 font-bold">${Number(i.diff).toLocaleString()}</td>
-            </tr>`;
-          }
-          html += '</tbody></table>';
-        }
-
-        html += '</div></details>';
-      }
-
-      // 모든 항목 정상인 경우
-      const totalIssues = checks.reduce((s, c) => s + (data[c.key]?.count || 0), 0);
-      if (totalIssues === 0) {
-        html += '<p class="py-10 text-center text-emerald-600 font-semibold text-lg">모든 점검 항목이 정상입니다 ✓</p>';
-      }
-
-      if (data.allocationMismatch?.count > 50 || data.unallocatedWithStock?.count > 50 || data.poShortage?.count > 50 || data.statusInconsistency?.count > 50 || data.amountMismatch?.count > 50) {
-        html += '<p class="text-center text-[11px] text-warm-400 mt-4">※ 각 항목별 최대 50건까지 표시됩니다.</p>';
-      }
+      // 주문 vs 발주
+      html += `<div class="card mb-4" style="font-size:13px;line-height:1.8">
+        <h3 class="font-semibold text-warm-900 mb-2" style="font-size:15px">주문 vs 발주</h3>
+        <div>총 주문수량 <b>${ovp.totalOrderQty}개</b> / 총 발주수량 <b>${ovp.totalPOQty}개</b></div>
+        ${ovp.pendingQty > 0 ? '<div class="text-warm-500">입금확인중 ' + ovp.pendingQty + '개</div>' : ''}
+        <div class="mt-1 font-semibold ${ovp.note && ovp.note.includes('100%') ? 'text-emerald-600' : (ovp.totalOrderQty === ovp.totalPOQty ? 'text-emerald-600' : 'text-amber-600')}">${escapeHtml(ovp.note || '')}</div>
+      </div>`;
 
       box.innerHTML = html;
     } catch (e) {
-      box.innerHTML = '<p class="py-10 text-center text-rose-500">점검 실패: ' + (e.message || '알 수 없는 오류') + '</p>';
-    } finally {
-      btn.disabled = false; btn.textContent = '🔄 전체 점검 실행';
+      box.innerHTML = '<p class="py-10 text-center text-rose-500">조회 실패: ' + (e.message || '') + '</p>';
     }
   }
 
