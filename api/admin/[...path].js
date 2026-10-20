@@ -2827,8 +2827,10 @@ async function createAutoPurchaseOrders(orderId) {
       productIds.forEach(pid => {
         if (bcSet.has(pid)) {
           productBroadcastMap[pid] = { broadcastId: orderBroadcastId, broadcastTitle: orderBroadcastTitle };
+        } else {
+          // broadcast_products에 미등록이어도 주문의 broadcast_id로 fallback
+          productBroadcastMap[pid] = { broadcastId: orderBroadcastId, broadcastTitle: orderBroadcastTitle };
         }
-        // bcSet에 없는 상품은 productBroadcastMap에 넣지 않음 → broadcastId: 0 (무방송) 그룹으로 감
       });
     } else {
       (bcProducts || []).forEach(bp => {
