@@ -18,14 +18,14 @@
           },
           colors: {
             warm: {
-              50: '#f5f7fa', 100: '#ebeef5', 200: '#d5dbe8',
-              300: '#b8c2d4', 400: '#8a97b0', 500: '#6b7a96',
-              600: '#4e5f7e', 700: '#3a4d6e', 800: '#2a3a5c',
-              900: '#1c2940'
+              50: '#fdf8f4', 100: '#f9efe6', 200: '#f0dcc8',
+              300: '#e4c5a5', 400: '#d4a574', 500: '#c4884a',
+              600: '#a86e35', 700: '#8a5628', 800: '#6b4220',
+              900: '#4a2e16'
             },
             rose: {
-              50: '#f0f4fd', 100: '#dce4f7', 200: '#c5d0ee',
-              400: '#7b8ec6', 500: '#5a6fb3', 600: '#45589a'
+              50: '#fdf2f4', 100: '#f9e0e5', 200: '#f0bfc8',
+              400: '#c97080', 500: '#b85a6c', 600: '#9a4456'
             }
           }
         }
@@ -35,60 +35,60 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; }
-    body { font-family: 'Noto Sans KR', sans-serif; background: #f5f7fa; color: #2a3350; }
+    body { font-family: 'Noto Sans KR', sans-serif; background: #fdf8f4; color: #3d2e22; }
 
     .fade-in { animation: fadeIn 0.5s ease-out forwards; opacity: 0; }
     @keyframes fadeIn { to { opacity: 1; } }
     .slide-up { animation: slideUp 0.5s ease-out forwards; opacity: 0; transform: translateY(20px); }
     @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
 
-    .spinner { width: 40px; height: 40px; border: 3px solid #d5dbe8; border-top-color: #3a4d6e; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .spinner { width: 40px; height: 40px; border: 3px solid #f0dcc8; border-top-color: #8a5628; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
     @keyframes dots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} }
 
-    .overlay { position: fixed; inset: 0; background: rgba(30,42,70,0.4); backdrop-filter: blur(6px); z-index: 50; display: flex; align-items: center; justify-content: center; }
+    .overlay { position: fixed; inset: 0; background: rgba(74,46,22,0.4); backdrop-filter: blur(6px); z-index: 50; display: flex; align-items: center; justify-content: center; }
     .overlay-content { animation: scaleIn 0.3s ease-out forwards; }
     @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-    .qty-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #b8c2d4; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 15px; user-select: none; color: #2a3a5c; }
-    .qty-btn:hover { background: #2a3a5c; color: #fff; border-color: #2a3a5c; }
+    .qty-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4c5a5; background: #fff; cursor: pointer; transition: all 0.2s; font-size: 15px; user-select: none; color: #6b4220; }
+    .qty-btn:hover { background: #6b4220; color: #fff; border-color: #6b4220; }
 
-    .chip { padding: 8px 20px; border: 1.5px solid #b8c2d4; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 500; background: #fff; color: #2a3a5c; }
-    .chip:hover { border-color: #6b7a96; }
-    .chip.active { background: #2a3a5c; color: #fff; border-color: #2a3a5c; }
+    .chip { padding: 8px 20px; border: 1.5px solid #e4c5a5; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-size: 13px; font-weight: 500; background: #fff; color: #6b4220; }
+    .chip:hover { border-color: #c4884a; }
+    .chip.active { background: #6b4220; color: #fff; border-color: #6b4220; }
 
     .color-chip { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
     .color-chip:hover { transform: scale(1.1); }
-    .color-chip.active { box-shadow: 0 0 0 2px #f5f7fa, 0 0 0 4px #3a4d6e; }
+    .color-chip.active { box-shadow: 0 0 0 2px #fdf8f4, 0 0 0 4px #8a5628; }
 
-    .input-field { width: 100%; padding: 13px 16px; border: 1.5px solid #b8c2d4; border-radius: 6px; background: #fff; font-size: 14px; transition: border-color 0.2s; outline: none; font-family: 'Noto Sans KR', sans-serif; color: #2a3350; }
-    .input-field:focus { border-color: #3a4d6e; }
-    .input-field::placeholder { color: #9aa4b8; }
+    .input-field { width: 100%; padding: 13px 16px; border: 1.5px solid #e4c5a5; border-radius: 6px; background: #fff; font-size: 14px; transition: border-color 0.2s; outline: none; font-family: 'Noto Sans KR', sans-serif; color: #3d2e22; }
+    .input-field:focus { border-color: #8a5628; }
+    .input-field::placeholder { color: #c4b09a; }
 
-    .btn-primary { background: #2a3a5c; color: #fff; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; letter-spacing: 0.5px; font-family: 'Noto Sans KR', sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-    .btn-primary:hover { background: #3a4d6e; }
+    .btn-primary { background: #6b4220; color: #fff; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; border-radius: 6px; transition: all 0.2s; letter-spacing: 0.5px; font-family: 'Noto Sans KR', sans-serif; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary:hover { background: #8a5628; }
     .btn-primary:active { transform: scale(0.98); }
-    .btn-primary:disabled { background: #b8c2d4; cursor: not-allowed; }
+    .btn-primary:disabled { background: #d4c5a5; cursor: not-allowed; }
 
-    .btn-outline { background: transparent; color: #2a3a5c; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1.5px solid #2a3a5c; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
-    .btn-outline:hover { background: #2a3a5c; color: #fff; }
+    .btn-outline { background: transparent; color: #6b4220; padding: 14px 28px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1.5px solid #6b4220; border-radius: 6px; transition: all 0.2s; font-family: 'Noto Sans KR', sans-serif; }
+    .btn-outline:hover { background: #6b4220; color: #fff; }
 
-    .product-card { cursor: pointer; transition: transform 0.3s, box-shadow 0.3s; border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid #d5dbe8; }
-    .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(30,42,70,0.1); }
+    .product-card { cursor: pointer; transition: transform 0.3s, box-shadow 0.3s; border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid #f0dcc8; }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(74,46,22,0.1); }
     .product-card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; }
 
     .thumb-wrap { cursor: pointer; border: 2px solid transparent; border-radius: 4px; transition: border-color 0.2s; overflow: hidden; }
-    .thumb-wrap.active { border-color: #3a4d6e; }
+    .thumb-wrap.active { border-color: #8a5628; }
     .thumb-wrap:hover { opacity: 0.85; }
 
-    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #2a3a5c; color: #fff; padding: 14px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
+    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #6b4220; color: #fff; padding: 14px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 100; opacity: 0; transition: all 0.3s ease; pointer-events: none; }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-    .badge { position: absolute; top: -6px; right: -8px; background: #5a6fb3; color: #fff; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .badge { position: absolute; top: -6px; right: -8px; background: #b85a6c; color: #fff; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
     .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
-    .status-입금확인 { background: #fef1d1; color: #4e5f7e; }
+    .status-입금확인 { background: #fef1d1; color: #a86e35; }
     .status-결제완료 { background: #b9e4d0; color: #1a6b42; }
     .status-배송완료 { background: #d1fae5; color: #065f46; }
     .status-결제취소 { background: #fee2e2; color: #991b1b; }
@@ -97,19 +97,19 @@
     .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s ease; }
     .confirm-overlay.show { opacity: 1; }
     .confirm-box { background: #fff; border-radius: 12px; padding: 28px 24px 20px; max-width: 360px; width: 90%; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
-    .confirm-box h3 { font-size: 16px; font-weight: 700; color: #1c2940; margin-bottom: 10px; }
-    .confirm-box p { font-size: 13px; color: #5a6880; line-height: 1.6; margin-bottom: 20px; white-space: pre-line; }
+    .confirm-box h3 { font-size: 16px; font-weight: 700; color: #44210b; margin-bottom: 10px; }
+    .confirm-box p { font-size: 13px; color: #7c6a56; line-height: 1.6; margin-bottom: 20px; white-space: pre-line; }
     .confirm-box .btn-row { display: flex; gap: 8px; }
     .confirm-box .btn-row button { flex: 1; padding: 10px 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
-    .confirm-box .btn-cancel { background: #e8edf5; color: #5a6880; }
-    .confirm-box .btn-confirm { background: #2a3a5c; color: #fff; }
+    .confirm-box .btn-cancel { background: #f3ebe0; color: #7c6a56; }
+    .confirm-box .btn-confirm { background: #6b4220; color: #fff; }
 
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #b8c2d4; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #e4c5a5; border-radius: 3px; }
 
     .elegant-divider { display: flex; align-items: center; gap: 16px; }
-    .elegant-divider::before, .elegant-divider::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #b8c2d4, transparent); }
+    .elegant-divider::before, .elegant-divider::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #e4c5a5, transparent); }
 
     .mobile-nav { display: none; }
     @media (max-width: 768px) {
@@ -140,7 +140,7 @@
   </div>
 
   <!-- 헤더 -->
-  <header class="sticky top-0 z-40 bg-[#f5f7fa]/95 backdrop-blur-md border-b border-warm-200">
+  <header class="sticky top-0 z-40 bg-[#fdf8f4]/95 backdrop-blur-md border-b border-warm-200">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-[64px] flex items-center justify-between">
       <!-- 로고 -->
       <a href="#home" class="cursor-pointer text-center flex-shrink-0">
@@ -192,7 +192,7 @@
     </div>
     <p class="text-[10px] text-warm-300 tracking-[0.15em] uppercase mt-3">&copy; 2026 CHICMOOD. All rights reserved.</p>
     <p class="text-[10px] text-warm-300 tracking-wider mt-1">Developed by DK Studio</p>
-    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.56 &middot; Last Modified 2026.10.22 10:43:56</p>
+    <p class="text-[9px] text-warm-300 mt-1">Ver 3.0.55 &middot; Last Modified 2026.10.20 15:40:00</p>
   </footer>
 
   <!-- 오버레이: 로딩 -->
@@ -406,51 +406,51 @@
       const baseSize = sizeParts[0] || '';
       const curLength = sizeParts[1] || '';
       return `
-        <div style="padding:10px 0;${idx > 0 ? 'border-top:1px solid #e8edf5;' : ''}">
+        <div style="padding:10px 0;${idx > 0 ? 'border-top:1px solid #f3ebe0;' : ''}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <p style="flex:1;font-size:13px;font-weight:600;color:#1c2940;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.name)}</p>
+            <p style="flex:1;font-size:13px;font-weight:600;color:#44210b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.name)}</p>
             <button onclick="removeModifyItem(${idx})" style="width:24px;height:24px;border:none;border-radius:6px;background:#fee2e2;color:#991b1b;cursor:pointer;font-size:12px;line-height:1;flex-shrink:0;">✕</button>
           </div>
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
             ${colors.length > 0 ? `
-              <select onchange="modifyItemOption(${idx},'color',this.value)" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:11px;background:#fff;color:#1c2940;">
+              <select onchange="modifyItemOption(${idx},'color',this.value)" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
                 ${colors.map(c => `<option value="${escapeHtml(c.name)}" ${c.name === item.color ? 'selected' : ''}>${c.name}</option>`).join('')}
               </select>
             ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(item.color)}</span>`}
             ${sizes.length > 0 ? `
-              <select onchange="modifyItemSize(${idx},this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:11px;background:#fff;color:#1c2940;">
+              <select onchange="modifyItemSize(${idx},this.value)" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
                 ${sizes.map(s => `<option value="${escapeHtml(s)}" ${s === baseSize ? 'selected' : ''}>${s}</option>`).join('')}
               </select>
             ` : `<span style="font-size:11px;color:#a89580;flex:1;">${escapeHtml(baseSize)}</span>`}
             ${lengths.length > 0 ? `
-              <select onchange="modifyItemLength(${idx},this.value)" style="flex:1;min-width:60px;padding:5px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:11px;background:#fff;color:#1c2940;">
+              <select onchange="modifyItemLength(${idx},this.value)" style="flex:1;min-width:60px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;color:#44210b;">
                 <option value="" ${!curLength ? 'selected' : ''}>기장</option>
                 ${lengths.map(l => `<option value="${escapeHtml(l)}" ${l === curLength ? 'selected' : ''}>${l}</option>`).join('')}
               </select>
             ` : ''}
             <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
-              <button onclick="modifyItemQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #b8c2d4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">−</button>
+              <button onclick="modifyItemQty(${idx},-1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">−</button>
               <span style="width:22px;text-align:center;font-size:13px;font-weight:600;">${item.qty}</span>
-              <button onclick="modifyItemQty(${idx},1)" style="width:26px;height:26px;border:1px solid #b8c2d4;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">+</button>
+              <button onclick="modifyItemQty(${idx},1)" style="width:26px;height:26px;border:1px solid #e4c5a5;border-radius:6px;background:#fff;cursor:pointer;font-size:15px;line-height:1;">+</button>
             </div>
           </div>
-          <p style="font-size:11px;color:#5a6880;font-weight:600;margin-top:4px;text-align:right;">${fmt(item.price)} x ${item.qty} = ${fmt(item.price * item.qty)}</p>
+          <p style="font-size:11px;color:#7c6a56;font-weight:600;margin-top:4px;text-align:right;">${fmt(item.price)} x ${item.qty} = ${fmt(item.price * item.qty)}</p>
         </div>`;
     }).join('');
 
     // 상품 추가 섹션
     const addProductHtml = catalog.length > 0 ? `
-      <div style="border-top:2px solid #b8c2d4;margin-top:8px;padding-top:10px;">
-        <p style="font-size:11px;font-weight:600;color:#5a6880;margin-bottom:6px;">상품 추가</p>
-        <select id="mod-add-product" onchange="onModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:12px;background:#fff;color:#1c2940;">
+      <div style="border-top:2px solid #e4c5a5;margin-top:8px;padding-top:10px;">
+        <p style="font-size:11px;font-weight:600;color:#7c6a56;margin-bottom:6px;">상품 추가</p>
+        <select id="mod-add-product" onchange="onModifyAddProductChange()" style="width:100%;padding:6px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:12px;background:#fff;color:#44210b;">
           <option value="">상품을 선택하세요</option>
           ${catalog.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${fmt(p.price)})</option>`).join('')}
         </select>
         <div id="mod-add-options" style="display:none;margin-top:6px;">
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <select id="mod-add-color" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:11px;background:#fff;"></select>
-            <select id="mod-add-size" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #b8c2d4;border-radius:6px;font-size:11px;background:#fff;"></select>
-            <button onclick="addProductToModify()" style="padding:5px 12px;border:none;border-radius:6px;background:#2a3a5c;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">추가</button>
+            <select id="mod-add-color" style="flex:1;min-width:80px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;"></select>
+            <select id="mod-add-size" style="flex:1;min-width:70px;padding:5px 8px;border:1px solid #e4c5a5;border-radius:6px;font-size:11px;background:#fff;"></select>
+            <button onclick="addProductToModify()" style="padding:5px 12px;border:none;border-radius:6px;background:#6b4220;color:#fff;font-size:11px;font-weight:600;cursor:pointer;">추가</button>
           </div>
         </div>
       </div>` : '';
@@ -462,10 +462,10 @@
           ${itemsHtml}
           ${addProductHtml}
         </div>
-        <div style="border-top:1px solid #b8c2d4;margin-top:12px;padding-top:12px;">
+        <div style="border-top:1px solid #e4c5a5;margin-top:12px;padding-top:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <span style="font-size:12px;color:#5a6880;">상품금액</span>
-            <span style="font-size:15px;font-weight:700;color:#1c2940;">${fmt(subtotal)}</span>
+            <span style="font-size:12px;color:#7c6a56;">상품금액</span>
+            <span style="font-size:15px;font-weight:700;color:#44210b;">${fmt(subtotal)}</span>
           </div>
           <p style="font-size:11px;color:#a89580;">배송비는 수정 완료 시 자동 계산됩니다</p>
         </div>
@@ -684,25 +684,24 @@
 
       el.innerHTML = `
         <section class="py-12 sm:py-16 fade-in">
-          <div class="relative rounded-2xl overflow-hidden" style="background:#e8edf5;min-height:420px;">
-            <div class="absolute inset-0">
-              <img src="https://images.pexels.com/photos/9362027/pexels-photo-9362027.jpeg?auto=compress&cs=tinysrgb&w=1200&q=80" alt="" class="w-full h-full object-cover" style="object-position:center 35%;" />
+          <div class="relative bg-warm-800 rounded-2xl overflow-hidden">
+            <div class="absolute inset-0 opacity-20">
+              <img src="https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=1200&h=500&fit=crop&auto=format&q=60" alt="" class="w-full h-full object-cover" />
             </div>
-            <div class="absolute inset-0" style="background:linear-gradient(to right,rgba(245,247,250,0.92) 0%,rgba(245,247,250,0.55) 50%,rgba(245,247,250,0.05) 100%);"></div>
-            <div class="relative py-20 sm:py-28 px-8 sm:px-16 text-center sm:text-left">
-              <p class="text-[11px] tracking-[0.4em] text-warm-500 uppercase mb-4">Winter Collection 2026</p>
-              <h1 class="font-serif text-4xl sm:text-5xl font-bold text-warm-900 italic tracking-wide mb-4">CHICMOOD<br><span class="text-warm-700">Winter</span></h1>
-              <p class="text-warm-500 text-sm sm:text-base font-light max-w-md mb-8">이번 겨울, 라이브 방송에서 만나는<br class="sm:hidden"> 특별한 여성 패션 컬렉션</p>
-              <div class="flex flex-wrap justify-center sm:justify-start gap-3">
+            <div class="relative py-16 sm:py-20 px-8 sm:px-16 text-center">
+              <p class="text-[11px] tracking-[0.4em] text-warm-400 uppercase mb-4">Live Commerce Shopping</p>
+              <h1 class="font-serif text-4xl sm:text-5xl font-bold text-white italic tracking-wide mb-4">CHICMOOD LIVE 특가</h1>
+              <p class="text-warm-300 text-sm sm:text-base font-light max-w-lg mx-auto mb-8">유튜브 · 틱톡 라이브 방송에서 만나는<br class="sm:hidden"> 여성 패션 특가 쇼핑</p>
+              <div class="flex flex-wrap justify-center gap-3">
                 ${hasLive
                   ? liveBroadcasts.map(lb => `<a href="#live/${lb.id}" class="btn-primary inline-flex items-center gap-2"><span class="inline-block w-2 h-2 bg-red-400 rounded-full animate-pulse"></span> ${liveBroadcasts.length > 1 ? escapeHtml(lb.title) : '지금 LIVE 보러가기 →'}</a>`).join('')
                   : '<span class="text-warm-400 text-sm font-light">현재 진행 중인 LIVE 방송이 없습니다</span>'
                 }
-                <a href="https://youtube.com/@chicmood" target="_blank" rel="noopener" class="btn-outline inline-flex items-center justify-center gap-2" style="min-width:145px;">
+                <a href="https://youtube.com/@chicmood" target="_blank" rel="noopener" class="btn-outline inline-flex items-center gap-2" style="border-color:#fff;color:#fff;">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 00.5 6.2 31.9 31.9 0 000 12a31.9 31.9 0 00.5 5.8 3 3 0 002.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 002.1-2.1A31.9 31.9 0 0024 12a31.9 31.9 0 00-.5-5.8zM9.6 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
                   유튜브 LIVE
                 </a>
-                <a href="https://www.tiktok.com/@chicmood_01" target="_blank" rel="noopener" class="btn-outline inline-flex items-center justify-center gap-2" style="min-width:145px;">
+                <a href="https://www.tiktok.com/@chicmood_01" target="_blank" rel="noopener" class="btn-outline inline-flex items-center gap-2" style="border-color:#fff;color:#fff;">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.87a8.16 8.16 0 004.76 1.52V6.94a4.84 4.84 0 01-1-.25z"/></svg>
                   틱톡 LIVE
                 </a>
