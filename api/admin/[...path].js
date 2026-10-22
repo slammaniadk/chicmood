@@ -1930,12 +1930,14 @@ async function allocateReceivedToOrders(poId) {
     }
 
     const productIds = [...new Set(uniqueCombos.map(i => i.product_id))];
+    const poItemIds = validItems.map(i => i.id);
 
-    // 2) 배치 조회: 실재고, 결제완료 주문, 관련 주문품목 한번에
-    const [{ data: allInventory }, { data: paidOrders }, { data: allAllocItemsRaw }] = await Promise.all([
+    // 2) 배치 조회: 실재고, 결제완료 주문, 관련 주문품목, po_order_links 한번에
+    const [{ data: allInventory }, { data: paidOrders }, { data: allAllocItemsRaw }, { data: poLinks }] = await Promise.all([
       supabaseAdmin.from('inventory').select('product_id, color_name, size_name, stock_qty').in('product_id', productIds).eq('warehouse', '판매'),
       supabaseAdmin.from('orders').select('id, broadcast_id').in('status', ['결제완료', '배송준비']).order('created_at', { ascending: true }),
       supabaseAdmin.from('order_items').select('id, order_id, product_id, color, size, qty, allocated_qty, status').in('product_id', productIds).not('status', 'in', '("배송완료","결제취소")'),
+      supabaseAdmin.from('po_order_links').select('order_item_id').in('purchase_order_item_id', poItemIds),
     ]);
 
     if (!paidOrders || paidOrders.length === 0) return { allocated: 0, orders: 0 };
@@ -1945,6 +1947,9 @@ async function allocateReceivedToOrders(poId) {
     paidOrderIds.forEach((oid, idx) => { orderIndexMap[oid] = idx; });
     const orderBroadcastMap = {};
     paidOrders.forEach(o => { orderBroadcastMap[o.id] = o.broadcast_id; });
+
+    // po_order_links 연결된 order_item_id (이 PO에 연결된 주문 우선 배정)
+    const linkedOrderItemIds = new Set((poLinks || []).map(l => l.order_item_id));
 
     let totalAllocated = 0;
     const allocatedOrderIds = new Set();
@@ -1965,13 +1970,19 @@ async function allocateReceivedToOrders(poId) {
       let remaining = Math.max(0, stockQty - totalAlreadyAllocated);
       if (remaining <= 0) continue;
 
-      // 결제완료 주문의 매칭 품목 (동일 방송 우선 + FIFO 정렬) — null-safe 비교
+      // 결제완료 주문의 매칭 품목 (po_order_links 연결 우선 → 동일 방송 우선 → FIFO 정렬) — null-safe 비교
       const matchingItems = (allAllocItemsRaw || [])
         .filter(i => i.product_id === poItem.product_id && (i.color || '') === (poItem.color_name || '') && (i.size || '') === (poItem.size_name || '') && paidOrderSet.has(i.order_id))
         .sort((a, b) => {
+          // 1순위: po_order_links 연결된 주문 우선
+          const aLinked = linkedOrderItemIds.has(a.id) ? 0 : 1;
+          const bLinked = linkedOrderItemIds.has(b.id) ? 0 : 1;
+          if (aLinked !== bLinked) return aLinked - bLinked;
+          // 2순위: 동일 방송 우선
           const aSame = poBroadcastId && orderBroadcastMap[a.order_id] === poBroadcastId ? 0 : 1;
           const bSame = poBroadcastId && orderBroadcastMap[b.order_id] === poBroadcastId ? 0 : 1;
           if (aSame !== bSame) return aSame - bSame;
+          // 3순위: FIFO
           return (orderIndexMap[a.order_id] || 0) - (orderIndexMap[b.order_id] || 0);
         });
 
@@ -3081,6 +3092,17 @@ async function createAutoPurchaseOrders(orderId) {
         }).eq('id', poId)
       );
       await Promise.all(recalcOps);
+    }
+
+    // 이미 입고된 PO에 새 주문이 연결된 경우, 재배정 실행
+    for (const group of groupEntries) {
+      const existingPO = pendingPOs.find(po =>
+        po.vendor_id === group.vendorId &&
+        po.broadcast_id === (group.broadcastId || null)
+      );
+      if (existingPO && (existingPO.status === '부분입고' || existingPO.status === '입고완료')) {
+        await allocateReceivedToOrders(existingPO.id);
+      }
     }
   } catch (e) { console.error('자동 발주 생성 오류:', e.message || e); }
 }
