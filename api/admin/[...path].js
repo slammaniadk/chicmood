@@ -2265,7 +2265,7 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
 
     const affectedPOIds = new Set();
     const deleteItemIds = [];
-    const updateOps = [];
+    const finalUpdates = new Map(); // key: poItem.id → { qty, received_qty, subtotal }
     const inventoryOps = [];
 
     // ── 1차: po_order_links 기반 정확 매칭 (broadcast_id 불일치 PO도 처리) ──
@@ -2308,13 +2308,10 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
         const newQty = poItem.qty - link.qty;
         if (newQty <= 0) {
           deleteItemIds.push(poItem.id);
+          finalUpdates.delete(poItem.id); // 삭제 대상이면 업데이트 불필요
         } else {
           const newReceivedQty = Math.max(0, (poItem.received_qty || 0) - deductReceived);
-          updateOps.push(
-            supabaseAdmin.from('purchase_order_items')
-              .update({ qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price })
-              .eq('id', poItem.id)
-          );
+          finalUpdates.set(poItem.id, { qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price });
           poItem.qty = newQty;
           poItem.received_qty = newReceivedQty;
         }
@@ -2397,14 +2394,11 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
 
                 if (newQty <= 0) {
                   deleteItemIds.push(poItem.id);
+                  finalUpdates.delete(poItem.id);
                   poItemsMap[po.id] = poItems.filter(pi => pi.id !== poItem.id);
                 } else {
                   const newReceivedQty = Math.max(0, (poItem.received_qty || 0) - deductReceived);
-                  updateOps.push(
-                    supabaseAdmin.from('purchase_order_items')
-                      .update({ qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price })
-                      .eq('id', poItem.id)
-                  );
+                  finalUpdates.set(poItem.id, { qty: newQty, received_qty: newReceivedQty, subtotal: newQty * poItem.cost_price });
                   poItem.qty = newQty;
                   poItem.received_qty = newReceivedQty;
                 }
@@ -2422,8 +2416,13 @@ async function deductPurchaseOrderQty(orderId, { skipDeallocate = false, isTrans
       }
     }
 
-    // 발주 품목 삭제/업데이트 병렬
-    const batchOps = [...updateOps];
+    // 발주 품목 삭제/업데이트 병렬 (Map 기반으로 동일 PO item 중복 업데이트 방지)
+    const batchOps = [];
+    for (const [poItemId, vals] of finalUpdates) {
+      if (!deleteItemIds.includes(poItemId)) {
+        batchOps.push(supabaseAdmin.from('purchase_order_items').update(vals).eq('id', poItemId));
+      }
+    }
     if (deleteItemIds.length > 0) {
       batchOps.push(supabaseAdmin.from('purchase_order_items').delete().in('id', deleteItemIds));
     }
@@ -4351,7 +4350,7 @@ async function handlePurchaseOrderDetail(req, res, id) {
     if (items && Array.isArray(items)) {
       // 삭제 전 기존 아이템의 id, received_qty를 (product_id, color_name, size_name) 키로 백업
       const { data: existingPOItems } = await supabaseAdmin.from('purchase_order_items')
-        .select('id, product_id, color_name, size_name, received_qty')
+        .select('id, product_id, color_name, size_name, received_qty, qty, cost_price, product_name')
         .eq('purchase_order_id', id);
       const receivedQtyBackup = {};
       const oldItemKeyMap = {}; // id → key 매핑
@@ -4381,6 +4380,13 @@ async function handlePurchaseOrderDetail(req, res, id) {
         qtyBackup[key] = Math.max(qtyBackup[key] || 0, ei.qty || 0);
       });
 
+      // 프론트엔드에 없는 DB-only 품목 식별 (자동발주로 추가된 품목 보존)
+      const frontKeys = new Set(items.map(i => `${i.productId}|${i.colorName || ''}|${i.sizeName || ''}`));
+      const dbOnlyItems = (existingPOItems || []).filter(ei => {
+        const key = `${ei.product_id}|${ei.color_name || ''}|${ei.size_name || ''}`;
+        return !frontKeys.has(key);
+      });
+
       await supabaseAdmin.from('purchase_order_items').delete().eq('purchase_order_id', id);
       if (items.length > 0) {
         const poItems = items.map(i => {
@@ -4404,6 +4410,22 @@ async function handlePurchaseOrderDetail(req, res, id) {
         await supabaseAdmin.from('purchase_order_items').insert(poItems);
       }
 
+      // DB-only 품목 재삽입 (프론트엔드에 없지만 자동발주 등으로 추가된 품목)
+      if (dbOnlyItems.length > 0) {
+        const preserveItems = dbOnlyItems.map(ei => ({
+          purchase_order_id: parseInt(id),
+          product_id: ei.product_id,
+          product_name: ei.product_name || '',
+          color_name: ei.color_name || '',
+          size_name: ei.size_name || '',
+          qty: ei.qty || 0,
+          cost_price: ei.cost_price || 0,
+          subtotal: (ei.qty || 0) * (ei.cost_price || 0),
+          received_qty: ei.received_qty || 0,
+        }));
+        await supabaseAdmin.from('purchase_order_items').insert(preserveItems);
+      }
+
       // po_order_links 재연결: 새 품목 ID로 매핑
       if (savedPoLinks.length > 0) {
         const { data: newPoItems } = await supabaseAdmin.from('purchase_order_items')
@@ -4423,8 +4445,16 @@ async function handlePurchaseOrderDetail(req, res, id) {
         }
       }
 
-      // total_amount 재계산
-      update.total_amount = items.reduce((s, i) => s + (i.qty || 1) * (i.costPrice || 0), 0);
+      // total_amount 재계산 (프론트엔드 품목 + DB-only 품목 합산)
+      const frontTotal = items.reduce((s, i) => {
+        const key = `${i.productId}|${i.colorName || ''}|${i.sizeName || ''}`;
+        const frontQty = i.qty || 1;
+        const dbQty = qtyBackup[key] || 0;
+        const finalQty = Math.max(frontQty, dbQty);
+        return s + finalQty * (i.costPrice || 0);
+      }, 0);
+      const dbOnlyTotal = dbOnlyItems.reduce((s, ei) => s + (ei.qty || 0) * (ei.cost_price || 0), 0);
+      update.total_amount = frontTotal + dbOnlyTotal;
     }
 
     // receivedItems: 입고 수량 업데이트 [{id, receivedQty}] — 병렬 처리
