@@ -4404,7 +4404,7 @@ async function handlePurchaseOrderDetail(req, res, id) {
             qty: finalQty,
             cost_price: i.costPrice || 0,
             subtotal: finalQty * (i.costPrice || 0),
-            received_qty: i.receivedQty !== undefined ? i.receivedQty : backupQty,
+            received_qty: backupQty, // 항상 DB 백업값 사용 (프론트 값은 모달 로드 시점이라 stale할 수 있음)
           };
         });
         await supabaseAdmin.from('purchase_order_items').insert(poItems);
