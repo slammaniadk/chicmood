@@ -294,7 +294,10 @@
   // ============================================================
   function fmt(n) { return '₩' + n.toLocaleString('ko-KR'); }
 
+  // ★ 이미지 표시 임시 비활성화 (복구: IMAGES_HIDDEN = false)
+  const IMAGES_HIDDEN = true;
   function thumbUrl(url, w, h) {
+    if (IMAGES_HIDDEN) return '';
     if (!url) return '';
     if (url.startsWith('data:')) return url;
     const width = w || 400;
